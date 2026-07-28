@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  위젯 전용 색. **`src/theme/tokens.ts` 의 `light` 팔레트에서 복제한 값이다.**
+
+  왜 복제하는가
+    위젯은 RN 프로세스 밖(런처 프로세스)에서 그려진다. NativeWind/CSS 변수·useTheme() 가
+    닿지 않으므로 네이티브 리소스에 같은 HEX 를 한 벌 둔다.
+  왜 라이트 고정인가
+    앱이 다크모드 동결 중이고(app.config.js userInterfaceStyle: 'light') 위젯은 런처 배경 위에
+    카드로 얹히므로 values-night 변형을 두지 않는다. 다크 해동 시 이 파일의 values-night 를
+    추가하고 tokens.ts `dark` 를 같은 방식으로 복제한다.
+  동기화 규칙
+    tokens.ts 가 바뀌면 여기도 바꾼다. 값의 정본은 언제나 tokens.ts 다(위키 Design Tokens §13-0).
+    Kotlin 런타임 색은 WidgetTheme.kt 에 같은 값이 상수로 한 벌 더 있다 —
+    setTextColor 가 int 를 요구해 리소스 조회 실패 시 검정으로 떨어지는 것을 막기 위한 의도된 중복이다.
+-->
+<resources>
+  <!-- tokens.ts light.bg.base -->
+  <color name="widget_bg">#FFFFFF</color>
+  <!-- tokens.ts light.surface.base -->
+  <color name="widget_surface">#F8FAFC</color>
+  <!-- tokens.ts light.border.subtle -->
+  <color name="widget_border_subtle">#CBD5E1</color>
+
+  <!-- tokens.ts light.text.primary -->
+  <color name="widget_text_primary">#111111</color>
+  <!-- tokens.ts light.text.secondary -->
+  <color name="widget_text_secondary">#505050</color>
+  <!-- tokens.ts light.text.muted -->
+  <color name="widget_text_muted">#64748B</color>
+  <!-- tokens.ts light.text.disabled — 달력의 이번 달 아닌 날 -->
+  <color name="widget_text_disabled">#999999</color>
+  <!-- tokens.ts light.text.inverse — 오늘 강조 원 위의 숫자 -->
+  <color name="widget_text_inverse">#FFFFFF</color>
+
+  <!-- tokens.ts light.brand.base -->
+  <color name="widget_brand">#15293D</color>
+  <!-- tokens.ts light.brand.container -->
+  <color name="widget_brand_container">#E8EDF3</color>
+  <!-- tokens.ts light.action.base — D-day(여유) 라벨 -->
+  <color name="widget_action">#0077B6</color>
+  <!-- tokens.ts light.info.container — D-day(여유) 배지 배경 -->
+  <color name="widget_info_container">#EFF6FF</color>
+  <!-- tokens.ts light.doc.DEADLINE.fg — D-day 3일 이하 라벨 (SCR-06 규칙: dDay <= 3) -->
+  <color name="widget_deadline">#B45309</color>
+  <!-- tokens.ts light.doc.DEADLINE.bg — D-day 3일 이하 배지 배경 -->
+  <color name="widget_deadline_container">#FEF3E2</color>
+
+  <!-- tokens.ts light.calendar.sunday -->
+  <color name="widget_calendar_sunday">#DC2626</color>
+  <!-- tokens.ts light.calendar.saturday -->
+  <color name="widget_calendar_saturday">#2563EB</color>
+
+  <!-- 문서유형 점: tokens.ts light.doc.*.fg -->
+  <color name="widget_doc_business_card">#15293D</color>
+  <color name="widget_doc_ticket">#6746AF</color>
+  <color name="widget_doc_poster">#0069A0</color>
+  <color name="widget_doc_receipt">#166534</color>
+  <color name="widget_doc_deadline">#B45309</color>
+</resources>

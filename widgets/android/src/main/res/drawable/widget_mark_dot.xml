@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 달력에서 '일정이 있는 날' 아래 점. 색: tokens.ts light.action.base -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+  <solid android:color="@color/widget_action" />
+</shape>
