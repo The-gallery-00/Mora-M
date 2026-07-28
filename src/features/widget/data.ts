@@ -66,7 +66,17 @@ export const WIDGET_PAYLOAD_VERSION = 1;
 /** 대형(4×4) 위젯이 5개까지 그린다. 중형(4×2)은 앞 3개만 쓴다. */
 export const WIDGET_UPCOMING_LIMIT = 5;
 
-/** `monthMarks` 가 담는 월 범위 — 현재 월 ±1. 위젯 월 이동이 네트워크 없이 한 칸 움직인다. */
+/**
+ * `monthMarks` 가 담는 월 범위 — 현재 월 ±1. 위젯 월 이동이 네트워크 없이 한 칸 움직인다.
+ *
+ * **2주(14일) 달력 위젯도 이 범위로 항상 덮인다** — 경계에서 확인한 근거:
+ * 오늘부터 14일 구간의 마지막 날은 `오늘 + 13일`이고, 가장 짧은 달도 28일이므로 한 구간이
+ * 걸칠 수 있는 달은 **최대 2개**(이번 달 + 다음 달)다. 3개 달에 걸치려면 중간 달의 길이가
+ * 12일 이하여야 하는데 그런 달은 없다. 최악의 경계(말일 시작)를 넣어 봐도:
+ *   2026-01-31 → 2026-02-13 (`2026-01`,`2026-02`)   2026-02-28 → 2026-03-13 (`2026-02`,`2026-03`)
+ *   2026-12-31 → 2027-01-13 (`2026-12`,`2027-01` — `monthWindow` 가 연도를 넘겨 만든다)
+ * 셋 다 현재 월 ±1 안에 들어온다. 즉 범위를 넓힐 필요가 없다.
+ */
 export const WIDGET_MONTH_RADIUS = 1;
 
 // ───────────────────────────────────────────────────────────── 스키마
@@ -113,7 +123,12 @@ export type WidgetPayload = {
   /** `YYYY-MM-DD` — 기기 로컬 오늘. 위젯의 "오늘 강조"는 이 값이 아니라 자기 시계를 써야 한다(30분 지연). */
   today: string;
   upcoming: WidgetUpcomingItem[];
-  /** `YYYY-MM` → 그 달에 일정이 있는 `YYYY-MM-DD` 목록(오름차순, 중복 없음). */
+  /**
+   * `YYYY-MM` → 그 달에 **점을 찍을** `YYYY-MM-DD` 목록(오름차순, 중복 없음).
+   *
+   * "일정이 있는 날 전부"가 아니라 **행동이 필요한 날만** 담는다 — 자세한 규칙과 이유는
+   * 아래 `markDatesOf()` 주석 참조. 기간 일정의 중간 날짜는 여기에 들어오지 않는다.
+   */
   monthMarks: Record<string, string[]>;
 };
 
@@ -121,8 +136,8 @@ export type WidgetPayload = {
  * 페이로드 입력.
  *
  * 둘 다 **선택**이다. 훅이 React Query 캐시에서 있는 것만 긁어 넘기기 때문이다.
- *  - `events` 가 있으면 그것만 쓴다(기간 정보가 있어 `monthMarks` 가 정확하다).
- *  - 없으면 `dashboard` 로 대체한다(단일 날짜라 기간 일정이 하루로 축약된다).
+ *  - `events` 가 있으면 그것만 쓴다(종료일을 알고 있어 포스터 **마감일 마크**까지 찍힌다).
+ *  - 없으면 `dashboard` 로 대체한다(단일 날짜뿐이라 포스터는 시작=종료가 되어 마크가 1개다).
  */
 export type WidgetPayloadInput = {
   events?: readonly CalendarEvent[] | undefined;
@@ -148,9 +163,6 @@ type DatedEntry = {
   /** `HH:MM` 또는 빈 문자열. 같은 날 정렬에만 쓴다. */
   time: string;
 };
-
-/** 기간 일정 전개 상한. 이상 데이터로 루프가 폭주하는 것을 막는다(calendar.ts 와 같은 값). */
-const MAX_EVENT_SPAN_DAYS = 366;
 
 // ───────────────────────────────────────────────────────── 날짜 유틸
 //
@@ -303,26 +315,17 @@ export function buildWidgetPayload(input: WidgetPayloadInput = {}): WidgetPayloa
       deepLink: docDeeplink(entry.type, entry.id),
     }));
 
-  // ── 월간 마크
+  // ── 월간 마크 (규칙은 `markDatesOf()` 주석이 정본이다)
   const window = monthWindow(today);
   const marks: Record<string, Set<string>> = {};
   for (const key of window) marks[key] = new Set<string>();
 
   for (const entry of valid) {
-    // 관심 창 밖은 전개조차 하지 않는다.
-    const firstMonth = window[0];
-    const lastMonth = window[window.length - 1];
-    if (firstMonth === undefined || lastMonth === undefined) break;
-    if (monthKeyOf(entry.endDate) < firstMonth || monthKeyOf(entry.startDate) > lastMonth) continue;
-
-    const cursor = parseLocalDate(entry.startDate);
-    if (!cursor) continue;
-    for (let step = 0; step < MAX_EVENT_SPAN_DAYS; step += 1) {
-      const iso = formatLocalDate(cursor);
-      const bucket = marks[monthKeyOf(iso)];
-      if (bucket !== undefined) bucket.add(iso);
-      if (iso >= entry.endDate) break;
-      cursor.setDate(cursor.getDate() + 1);
+    for (const iso of markDatesOf(entry)) {
+      // 유효하지 않은 날짜 문자열은 건너뛴다(빈 문자열·`2026-02-31` 처럼 굴러가는 값).
+      if (parseLocalDate(iso) === null) continue;
+      // 관심 창(현재 월 ±1) 밖이면 버킷 자체가 없다 → 조용히 버린다.
+      marks[monthKeyOf(iso)]?.add(iso);
     }
   }
 
@@ -339,6 +342,44 @@ export function buildWidgetPayload(input: WidgetPayloadInput = {}): WidgetPayloa
     upcoming,
     monthMarks,
   };
+}
+
+/**
+ * 이 항목이 달력에 **점을 찍어야 할 날짜들**. `monthMarks` 의 유일한 정본 규칙이다.
+ *
+ * ══════════════════════════════════════════════════════════════════════════════
+ *  왜 기간을 하루씩 전개하지 않는가 — **이걸 되돌리지 마라**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 이전 구현은 포스터의 행사 기간(시작~종료)을 하루 단위로 전부 펼쳐 넣었다. 그 결과
+ * 한 달 열리는 전시 **1건**이 그 달 31일 전부에 점을 찍었다(실측:
+ * `"2026-07": [07-23 … 07-31]`, `"2026-08": [08-01 … 08-31]`).
+ * 모든 칸에 점이 있는 달력은 아무 칸도 강조하지 못한다 — 정보량이 0 이 된다.
+ *
+ * 사용자가 달력에서 찾는 것은 "행사가 진행 중인 모든 날"이 아니라 **행동이 필요한 날**
+ * (출발일 · 개막일 · 마감일)이다. 그래서 유형별로 의미 있는 날짜만 남긴다:
+ *
+ *   TICKET         출발일 1개
+ *   POSTER         시작일 + 종료일(마감) 최대 2개 — **기간 중간은 찍지 않는다**
+ *   RECEIPT        결제일 1개
+ *   BUSINESS_CARD  없음 — 명함은 일정이 아니다(날짜 축이 존재하지 않는다)
+ *
+ * 기간의 "진행 중" 정보를 잃는 것은 의도된 트레이드오프다. 그 정보는 다가오는 일정 목록
+ * (`upcoming`, 진행 중이면 `dday === 0`)이 이미 전달하고 있고, 달력은 시작·마감만 알면 된다.
+ *
+ * 같은 날짜에 여러 건이 겹치는 중복 제거는 호출부의 `Set` 이 맡는다.
+ */
+function markDatesOf(entry: DatedEntry): readonly string[] {
+  switch (entry.type) {
+    case 'TICKET':
+    case 'RECEIPT':
+      // 하루짜리다 — `endDate` 는 항상 `startDate` 와 같으므로 볼 필요가 없다.
+      return [entry.startDate];
+    case 'POSTER':
+      // 하루짜리 행사(시작 == 종료)면 `Set` 이 알아서 1개로 접는다.
+      return [entry.startDate, entry.endDate];
+    case 'BUSINESS_CARD':
+      return [];
+  }
 }
 
 /**

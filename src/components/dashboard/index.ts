@@ -6,7 +6,7 @@
 export { DeadlineCard, dDayLabel, DEADLINE_CARD_HEIGHT, DEADLINE_CARD_WIDTH } from './DeadlineCard';
 export type { DeadlineCardProps, DeadlineDocType } from './DeadlineCard';
 
-export { StatTile, STAT_TILE_WIDTH } from './StatTile';
+export { StatTile, STAT_TILE_MIN_HEIGHT, STAT_TILE_WIDTH } from './StatTile';
 export type { StatTileProps, StatTileTone, StatTileVariant } from './StatTile';
 
 export { ScheduleListItem } from './ScheduleListItem';

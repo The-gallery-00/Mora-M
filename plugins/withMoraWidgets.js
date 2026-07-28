@@ -20,7 +20,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  *
  *  1. `widgets/android/src/main/` 전체를 `android/app/src/main/` 으로 복사(덮어쓰기, 멱등).
- *  2. `AndroidManifest.xml` 의 `<application>` 안에 `<receiver>` 2개 추가(멱등).
+ *  2. `AndroidManifest.xml` 의 `<application>` 안에 `<receiver>` 3개 추가(멱등).
  *  3. 위젯 라벨 문자열이 없으면 폴백 `widget_strings.xml` 을 생성(빌드 실패 방지).
  *
  * ═══════════════════════════════════════════════════════════════════════════
@@ -102,6 +102,8 @@ const APPWIDGET_UPDATE = 'android.appwidget.action.APPWIDGET_UPDATE';
  * 위젯 Kotlin 의 `const val ACTION_*` 과 **문자 단위로 같아야 한다**:
  *   CalendarWidgetProvider.ACTION_MONTH_SHIFT / ACTION_REFRESH
  *   UpcomingWidgetProvider.ACTION_REFRESH
+ *   BiweeklyCalendarWidgetProvider — 새 액션을 만들지 않고 ACTION_REFRESH_CALENDAR 를 **재사용**한다
+ *     (명시적 인텐트라 `component` 로 목적지가 갈리고 action 은 라우팅에 쓰이지 않는다).
  *
  * ⚠ 이 액션들은 `WidgetLinks.kt` 가 `component = ComponentName(...)` 로 **명시적 인텐트**로
  *   보내므로 사실 intent-filter 가 없어도 전달된다. 그래도 등재하는 이유는 두 가지다:
@@ -114,7 +116,7 @@ const ACTION_REFRESH_CALENDAR = 'com.mora.app.widget.ACTION_REFRESH_CALENDAR';
 const ACTION_REFRESH_UPCOMING = 'com.mora.app.widget.ACTION_REFRESH_UPCOMING';
 
 /**
- * 추가할 receiver 2개.
+ * 추가할 receiver 3개.
  *
  * `exported: false` — 런처(SystemUI)가 보내는 `APPWIDGET_UPDATE` 는 시스템 특권으로 전달되므로
  * exported 가 필요 없다. 월 이동도 우리 앱이 자기 자신에게 보내는 explicit intent 다.
@@ -135,6 +137,14 @@ const RECEIVERS = [
     // 맞으면 매칭되므로 필터를 쪼갤 이유가 없다.
     actions: [APPWIDGET_UPDATE, ACTION_MONTH_SHIFT, ACTION_REFRESH_CALENDAR],
   },
+  {
+    name: `${WIDGET_PACKAGE}.BiweeklyCalendarWidgetProvider`,
+    label: '@string/widget_biweekly_label',
+    info: '@xml/widget_biweekly_info',
+    // 새로고침은 달력 위젯과 같은 액션을 재사용한다(월 이동이 없어 ACTION_MONTH_SHIFT 는 넣지 않는다).
+    // 두 receiver 가 같은 action 을 필터에 두어도 문제없다 — 전송이 explicit 이라 component 로 갈린다.
+    actions: [APPWIDGET_UPDATE, ACTION_REFRESH_CALENDAR],
+  },
 ];
 
 /**
@@ -145,6 +155,7 @@ const RECEIVERS = [
 const FALLBACK_LABELS = {
   widget_upcoming_label: 'MORA 다가오는 일정',
   widget_calendar_label: 'MORA 달력',
+  widget_biweekly_label: 'MORA 2주 달력',
 };
 
 // ───────────────────────────────────────────────────────── 1. 소스 복사
