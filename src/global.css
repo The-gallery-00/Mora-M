@@ -1,0 +1,50 @@
+/* global.css — scripts/gen-theme-css.ts 생성물 — 직접 수정 금지, `npm run theme:css` 로 재생성. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-base: 255 255 255;        --bg-elev: 255 255 255;       --bg-sunken: 241 245 249;
+    --surface: 248 250 252;        --surface-alt: 241 245 249;   --surface-active: 240 249 255;
+    --surface-input: 250 251 252;  --surface-overlay: 255 255 255;
+    --border-subtle: 203 213 225;  --border-strong: 100 116 139;
+    --text-primary: 17 17 17;      --text-secondary: 80 80 80;   --text-muted: 100 116 139;
+    --text-disabled: 153 153 153;  --text-inverse: 255 255 255;
+    --brand: 21 41 61;             --brand-pressed: 18 36 54;    --brand-container: 232 237 243;
+    --action: 0 119 182;           --action-pressed: 0 105 160;
+    --success: 22 163 74;          --success-text: 22 101 52;    --success-container: 220 252 231;
+    --warn: 146 64 14;             --warn-container: 255 251 235; --warn-border: 253 230 138;
+    --danger: 220 38 38;           --danger-strong: 185 28 28;   --danger-pressed: 194 33 33;
+    --danger-container: 254 226 226; --danger-border: 254 202 202;
+    --info: 37 99 235;             --info-container: 239 246 255; --info-border: 219 234 254;
+    --doc-card: 21 41 61;          --doc-card-bg: 232 237 243;
+    --doc-ticket: 103 70 175;      --doc-ticket-bg: 233 229 250;
+    --doc-poster: 0 105 160;       --doc-poster-bg: 232 237 243;
+    --doc-receipt: 22 101 52;      --doc-receipt-bg: 207 229 208;
+    --doc-deadline: 180 83 9;      --doc-deadline-bg: 254 243 226;
+    --skeleton: 241 245 249;       --skeleton-hi: 255 255 255;
+  }
+
+  .dark:root {
+    --bg-base: 15 22 33;           --bg-elev: 23 32 45;          --bg-sunken: 10 15 23;
+    --surface: 28 38 52;           --surface-alt: 35 46 62;      --surface-active: 20 50 74;
+    --surface-input: 21 30 42;     --surface-overlay: 43 56 73;
+    --border-subtle: 42 54 70;     --border-strong: 100 116 139;   /* DK-07 — 양 테마 공용 */
+    --text-primary: 232 237 243;   --text-secondary: 168 182 200; --text-muted: 148 163 184;
+    --text-disabled: 107 122 141;  --text-inverse: 15 22 33;
+    --brand: 174 196 216;          --brand-pressed: 198 216 231; --brand-container: 27 42 60;
+    --action: 75 163 219;          --action-pressed: 111 184 228;
+    --success: 123 214 154;        --success-text: 123 214 154;  --success-container: 18 41 27;
+    --warn: 239 185 100;           --warn-container: 46 35 8;    --warn-border: 74 58 18;
+    --danger: 240 144 140;         --danger-strong: 245 165 161; --danger-pressed: 245 165 161;
+    --danger-container: 46 21 22;  --danger-border: 90 36 34;
+    --info: 127 176 239;           --info-container: 20 36 61;   --info-border: 38 67 110;
+    --doc-card: 174 196 216;       --doc-card-bg: 27 42 60;
+    --doc-ticket: 194 179 230;     --doc-ticket-bg: 42 35 64;
+    --doc-poster: 115 181 222;     --doc-poster-bg: 18 40 58;
+    --doc-receipt: 123 214 154;    --doc-receipt-bg: 22 48 31;
+    --doc-deadline: 232 177 114;   --doc-deadline-bg: 51 36 15;
+    --skeleton: 35 46 62;          --skeleton-hi: 46 59 77;
+  }
+}
