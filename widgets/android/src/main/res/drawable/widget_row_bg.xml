@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 일정 항목 1행의 배경. 색: tokens.ts light.surface.base -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+  <solid android:color="@color/widget_surface" />
+  <corners android:radius="12dp" />
+</shape>

@@ -89,6 +89,9 @@ module.exports = ({ config }) => ({
   plugins: [
     'expo-router',
     'expo-secure-store',
+    // 안드로이드 홈 위젯(RemoteViews) 네이티브 소스 주입. `widgets/android/src/main/` → `android/app/src/main/`
+    // + AndroidManifest 에 receiver 2개. 새 gradle 플러그인은 추가하지 않는다.
+    './plugins/withMoraWidgets',
     [
       'expo-splash-screen',
       {

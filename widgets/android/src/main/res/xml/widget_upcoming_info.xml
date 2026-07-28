@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  다가오는 일정 위젯 메타. 매니페스트 `<receiver>` 의
+  `<meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_upcoming_info"/>` 가 가리킨다.
+
+  크기 계산 — 런처 셀 n개의 dp = 70n - 30
+    4x2 = 250dp x 110dp (기본), 4x4 = 250dp x 250dp 까지 리사이즈.
+    targetCellWidth/Height 는 API 31+ 에서 minWidth/minHeight 보다 우선한다.
+
+  updatePeriodMillis = 1800000 (30분)
+    안드로이드가 허용하는 **최소값**이다. 이보다 짧게 적으면 무시된다. 절전 상태에서는
+    더 늦게 올 수 있다. RN 이 파일을 갱신해도 최대 30분 늦게 반영되며, 즉시 반영이
+    필요하면 위젯 헤더의 새로고침(↻)을 누른다 — v1 은 네이티브 모듈을 만들지 않는다.
+    부팅 후 갱신은 시스템이 APPWIDGET_UPDATE 를 다시 스케줄하므로 BOOT_COMPLETED 수신이 필요 없다.
+
+  previewImage 는 일부러 넣지 않았다. API 31+ 는 previewLayout(실제 레이아웃 렌더)을 쓰고,
+  그 이하 런처는 앱 아이콘으로 떨어진다. 별도 미리보기 PNG 에셋을 만들지 않기 위한 선택이다.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="110dp"
+    android:maxResizeWidth="320dp"
+    android:maxResizeHeight="320dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget_upcoming"
+    android:previewLayout="@layout/widget_upcoming"
+    android:description="@string/widget_upcoming_description" />
