@@ -1,0 +1,558 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MORA 2주 달력 위젯 (4x2).
+
+  월간 달력(widget_calendar.xml, 4x4)의 컴팩트 버전이다. **오늘이 포함된 주 + 다음 주**
+  총 14칸만 보여주고 월 이동은 없다(4x2 에 화살표까지 넣을 세로 여유가 없다).
+
+  RemoteViews 제약 — widget_calendar.xml 과 동일
+    - ConstraintLayout 은 지원되지 않는다. LinearLayout/RelativeLayout/FrameLayout/GridLayout 만 쓴다.
+    - @RemoteView 가 아닌 <View>/<Space> 는 인플레이트가 거부될 수 있어 쓰지 않는다.
+      구분선도 ImageView 의 background 로 그린다.
+    - 뷰를 런타임에 만들 수 없으므로 **14칸(2주 x 7일)을 미리 정의**하고
+      setTextViewText / setTextColor / setViewVisibility / setInt(setBackgroundResource) 로만 채운다.
+    - 칸 id 는 bw0~bw13, 점은 bw0_dot~bw13_dot 로 고정이다
+      (BiweeklyCalendarWidgetProvider 가 WidgetRes.getIdentifier 로 이름을 찾는다).
+
+  세로 예산 (4x2 = 110dp)
+    padding 12 + 헤더 ~20 + 요일 행 ~13 + 구분선 3 = 48dp → 주 행 2개가 ~31dp 씩 갖는다.
+    칸 원 20dp + 점 4dp 로 맞췄다. 여기서 폰트/여백을 키우면 두 번째 주가 잘린다.
+
+  reapply 주의: 런처는 같은 layout id 로 갱신이 오면 기존 뷰 계층에 액션만 덧입힌다.
+  따라서 provider 는 매 갱신마다 **14칸 전부**의 텍스트/색/배경/점을 다시 지정한다.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/biweekly_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg"
+    android:paddingLeft="8dp"
+    android:paddingRight="8dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp">
+
+    <!-- 헤더: 오늘 날짜 + 새로고침. 헤더 탭 -> mora://calendar,
+         새로고침 탭 -> 달력 위젯과 같은 갱신 브로드캐스트(파일 다시 읽기).
+         자식(새로고침)의 클릭이 먼저 먹으므로 부모에 헤더 클릭을 걸어도 서로 방해하지 않는다. -->
+    <LinearLayout
+        android:id="@+id/biweekly_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="2dp">
+
+        <TextView
+            android:id="@+id/biweekly_date"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:maxLines="1"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/widget_brand"
+            android:text="" />
+
+        <!-- 글리프는 U+21BB. 폰트에 없으면 사각형으로 떨어지지만 동작에는 영향이 없다. -->
+        <TextView
+            android:id="@+id/biweekly_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingLeft="8dp"
+            android:paddingRight="2dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:textSize="12sp"
+            android:textColor="@color/widget_text_muted"
+            android:contentDescription="@string/widget_refresh"
+            android:text="↻" />
+    </LinearLayout>
+
+    <!-- 요일 행. 일요일 빨강 / 토요일 파랑 (tokens.ts light.calendar.*) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingBottom="1dp">
+
+        <TextView
+            android:id="@+id/bwd0"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textSize="9sp"
+            android:textColor="@color/widget_calendar_sunday"
+            android:text="일" />
+
+        <TextView
+            android:id="@+id/bwd1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textSize="9sp"
+            android:textColor="@color/widget_text_muted"
+            android:text="월" />
+
+        <TextView
+            android:id="@+id/bwd2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textSize="9sp"
+            android:textColor="@color/widget_text_muted"
+            android:text="화" />
+
+        <TextView
+            android:id="@+id/bwd3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textSize="9sp"
+            android:textColor="@color/widget_text_muted"
+            android:text="수" />
+
+        <TextView
+            android:id="@+id/bwd4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textSize="9sp"
+            android:textColor="@color/widget_text_muted"
+            android:text="목" />
+
+        <TextView
+            android:id="@+id/bwd5"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textSize="9sp"
+            android:textColor="@color/widget_text_muted"
+            android:text="금" />
+
+        <TextView
+            android:id="@+id/bwd6"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textSize="9sp"
+            android:textColor="@color/widget_calendar_saturday"
+            android:text="토" />
+    </LinearLayout>
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginBottom="2dp"
+        android:background="@color/widget_border_subtle"
+        android:contentDescription="@null" />
+
+    <!-- 2주 x 7일 = 14칸 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- 이번 주 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw0"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="1" />
+
+                <ImageView
+                    android:id="@+id/bw0_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw1"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="2" />
+
+                <ImageView
+                    android:id="@+id/bw1_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw2"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="3" />
+
+                <ImageView
+                    android:id="@+id/bw2_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw3"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="4" />
+
+                <ImageView
+                    android:id="@+id/bw3_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw4"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="5" />
+
+                <ImageView
+                    android:id="@+id/bw4_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw5"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="6" />
+
+                <ImageView
+                    android:id="@+id/bw5_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw6"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="7" />
+
+                <ImageView
+                    android:id="@+id/bw6_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 다음 주 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw7"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="8" />
+
+                <ImageView
+                    android:id="@+id/bw7_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw8"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="9" />
+
+                <ImageView
+                    android:id="@+id/bw8_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw9"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="10" />
+
+                <ImageView
+                    android:id="@+id/bw9_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw10"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="11" />
+
+                <ImageView
+                    android:id="@+id/bw10_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw11"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="12" />
+
+                <ImageView
+                    android:id="@+id/bw11_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw12"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="13" />
+
+                <ImageView
+                    android:id="@+id/bw12_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/bw13"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textSize="11sp"
+                    android:textColor="@color/widget_text_primary"
+                    android:text="14" />
+
+                <ImageView
+                    android:id="@+id/bw13_dot"
+                    android:layout_width="4dp"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="1dp"
+                    android:src="@drawable/widget_mark_dot"
+                    android:visibility="invisible"
+                    android:contentDescription="@null" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

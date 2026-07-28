@@ -13,6 +13,9 @@
   <string name="widget_calendar_label">MORA 달력</string>
   <string name="widget_calendar_description">이번 달 일정이 있는 날을 한눈에 봅니다. 날짜를 누르면 캘린더가 열립니다.</string>
 
+  <string name="widget_biweekly_label">MORA 2주 달력</string>
+  <string name="widget_biweekly_description">이번 주와 다음 주 2주치를 컴팩트하게 봅니다. 날짜를 누르면 캘린더가 열립니다.</string>
+
   <!-- 접근성 라벨(TalkBack). 화면에는 보이지 않는다. -->
   <string name="widget_refresh">새로고침</string>
   <string name="widget_prev_month">이전 달</string>
