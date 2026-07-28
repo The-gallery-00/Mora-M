@@ -1,4 +1,6 @@
 import { getApiBaseUrl } from '@/config/env';
+import { isMockEnabled } from '@/mocks/config';
+import { handleMockRequest } from '@/mocks/handlers';
 
 import { clearSession, getTokenSync } from './session';
 
@@ -94,7 +96,60 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
+/**
+ * 목 모드 요청 1건 (`mocks/handlers.ts` 라우터).
+ *
+ * **아래 `request()` 의 후처리를 글자 그대로 다시 밟는다** — 401 세션 정리, `success:false` 판정,
+ * 봉투 언랩, `message` 승계까지. 여기서 한 줄이라도 갈라지면 "목에서만 나는 버그"가 생겨
+ * 목 모드의 목적(프론트 디버깅)이 무너진다.
+ *
+ * 취소(`signal`)는 `fetch` 처럼 즉시 끊지 않고 목 지연(200~600ms)이 끝난 뒤 판정한다.
+ * 결과는 같다 — 실서버의 AbortError 와 동일하게 `timeout` 으로 돌려준다.
+ */
+async function mockRequest<T>(path: string, options: RequestOptions): Promise<ApiResult<T>> {
+  const { method = 'GET', json, formData, anonymous = false, signal } = options;
+
+  const aborted: ApiResult<T> = {
+    ok: false,
+    error: { kind: 'timeout', status: null, message: '서버 응답이 없습니다. 네트워크를 확인해 주세요.' },
+  };
+  if (signal?.aborted) return aborted;
+
+  // 익명 요청(로그인·회원가입)은 실서버와 같은 조건 — 토큰을 붙이지 않는다.
+  const token = anonymous ? null : getTokenSync();
+  // multipart 로 오는 경로는 목 라우터에 없다(스캔·커밋은 `features/scan/api.ts` 가 직접 가로챈다).
+  const body = formData !== undefined ? undefined : json;
+
+  const mock = await handleMockRequest(method, path, body, { token });
+  if (signal?.aborted) return aborted;
+
+  if (mock.status === 401) {
+    await clearSession();
+    onSessionExpired?.();
+    return { ok: false, error: { kind: 'unauthorized', status: 401, message: messageForStatus(401) } };
+  }
+
+  const envelope = mock.body as { success?: boolean; data?: unknown; error?: string; message?: string } | null;
+  const httpOk = mock.status >= 200 && mock.status < 300;
+
+  if (!httpOk || envelope?.success === false) {
+    return {
+      ok: false,
+      error: {
+        kind: kindForStatus(mock.status),
+        status: mock.status,
+        message: messageForStatus(mock.status),
+      },
+    };
+  }
+
+  const data = (envelope && 'data' in envelope ? envelope.data : mock.body) as T;
+  return { ok: true, data, message: envelope?.message };
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<ApiResult<T>> {
+  if (isMockEnabled()) return mockRequest<T>(path, options);
+
   const {
     method = 'GET',
     json,

@@ -515,6 +515,12 @@ export default function SettingsScreen() {
               onPress={() => router.push('/(dev)/pipeline')}
               testID="row-pipeline"
             />
+            <SettingsRow
+              label="목 모드"
+              description="서버 없이 앱만으로 전 화면을 확인합니다."
+              onPress={() => router.push('/(dev)/mock')}
+              testID="row-mock"
+            />
           </SettingsSection>
         ) : null}
 
