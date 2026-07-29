@@ -1,4 +1,6 @@
 import { getApiBaseUrl, getOcrBaseUrl } from '@/config/env';
+import { isMockEnabled } from '@/mocks/config';
+import { mockProbe } from '@/mocks/health';
 
 /**
  * 서버 연결 진단 (FR-121 / FR-122, 화면 SCR-31).
@@ -71,13 +73,20 @@ async function probe(
 }
 
 export function probeSpring(): Promise<ProbeResult> {
-  return probe('spring', `${getApiBaseUrl()}/auth/me`, (body) => {
+  const url = `${getApiBaseUrl()}/auth/me`;
+  // 목 모드에서는 서버가 없는 것이 정상이다. 빨간 실패 카드 대신 `목 모드` 문구로 구분한다.
+  if (isMockEnabled()) return mockProbe('spring', url);
+
+  return probe('spring', url, (body) => {
     return !!body && typeof body === 'object' && 'success' in (body as object);
   });
 }
 
 export function probeOcr(): Promise<ProbeResult> {
-  return probe('ocr', `${getOcrBaseUrl()}/`, (body) => {
+  const url = `${getOcrBaseUrl()}/`;
+  if (isMockEnabled()) return mockProbe('ocr', url);
+
+  return probe('ocr', url, (body) => {
     const service = (body as { service?: unknown } | null)?.service;
     return typeof service === 'string' && service.includes('MORA OCR');
   });

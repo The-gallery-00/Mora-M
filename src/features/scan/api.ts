@@ -1,4 +1,6 @@
 import { getApiBaseUrl, getOcrBaseUrl } from '@/config/env';
+import { isMockEnabled } from '@/mocks/config';
+import { mockCommitDocument, mockScanImage } from '@/mocks/scan';
 import { request } from '@/services/http';
 import { getTokenSync } from '@/services/session';
 
@@ -278,6 +280,11 @@ export type ScanImageOptions = {
  * **부작용 없음**: 서버가 임시파일로 처리하고 `finally` 에서 삭제한다 → 취소·재시도가 안전하다.
  */
 export function scanImage(file: PreparedImage, options: ScanImageOptions = {}): UploadHandle<ScanResult> {
+  /* 목 모드 주입점. 스캔·커밋은 `request()` 가 아니라 XHR 업로더를 쓰므로 http 계층에서
+     가로챌 수 없다 — 같은 `UploadHandle` 계약으로 여기서 갈아끼운다.
+     목도 **봉투 → `unwrapScan`** 순서를 그대로 밟는다(파서를 우회하지 않는다). */
+  if (isMockEnabled()) return mockScanImage(file, unwrapScan, options);
+
   return uploadMultipart<ScanResult>({
     url: `${getApiBaseUrl()}/api/scan`,
     file,
@@ -325,6 +332,11 @@ export function commitDocument(
   correctedFields: ParsedFields = {},
   options: CommitOptions = {},
 ): UploadHandle<CommitResult> {
+  // 목 모드: 파일 시스템이 없으므로 `image_url` 이 빈 문자열로 온다 → R2 경로가 검증된다.
+  if (isMockEnabled()) {
+    return mockCommitDocument(documentType, rawBlocks, correctedFields, unwrapCommit, options);
+  }
+
   return uploadMultipart<CommitResult>({
     url: `${getOcrBaseUrl()}/api/commit`,
     file,
@@ -570,6 +582,7 @@ export async function saveDocument(args: SaveDocumentArgs): Promise<ScanApiResul
     groupId: args.groupId,
   });
 
+  // 저장은 `request()` 를 타므로 목 모드 주입이 필요 없다 — http 계층이 목 라우터로 보낸다.
   const result = await request<unknown>(path, {
     method: 'POST',
     json: body,
