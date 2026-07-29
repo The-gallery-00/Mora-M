@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  월간 달력 위젯 메타. 4x4 고정 성격이다(6주 x 7일 그리드가 들어가야 한다).
+
+  크기 = 70n - 30 → 4셀 = 250dp. 세로 축소는 허용하지 않는다(resizeMode="horizontal"):
+  높이가 줄면 42칸 그리드의 숫자가 잘려 읽을 수 없다.
+
+  updatePeriodMillis 는 다가오는 일정 위젯과 같은 30분(안드로이드 최소값)이다.
+  월 이동/월 라벨 탭은 자체 브로드캐스트로 즉시 다시 그린다 — 주기 갱신을 기다리지 않는다.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="250dp"
+    android:minResizeWidth="250dp"
+    android:minResizeHeight="250dp"
+    android:maxResizeWidth="320dp"
+    android:maxResizeHeight="250dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="4"
+    android:updatePeriodMillis="1800000"
+    android:resizeMode="horizontal"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget_calendar"
+    android:previewLayout="@layout/widget_calendar"
+    android:description="@string/widget_calendar_description" />

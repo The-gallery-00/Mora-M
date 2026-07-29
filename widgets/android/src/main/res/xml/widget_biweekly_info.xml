@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  2주 달력 위젯 메타. 매니페스트 `<receiver>` 의
+  `<meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_biweekly_info"/>` 가 가리킨다.
+
+  크기 계산 — 런처 셀 n개의 dp = 70n - 30
+    4x2 = 250dp x 110dp. 월간 달력(4x4, 250x250)과 달리 **세로 2셀에 들어가는 것이 이 위젯의 존재 이유**다.
+
+  resizeMode="horizontal|vertical"
+    가로는 좁은 런처(3셀)까지 줄어들 수 있게 180dp 를, 세로는 110dp 를 최소로 둔다.
+    2주 x 7일은 6주 그리드와 달리 110dp 에서도 숫자가 잘리지 않는다(widget_biweekly.xml 의 '세로 예산' 주석).
+    maxResizeHeight 는 180dp(3셀) 로 막는다 — 더 늘려 봐야 14칸 사이 여백만 벌어지고,
+    그 크기가 필요하면 월간 달력을 쓰는 게 맞다.
+
+  updatePeriodMillis = 1800000 (30분)
+    안드로이드가 허용하는 최소값이다. 더 짧게 적으면 무시된다. 즉시 반영이 필요하면 헤더의 ↻ 를 누른다.
+    날짜가 바뀌면 다음 주기 갱신 때 오늘 강조가 따라온다(최대 30분 지연).
+
+  previewImage 는 넣지 않는다 — 다른 두 위젯과 같은 이유로 previewLayout(실제 레이아웃 렌더)만 쓴다.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="110dp"
+    android:maxResizeWidth="320dp"
+    android:maxResizeHeight="180dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget_biweekly"
+    android:previewLayout="@layout/widget_biweekly"
+    android:description="@string/widget_biweekly_description" />

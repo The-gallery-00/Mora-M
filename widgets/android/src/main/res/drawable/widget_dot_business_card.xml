@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 문서유형 점 — BUSINESS_CARD(명함). 색: tokens.ts light.doc.BUSINESS_CARD.fg -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+  <solid android:color="@color/widget_doc_business_card" />
+</shape>

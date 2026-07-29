@@ -24,7 +24,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { MoraLogo } from '@/components/brand/MoraLogo';
-import { DeadlineCard, DEADLINE_CARD_WIDTH, ScheduleListItem, StatTile } from '@/components/dashboard';
+import {
+  DeadlineCard,
+  DEADLINE_CARD_WIDTH,
+  ScheduleListItem,
+  StatTile,
+  STAT_TILE_MIN_HEIGHT,
+  STAT_TILE_WIDTH,
+} from '@/components/dashboard';
 import { Button, EmptyState, IconButton, Skeleton, toast } from '@/components/ui';
 import {
   DASHBOARD_COPY,
@@ -152,9 +159,11 @@ function HomeSkeleton({ slow }: { slow: boolean }) {
   return (
     <View>
       <Skeleton height={116} radius={16} />
+      {/* 치수를 적지 않고 StatTile 상수를 쓴다 — 예전에 여기 하드코딩된 96 이 실제 타일 높이와
+          어긋나 있었고, 그 어긋남이 통계 타일 잘림 버그의 표식이었다. */}
       <View className="mt-5 flex-row gap-3">
         {[0, 1, 2].map((i) => (
-          <Skeleton key={i} width={148} height={96} radius={12} />
+          <Skeleton key={i} width={STAT_TILE_WIDTH} height={STAT_TILE_MIN_HEIGHT} radius={12} />
         ))}
       </View>
       <View className="mt-7 flex-row gap-3">
@@ -320,12 +329,17 @@ export default function HomeScreen() {
         ) : data ? (
           <>
             {/* ── 통계 타일 3개 (가로 스크롤) ──
-                390dp 에서 4분할은 칸당 90dp 라 숫자+라벨이 안 들어간다 → 3개 가로 스크롤이다. */}
+                390dp 에서 4분할은 칸당 90dp 라 숫자+라벨이 안 들어간다 → 3개 가로 스크롤이다.
+
+                `alignItems: 'stretch'` 는 기본값이지만 **명시한다.** 세 타일의 높이를 서로 맞추는
+                유일한 장치이기 때문이다 — 한 타일이 (큰 글꼴 배율 등으로) 더 커지면 나머지 둘이
+                따라 늘어난다. 여기서 `alignItems: 'flex-start'` 로 바꾸면 세 타일 높이가 어긋나고,
+                캐러셀이 잰 높이보다 큰 타일은 잘린다. */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={{ marginHorizontal: -16, marginTop: 20 }}
-              contentContainerStyle={{ paddingHorizontal: 16, gap: CARD_GAP }}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: CARD_GAP, alignItems: 'stretch' }}
             >
               <StatTile
                 icon="📅"

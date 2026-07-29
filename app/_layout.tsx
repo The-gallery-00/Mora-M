@@ -15,6 +15,7 @@ import { ToastHost, toast } from '@/components/ui';
 import { useAuth, useAuthBootstrap, useSessionRevalidate } from '@/features/auth';
 import { useAuthFlowStore } from '@/features/auth/authFlow';
 import { installQueryNetworkBridge, queryRetry, queryRetryDelay } from '@/features/network';
+import { useWidgetSync } from '@/features/widget';
 import { tabToastBottomOffset } from '@/navigation/shell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 
@@ -131,6 +132,9 @@ function SessionBootstrap() {
 
   useAuthBootstrap();
   useSessionRevalidate();
+  // 안드로이드 홈 위젯 JSON 동기화. 쿼리 캐시를 읽기만 하므로 새 네트워크 요청은 없고,
+  // 실패는 내부에서 삼킨다. `useQueryClient()` 를 쓰므로 QueryClientProvider 안이어야 한다.
+  useWidgetSync();
 
   const { expiredNotice, sessionExpiredMessage, clearExpiredNotice } = useAuth();
 

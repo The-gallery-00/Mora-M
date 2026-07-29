@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 위젯 카드 배경. 런처 배경 위에 얹히는 흰 카드. 색: tokens.ts light.bg.base -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+  <solid android:color="@color/widget_bg" />
+  <!-- API 31 의 @android:dimen/system_app_widget_background_radius(보통 16~28dp)에 가까운 고정값.
+       dimen 참조는 v31 리소스 분기가 필요해 고정값으로 둔다. -->
+  <corners android:radius="20dp" />
+</shape>

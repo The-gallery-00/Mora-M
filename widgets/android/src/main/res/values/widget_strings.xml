@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  위젯 문구. 전부 한국어 고정이다(앱이 ko 전용 — src/i18n).
+  `widget_*_label` 은 매니페스트 `<receiver android:label>`, `widget_*_description` 은
+  `appwidget-provider android:description`(API 31+ 위젯 선택기 설명)에서 참조한다.
+  이름을 바꾸면 plugins/withMoraWidgets.js 의 매니페스트 주입도 같이 고쳐야 한다.
+-->
+<resources>
+  <string name="widget_upcoming_label">MORA 다가오는 일정</string>
+  <string name="widget_upcoming_description">가까운 일정을 D-day 와 함께 보여줍니다. 항목을 누르면 문서가 열립니다.</string>
+  <string name="widget_upcoming_empty">스캔해서 일정을 등록하세요</string>
+
+  <string name="widget_calendar_label">MORA 달력</string>
+  <string name="widget_calendar_description">이번 달 일정이 있는 날을 한눈에 봅니다. 날짜를 누르면 캘린더가 열립니다.</string>
+
+  <string name="widget_biweekly_label">MORA 2주 달력</string>
+  <string name="widget_biweekly_description">이번 주와 다음 주 2주치를 컴팩트하게 봅니다. 날짜를 누르면 캘린더가 열립니다.</string>
+
+  <!-- 접근성 라벨(TalkBack). 화면에는 보이지 않는다. -->
+  <string name="widget_refresh">새로고침</string>
+  <string name="widget_prev_month">이전 달</string>
+  <string name="widget_next_month">다음 달</string>
+</resources>
