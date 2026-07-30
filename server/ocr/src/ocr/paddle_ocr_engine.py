@@ -92,6 +92,7 @@ class PaddleOCREngine:
         # PaddleOCR 엔진 초기화 (문서 방향 감지/왜곡 보정 비활성화로 속도 향상)
         self.ocr = PaddleOCR(
             lang=lang,
+            enable_mkldnn=False,
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
         )
