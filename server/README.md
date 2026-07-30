@@ -61,3 +61,43 @@ For store-ready mobile deployment:
 - App build: EAS production AAB
 
 Do not deploy the current local `/uploads` storage model to production. Cloud Run instances are stateless, so local images can disappear when instances are replaced.
+
+## Production Environment Variables
+
+### OCR Cloud Run
+
+```text
+GCS_BUCKET_NAME=mora-mobile-uploads
+GCS_UPLOAD_PREFIX=uploads
+MORA_UPLOAD_DIR=/tmp/mora-uploads
+```
+
+`GCS_BUCKET_NAME` enables durable image storage. The OCR service still uses a
+temporary local file so PaddleOCR can read the image, then uploads the original
+to GCS. App-facing image URLs remain `/uploads/{file}` and are served back by
+the OCR service, so the GCS bucket can stay private.
+
+### Spring Cloud Run
+
+```text
+DATABASE_URL=jdbc:postgresql:///mora?cloudSqlInstance=PROJECT_ID:asia-northeast3:mora-mobile-db&socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlRefreshStrategy=lazy&stringtype=unspecified
+DATABASE_USERNAME=mora
+DATABASE_PASSWORD=...
+JWT_SECRET=...
+JWT_EXPIRATION=1209600000
+OCR_SERVICE_URL=https://mora-mobile-ocr-xxxxx.a.run.app
+OPENAI_API_KEY=...
+```
+
+`JWT_EXPIRATION=1209600000` is 14 days.
+
+## Recommended Deployment Order
+
+1. Create or select the Google Cloud project.
+2. Create Cloud SQL for PostgreSQL and apply `db/init.sql`.
+3. Create a private GCS bucket for uploaded originals.
+4. Grant the OCR Cloud Run service account access to the GCS bucket.
+5. Deploy OCR to Cloud Run with `GCS_BUCKET_NAME`.
+6. Deploy Spring to Cloud Run with Cloud SQL and `OCR_SERVICE_URL`.
+7. Build the mobile app with `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_OCR_URL`.
+8. Submit the production AAB through EAS or Google Play Console.

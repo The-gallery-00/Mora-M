@@ -20,6 +20,7 @@
     <properties>
         <java.version>21</java.version>
         <jjwt.version>0.12.5</jjwt.version>
+        <cloud-sql-jdbc-socket-factory.version>1.29.0</cloud-sql-jdbc-socket-factory.version>
     </properties>
 
     <dependencies>
@@ -40,6 +41,13 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- Cloud SQL PostgreSQL connector for Cloud Run deployments -->
+        <dependency>
+            <groupId>com.google.cloud.sql</groupId>
+            <artifactId>postgres-socket-factory</artifactId>
+            <version>${cloud-sql-jdbc-socket-factory.version}</version>
         </dependency>
 
         <!-- Spring Boot Security -->

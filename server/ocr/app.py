@@ -79,7 +79,6 @@ os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 # ── Path Setup ──
 # backend 디렉토리를 sys.path에 추가하여 routers 패키지를 import 가능하게 함
@@ -87,6 +86,7 @@ BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from routers import ocr  # noqa: E402
+from storage import get_upload_response  # noqa: E402
 
 # ── App Setup ──
 # FastAPI 인스턴스 생성 (Swagger UI에서 title/version 표시됨)
@@ -105,11 +105,10 @@ app.add_middleware(
 # OCR 관련 엔드포인트를 /api 경로 아래에 등록
 app.include_router(ocr.router, prefix="/api", tags=["OCR"])
 
-# ── 이미지 파일 서빙 ──
-# 업로드된 이미지를 /uploads/파일명 URL로 접근 가능하게 정적 서빙
-UPLOAD_DIR = BACKEND_DIR.parent / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)  # 디렉토리가 없으면 생성
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+@app.get("/uploads/{image_name}")
+def uploaded_image(image_name: str):
+    """Serve uploaded originals from GCS in production or disk in local dev."""
+    return get_upload_response(image_name)
 
 
 @app.get("/")
