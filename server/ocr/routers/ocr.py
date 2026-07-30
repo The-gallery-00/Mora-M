@@ -54,7 +54,6 @@
 
 """OCR router — POST /scan only."""
 import uuid
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile
@@ -62,12 +61,9 @@ from fastapi.responses import JSONResponse
 
 # services.py에서 싱글톤으로 생성된 파이프라인과 파싱 스킬을 가져옴
 from services import pipeline, parsing_skill
+from storage import persist_image, save_upload_file
 
 router = APIRouter()
-
-# 업로드 디렉토리 경로 설정 (프로젝트 루트/uploads)
-UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)  # 디렉토리가 없으면 생성
 
 
 @router.post("/scan")
@@ -77,11 +73,7 @@ async def scan(file: UploadFile = File(...)):
     # 원본 확장자를 유지하면서 UUID 기반 고유 파일명 생성
     suffix = Path(file.filename).suffix
     img_name = f"{uuid.uuid4().hex}{suffix}"
-    img_path = UPLOAD_DIR / img_name
-
-    # 업로드된 파일 스트림을 디스크에 저장
-    with open(img_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    img_path = save_upload_file(file, img_name)
 
     try:
         # OCR 파이프라인 실행 → 이미지에서 텍스트 블록 추출
@@ -98,7 +90,7 @@ async def scan(file: UploadFile = File(...)):
             "data": {
                 "parsed": parsed,
                 "raw_blocks": text_blocks,
-                "image_url": f"/uploads/{img_name}",
+                "image_url": persist_image(img_path, img_name, file.content_type),
             }
         })
     except Exception as e:

@@ -12,3 +12,6 @@ python-multipart
 
 # ── Config ──
 python-dotenv
+
+# ── Cloud Storage ──
+google-cloud-storage
