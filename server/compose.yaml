@@ -1,7 +1,6 @@
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: mora-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: mora
