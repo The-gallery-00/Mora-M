@@ -1,0 +1,43 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: mora-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mora
+      POSTGRES_USER: mora
+      POSTGRES_PASSWORD: mora1234
+    ports:
+      - "5433:5432"
+    volumes:
+      - mora_pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+
+  ocr:
+    build:
+      context: ./ocr
+    ports:
+      - "8000:8000"
+    volumes:
+      - mora_uploads:/uploads
+
+  spring:
+    build:
+      context: ./spring
+    depends_on:
+      - db
+      - ocr
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/mora?stringtype=unspecified
+      DATABASE_USERNAME: mora
+      DATABASE_PASSWORD: mora1234
+      JWT_SECRET: change-this-to-a-long-random-secret
+      JWT_EXPIRATION: 1209600000
+      OCR_SERVICE_URL: http://ocr:8000
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "8080:8080"
+
+volumes:
+  mora_pgdata:
+  mora_uploads:

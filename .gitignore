@@ -49,6 +49,7 @@ example
 # 빌드 산출물 — APK/AAB 는 언제든 다시 만든다. GitHub 는 100MB 초과 파일을 거부한다.
 *.apk
 *.aab
+target/
 
 # Obsidian 로컬 설정 (workspace.json 에 개인 경로가 들어간다)
 .obsidian/
