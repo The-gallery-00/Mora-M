@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 /**
  * JWT 는 반드시 SecureStore(Android Keystore 로 암호화)에만 둔다.
@@ -20,9 +21,45 @@ export type SessionUser = {
 let cachedToken: string | null = null;
 let loaded = false;
 
+function getWebItem(key: string): string | null {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  return window.localStorage.getItem(key);
+}
+
+function setWebItem(key: string, value: string): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  window.localStorage.setItem(key, value);
+}
+
+function removeWebItem(key: string): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  window.localStorage.removeItem(key);
+}
+
+async function getItem(key: string): Promise<string | null> {
+  if (Platform.OS === 'web') return getWebItem(key);
+  return SecureStore.getItemAsync(key);
+}
+
+async function setItem(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    setWebItem(key, value);
+    return;
+  }
+  await SecureStore.setItemAsync(key, value);
+}
+
+async function deleteItem(key: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    removeWebItem(key);
+    return;
+  }
+  await SecureStore.deleteItemAsync(key);
+}
+
 export async function loadSession(): Promise<string | null> {
   if (!loaded) {
-    cachedToken = await SecureStore.getItemAsync(TOKEN_KEY);
+    cachedToken = await getItem(TOKEN_KEY);
     loaded = true;
   }
   return cachedToken;
@@ -35,12 +72,12 @@ export function getTokenSync(): string | null {
 export async function saveSession(token: string, user?: SessionUser): Promise<void> {
   cachedToken = token;
   loaded = true;
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
-  if (user) await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+  await setItem(TOKEN_KEY, token);
+  if (user) await setItem(USER_KEY, JSON.stringify(user));
 }
 
 export async function getCachedUser(): Promise<SessionUser | null> {
-  const raw = await SecureStore.getItemAsync(USER_KEY);
+  const raw = await getItem(USER_KEY);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as SessionUser;
@@ -52,6 +89,6 @@ export async function getCachedUser(): Promise<SessionUser | null> {
 export async function clearSession(): Promise<void> {
   cachedToken = null;
   loaded = true;
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
-  await SecureStore.deleteItemAsync(USER_KEY);
+  await deleteItem(TOKEN_KEY);
+  await deleteItem(USER_KEY);
 }
