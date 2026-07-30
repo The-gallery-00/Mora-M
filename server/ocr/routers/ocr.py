@@ -52,11 +52,12 @@
 #
 # ═══════════════════════════════════════════════════════════════
 
-"""OCR router — POST /scan only."""
+"""OCR router — scan and commit endpoints."""
+import json
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
 # services.py에서 싱글톤으로 생성된 파이프라인과 파싱 스킬을 가져옴
@@ -95,4 +96,33 @@ async def scan(file: UploadFile = File(...)):
         })
     except Exception as e:
         # 에러 발생 시 500 응답
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+
+@router.post("/commit")
+async def commit(
+    file: UploadFile = File(...),
+    document_type: str = Form("ETC"),
+    raw_blocks: str = Form("[]"),
+    corrected_fields: str = Form("{}"),
+):
+    """Persist an original image after the user confirms extracted fields."""
+    suffix = Path(file.filename).suffix
+    safe_type = document_type if document_type in {"BUSINESS_CARD", "POSTER", "TICKET", "RECEIPT"} else "ETC"
+    img_name = f"{safe_type.lower()}_{uuid.uuid4().hex}{suffix}"
+    img_path = save_upload_file(file, img_name)
+
+    try:
+        blocks = json.loads(raw_blocks)
+        fields = json.loads(corrected_fields)
+        count = len(blocks) if isinstance(blocks, list) else 0
+
+        return JSONResponse(content={
+            "success": True,
+            "data": {
+                "image_url": persist_image(img_path, img_name, file.content_type),
+                "count": count + (len(fields) if isinstance(fields, dict) else 0),
+            }
+        })
+    except Exception as e:
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
