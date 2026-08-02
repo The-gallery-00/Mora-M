@@ -89,7 +89,7 @@ BACKEND_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from routers import ocr  # noqa: E402
-from storage import get_upload_response  # noqa: E402
+from storage import get_upload_response, delete_image  # noqa: E402
 
 # ── App Setup ──
 # FastAPI 인스턴스 생성 (Swagger UI에서 title/version 표시됨)
@@ -112,6 +112,13 @@ app.include_router(ocr.router, prefix="/api", tags=["OCR"])
 def uploaded_image(image_name: str):
     """Serve uploaded originals from GCS in production or disk in local dev."""
     return get_upload_response(image_name)
+
+
+@app.delete("/uploads/{image_name}")
+def delete_uploaded_image(image_name: str):
+    # Spring 계정 삭제 로직이 명함 이미지를 지울 때 호출한다
+    delete_image(image_name)
+    return {"deleted": image_name}
 
 
 @app.get("/")

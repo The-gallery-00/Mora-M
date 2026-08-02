@@ -134,4 +134,13 @@ public class OcrService {
                 file.getContentType() != null ? file.getContentType() : "application/octet-stream"));
         return headers;
     }
+
+    // 명함 이미지를 OCR 서버(GCS/로컬)에서 삭제한다
+    public void deleteImage(String imageName) {
+        try {
+            restTemplate.delete(ocrServiceUrl + "/uploads/" + imageName);
+        } catch (Exception e) {
+            throw new RuntimeException("OCR image delete failed: " + e.getMessage(), e);
+        }
+    }
 }

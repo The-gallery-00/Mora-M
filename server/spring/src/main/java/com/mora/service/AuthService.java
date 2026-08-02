@@ -3,12 +3,16 @@ package com.mora.service;
 import com.mora.dto.AuthResponse;
 import com.mora.dto.LoginRequest;
 import com.mora.dto.SignupRequest;
+import com.mora.entity.BusinessCard;
 import com.mora.entity.User;
+import com.mora.repository.BusinessCardRepository;
 import com.mora.repository.UserRepository;
 import com.mora.security.JwtUtil;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -63,11 +67,16 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final BusinessCardRepository businessCardRepository;
+    private final OcrService ocrService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+                        BusinessCardRepository businessCardRepository, OcrService ocrService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.businessCardRepository = businessCardRepository;
+        this.ocrService = ocrService;
     }
 
     /**
@@ -122,5 +131,22 @@ public class AuthService {
     public User getUserById(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    // 계정을 삭제한다. 명함 이미지(GCS)를 먼저 지우고 유저 row를 삭제한다 (business_cards는 CASCADE로 자동 삭제)
+    @Transactional
+    public void deleteAccount(UUID userId) {
+        User user = getUserById(userId);
+
+        // GCS 이미지를 DB보다 먼저 지운다 — 실패하면 유저 row가 남아있어 재시도 가능
+        List<BusinessCard> cards = businessCardRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        for (BusinessCard card : cards) {
+            String imageUrl = card.getImageUrl();
+            if (imageUrl != null && imageUrl.startsWith("/uploads/")) {
+                ocrService.deleteImage(imageUrl.substring("/uploads/".length()));
+            }
+        }
+
+        userRepository.delete(user);
     }
 }
