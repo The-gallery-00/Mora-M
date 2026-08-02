@@ -3,6 +3,7 @@ package com.mora.service;
 import com.mora.dto.CardResponse;
 import com.mora.dto.CardSaveRequest;
 import com.mora.entity.BusinessCard;
+import com.mora.repository.CardGroupRepository;
 import com.mora.repository.BusinessCardRepository;
 import org.springframework.stereotype.Service;
 
@@ -70,11 +71,14 @@ import java.util.*;
 public class CardService {
 
     private final BusinessCardRepository cardRepository;
+    private final CardGroupRepository groupRepository;
     private final EmbeddingService embeddingService;
     private final OcrService ocrService;
 
-    public CardService(BusinessCardRepository cardRepository, EmbeddingService embeddingService, OcrService ocrService) {
+    public CardService(BusinessCardRepository cardRepository, CardGroupRepository groupRepository,
+                       EmbeddingService embeddingService, OcrService ocrService) {
         this.cardRepository = cardRepository;
+        this.groupRepository = groupRepository;
         this.embeddingService = embeddingService;
         this.ocrService = ocrService;
     }
@@ -103,6 +107,7 @@ public class CardService {
         card.setEmail(request.getEmail());
         card.setRawOcrText(request.getRawOcrText());
         card.setImageUrl(request.getImageUrl());
+        setGroupIfOwned(card, userId, request.getGroupId());
         card.setEmbedding(embedding);
 
         // DB에 저장하고 응답 DTO로 변환하여 반환
@@ -118,6 +123,13 @@ public class CardService {
                 .stream()
                 .map(CardResponse::from)  // 각 엔티티를 응답 DTO로 변환
                 .toList();
+    }
+
+    public List<CardResponse> listByUserAndGroup(UUID userId, UUID groupId) {
+        List<BusinessCard> cards = groupId == null
+                ? cardRepository.findByUserIdAndGroupIdIsNullOrderByCreatedAtDesc(userId)
+                : cardRepository.findByUserIdAndGroupIdOrderByCreatedAtDesc(userId, groupId);
+        return cards.stream().map(CardResponse::from).toList();
     }
 
     /**
@@ -148,6 +160,9 @@ public class CardService {
         if (request.getImageUrl() != null) {
             card.setImageUrl(request.getImageUrl());
         }
+        if (request.getGroupId() != null) {
+            setGroupIfOwned(card, userId, request.getGroupId());
+        }
 
         // 수정된 필드로 임베딩을 재생성
         String textForEmbedding = buildEmbeddingText(
@@ -175,6 +190,18 @@ public class CardService {
 
         deleteImageIfUploaded(card.getImageUrl());
         cardRepository.delete(card);
+    }
+
+    public CardResponse moveGroup(UUID userId, UUID cardId, UUID groupId) {
+        BusinessCard card = cardRepository.findById(cardId)
+                .orElseThrow(() -> new RuntimeException("Card not found"));
+
+        if (!card.getUserId().equals(userId)) {
+            throw new RuntimeException("Unauthorized");
+        }
+
+        setGroupIfOwned(card, userId, groupId);
+        return CardResponse.from(cardRepository.save(card));
     }
 
     /**
@@ -206,6 +233,10 @@ public class CardService {
             cardResponse.setEmail((String) row.get("email"));
             cardResponse.setRawOcrText((String) row.get("raw_ocr_text"));
             cardResponse.setImageUrl((String) row.get("image_url"));
+            Object groupId = row.get("group_id");
+            if (groupId != null) {
+                cardResponse.setGroupId(UUID.fromString(groupId.toString()));
+            }
             // created_at → LocalDateTime 변환 (Instant 또는 Timestamp 둘 다 대응)
             Object createdAtObj = row.get("created_at");
             if (createdAtObj instanceof Instant) {
@@ -242,5 +273,16 @@ public class CardService {
         if (imageUrl != null && imageUrl.startsWith("/uploads/")) {
             ocrService.deleteImage(imageUrl.substring("/uploads/".length()));
         }
+    }
+
+    private void setGroupIfOwned(BusinessCard card, UUID userId, UUID groupId) {
+        if (groupId == null) {
+            card.setGroupId(null);
+            return;
+        }
+
+        groupRepository.findByIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new RuntimeException("Card group not found"));
+        card.setGroupId(groupId);
     }
 }

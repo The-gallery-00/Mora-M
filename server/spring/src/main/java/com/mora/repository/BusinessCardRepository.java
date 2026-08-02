@@ -66,6 +66,10 @@ public interface BusinessCardRepository extends JpaRepository<BusinessCard, UUID
     /** 특정 사용자의 명함 목록을 생성일 내림차순(최신순)으로 조회한다. */
     List<BusinessCard> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
+    List<BusinessCard> findByUserIdAndGroupIdOrderByCreatedAtDesc(UUID userId, UUID groupId);
+
+    List<BusinessCard> findByUserIdAndGroupIdIsNullOrderByCreatedAtDesc(UUID userId);
+
     /**
      * pgvector 코사인 유사도 기반으로 명함을 검색한다.
      * 임베딩이 있는 명함 중 주어진 벡터와 가장 유사한 topK개를 반환한다.
