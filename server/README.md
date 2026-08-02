@@ -86,10 +86,17 @@ DATABASE_PASSWORD=...
 JWT_SECRET=...
 JWT_EXPIRATION=1209600000
 OCR_SERVICE_URL=https://mora-mobile-ocr-xxxxx.a.run.app
-OPENAI_API_KEY=...
+OPENAI_API_KEY=...  # local development only; production uses Secret Manager
 ```
 
 `JWT_EXPIRATION=1209600000` is 14 days.
+
+For production, use [`cloudrun/deploy-spring.ps1`](cloudrun/deploy-spring.ps1).
+It injects `OPENAI_API_KEY`, `JWT_SECRET`, and `DATABASE_PASSWORD` from Google
+Secret Manager with Cloud Run `--set-secrets`; secret values are never command
+arguments or ordinary environment configuration. See [`SECURITY.md`](SECURITY.md)
+for setup and verification, and [`DATA_SAFETY.md`](DATA_SAFETY.md) for the Play
+Console data inventory.
 
 ## Recommended Deployment Order
 

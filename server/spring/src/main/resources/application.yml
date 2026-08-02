@@ -1,9 +1,19 @@
 server:
   port: 8080
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
+  tomcat:
+    accesslog:
+      enabled: false
 
 spring:
   autoconfigure:
     exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  mvc:
+    log-request-details: false
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/mora?stringtype=unspecified}
     username: ${DATABASE_USERNAME:mora}
@@ -15,11 +25,16 @@ spring:
       hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
 
 app:
-  jwt-secret: ${JWT_SECRET:morasecret123}
+  jwt-secret: ${JWT_SECRET}
   jwt-expiration: ${JWT_EXPIRATION:1209600000}
   ocr-service-url: ${OCR_SERVICE_URL:http://localhost:8000}
   openai-api-key: ${OPENAI_API_KEY:}
 
 logging:
   level:
+    root: INFO
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: OFF
+    org.hibernate.orm.jdbc.bind: OFF
     org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF

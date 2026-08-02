@@ -138,7 +138,9 @@ public class EmbeddingService {
             // List<Double>.toString()은 "[0.0023, -0.0091, ...]" 형태 → pgvector CAST에 사용
             return embedding.toString();
         } catch (Exception e) {
-            log.error("Failed to generate embedding: {}", e.getMessage());
+            // Exception messages from HTTP clients can contain submitted contact
+            // text or headers. Keep production logs metadata-only.
+            log.error("OpenAI embedding request failed (type={})", e.getClass().getSimpleName());
             return null;
         }
     }
