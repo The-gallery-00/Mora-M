@@ -1,6 +1,7 @@
 package com.mora.controller;
 
 import com.mora.dto.ApiResponse;
+import com.mora.dto.CardMoveGroupRequest;
 import com.mora.dto.CardResponse;
 import com.mora.dto.CardSaveRequest;
 import com.mora.security.JwtUtil;
@@ -156,6 +157,33 @@ public class CardController {
         }
     }
 
+    @GetMapping(value = "/cards", params = "groupId")
+    public ResponseEntity<ApiResponse<List<CardResponse>>> listByGroup(
+            HttpServletRequest request,
+            @RequestParam("groupId") UUID groupId) {
+        try {
+            UUID userId = getUserId(request);
+            if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
+            return ResponseEntity.ok(ApiResponse.ok(cardService.listByUserAndGroup(userId, groupId)));
+        } catch (RuntimeException e) {
+            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
+        }
+    }
+
+    @GetMapping(value = "/cards", params = "ungrouped")
+    public ResponseEntity<ApiResponse<List<CardResponse>>> listUngrouped(
+            HttpServletRequest request,
+            @RequestParam("ungrouped") boolean ungrouped) {
+        try {
+            UUID userId = getUserId(request);
+            if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
+            if (!ungrouped) return ResponseEntity.ok(ApiResponse.ok(cardService.listByUser(userId)));
+            return ResponseEntity.ok(ApiResponse.ok(cardService.listByUserAndGroup(userId, null)));
+        } catch (RuntimeException e) {
+            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
+        }
+    }
+
     /**
      * 특정 명함의 정보를 수정한다.
      * 로그인 필수. 본인 소유 명함만 수정 가능.
@@ -172,6 +200,22 @@ public class CardController {
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
+        }
+    }
+
+    @PatchMapping("/cards/{id}/group")
+    public ResponseEntity<ApiResponse<CardResponse>> moveGroup(
+            HttpServletRequest request,
+            @PathVariable UUID id,
+            @RequestBody(required = false) CardMoveGroupRequest body) {
+        try {
+            UUID userId = getUserId(request);
+            if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
+            UUID groupId = body == null ? null : body.getGroupId();
+            CardResponse response = cardService.moveGroup(userId, id, groupId);
+            return ResponseEntity.ok(ApiResponse.ok(response));
+        } catch (RuntimeException e) {
+            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }
     }
 

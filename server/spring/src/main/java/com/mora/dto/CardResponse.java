@@ -51,6 +51,8 @@ public class CardResponse {
     private String rawOcrText;
     /** 명함 이미지 URL */
     private String imageUrl;
+    /** 명함첩 ID. null 이면 미분류 */
+    private UUID groupId;
     /** 명함 등록 일시 */
     private LocalDateTime createdAt;
     /** 벡터 검색 시 코사인 유사도 점수 (0~1, 일반 조회 시 null) */
@@ -87,6 +89,7 @@ public class CardResponse {
         response.setEmail(card.getEmail());
         response.setRawOcrText(card.getRawOcrText());
         response.setImageUrl(card.getImageUrl());
+        response.setGroupId(card.getGroupId());
         response.setCreatedAt(card.getCreatedAt());
         return response;
     }
@@ -153,6 +156,14 @@ public class CardResponse {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public UUID getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(UUID groupId) {
+        this.groupId = groupId;
     }
 
     public LocalDateTime getCreatedAt() {

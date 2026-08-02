@@ -71,8 +71,12 @@ public class BusinessCard {
     private UUID id;
 
     /** 이 명함을 등록한 사용자의 ID (FK 역할, NOT NULL) */
-    @Column(nullable = false)
+    @Column(name = "user_id", nullable = false)
     private UUID userId;
+
+    /** 이 명함이 속한 명함첩 ID. null 이면 미분류 */
+    @Column(name = "group_id")
+    private UUID groupId;
 
     /** 명함에 기재된 이름 */
     private String name;
@@ -90,10 +94,11 @@ public class BusinessCard {
     private String email;
 
     /** OCR로 인식된 원본 텍스트 전체 (TEXT 타입) */
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "raw_ocr_text", columnDefinition = "TEXT")
     private String rawOcrText;
 
     /** 명함 이미지 URL (S3 등 외부 저장소 경로) */
+    @Column(name = "image_url")
     private String imageUrl;
 
     /** 임베딩 벡터 (pgvector vector(1536) 타입) */
@@ -101,7 +106,7 @@ public class BusinessCard {
     private String embedding;
 
     /** 명함 등록 일시 (INSERT 시 자동 설정, UPDATE 시 변경 불가) */
-    @Column(updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     public BusinessCard() {
@@ -144,6 +149,14 @@ public class BusinessCard {
 
     public void setUserId(UUID userId) {
         this.userId = userId;
+    }
+
+    public UUID getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(UUID groupId) {
+        this.groupId = groupId;
     }
 
     public String getName() {

@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory = $true)] [string] $OcrServiceUrl,
     [Parameter(Mandatory = $true)] [string] $ServiceAccount,
     [string] $Region = "asia-northeast3",
-    [string] $ServiceName = "mora-mobile-api",
+    [string] $ServiceName = "mora-mobile-spring",
     [string] $OpenAiSecret = "mora-openai-api-key",
     [string] $OpenAiSecretVersion = "1",
     [string] $JwtSecret = "mora-jwt-secret",
@@ -24,7 +24,7 @@ foreach ($secretName in $secretNames) {
 }
 
 $databaseUrl = "jdbc:postgresql:///mora?cloudSqlInstance=$CloudSqlInstance&socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlRefreshStrategy=lazy&stringtype=unspecified"
-$environment = "DATABASE_URL=$databaseUrl,DATABASE_USERNAME=mora,OCR_SERVICE_URL=$OcrServiceUrl,JWT_EXPIRATION=1209600000"
+$environment = "DATABASE_URL=$databaseUrl,DATABASE_USERNAME=mora,OCR_SERVICE_URL=$OcrServiceUrl,JWT_EXPIRATION=1209600000,DB_MAX_POOL_SIZE=3,DB_MIN_IDLE=0"
 $secrets = "OPENAI_API_KEY=${OpenAiSecret}:${OpenAiSecretVersion},JWT_SECRET=${JwtSecret}:${JwtSecretVersion},DATABASE_PASSWORD=${DatabasePasswordSecret}:${DatabasePasswordSecretVersion}"
 
 gcloud run deploy $ServiceName `
@@ -35,4 +35,5 @@ gcloud run deploy $ServiceName `
     --add-cloudsql-instances $CloudSqlInstance `
     --set-env-vars $environment `
     --set-secrets $secrets `
+    --max-instances 3 `
     --quiet

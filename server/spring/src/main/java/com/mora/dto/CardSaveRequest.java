@@ -54,6 +54,8 @@ public class CardSaveRequest {
     private String rawOcrText;
     /** 명함 이미지 URL */
     private String imageUrl;
+    /** 명함첩 ID. null 이면 미분류 */
+    private java.util.UUID groupId;
 
     public CardSaveRequest() {
     }
@@ -123,5 +125,13 @@ public class CardSaveRequest {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public java.util.UUID getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(java.util.UUID groupId) {
+        this.groupId = groupId;
     }
 }
