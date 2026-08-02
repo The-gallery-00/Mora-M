@@ -120,7 +120,8 @@ public class OcrService {
 
             return response.getBody();
         } catch (Exception e) {
-            throw new RuntimeException("OCR service call failed: " + e.getMessage(), e);
+            // Provider errors may include filenames, response bodies, or URLs.
+            throw new RuntimeException("OCR service call failed", e);
         }
     }
 
@@ -140,7 +141,7 @@ public class OcrService {
         try {
             restTemplate.delete(ocrServiceUrl + "/uploads/" + imageName);
         } catch (Exception e) {
-            throw new RuntimeException("OCR image delete failed: " + e.getMessage(), e);
+            throw new RuntimeException("OCR image delete failed", e);
         }
     }
 }

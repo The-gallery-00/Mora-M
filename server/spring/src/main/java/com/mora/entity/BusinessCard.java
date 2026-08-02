@@ -236,8 +236,6 @@ public class BusinessCard {
         return "BusinessCard{" +
                 "id=" + id +
                 ", userId=" + userId +
-                ", name='" + name + '\'' +
-                ", company='" + company + '\'' +
                 '}';
     }
 }

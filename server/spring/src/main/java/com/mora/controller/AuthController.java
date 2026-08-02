@@ -87,7 +87,7 @@ public class AuthController {
             AuthResponse response = authService.signup(request);
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Signup failed"));
         }
     }
 
@@ -101,7 +101,7 @@ public class AuthController {
             AuthResponse response = authService.login(request);
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Invalid email or password"));
         }
     }
 
@@ -124,7 +124,7 @@ public class AuthController {
             UserResponse response = new UserResponse(user.getId(), user.getEmail(), user.getName(), user.getPicture());
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Invalid token"));
         }
     }
 
@@ -140,7 +140,7 @@ public class AuthController {
             authService.deleteAccount(userId);
             return ResponseEntity.ok(ApiResponse.ok(null));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Account deletion failed"));
         }
     }
 }

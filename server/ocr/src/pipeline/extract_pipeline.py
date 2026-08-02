@@ -171,23 +171,14 @@ class BusinessCardPipeline:
 
     def print_result(self, result: dict):
         """사용자에게 보여줄 한국어 결과 출력 (CLI용)."""
-        print("=" * 40)
-        print("  명함 인식 결과")
-        print("=" * 40)
-
         if "error" in result:
-            print(f"  오류: {result['error']}")
+            print("OCR failed")
             return
 
         korean_result = result.get("result_korean", {})
-        if not korean_result:
-            print("  인식된 정보가 없습니다.")
-            return
-
-        for label, value in korean_result.items():
-            print(f"  {label}: {value}")
-
-        print("=" * 40)
+        # OCR output commonly contains names, email addresses and phone
+        # numbers. Diagnostics must remain metadata-only.
+        print(f"OCR completed (field_count={len(korean_result)})")
 
 
 # --- CLI 실행용 ---

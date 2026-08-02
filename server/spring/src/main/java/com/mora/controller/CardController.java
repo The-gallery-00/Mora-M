@@ -118,7 +118,7 @@ public class CardController {
             Map<String, Object> result = ocrService.scan(file);
             return ResponseEntity.ok(ApiResponse.ok(result));
         } catch (RuntimeException e) {
-            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.fail("OCR processing failed"));
         }
     }
 
@@ -136,7 +136,7 @@ public class CardController {
             CardResponse response = cardService.save(userId, body);
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
-            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
         }
     }
 
@@ -152,7 +152,7 @@ public class CardController {
             List<CardResponse> cards = cardService.listByUser(userId);
             return ResponseEntity.ok(ApiResponse.ok(cards));
         } catch (RuntimeException e) {
-            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
         }
     }
 
@@ -171,7 +171,7 @@ public class CardController {
             CardResponse response = cardService.update(userId, id, body);
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
-            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
         }
     }
 
@@ -187,7 +187,7 @@ public class CardController {
             cardService.delete(userId, id);
             return ResponseEntity.ok(ApiResponse.ok(null));
         } catch (RuntimeException e) {
-            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
         }
     }
 
@@ -210,7 +210,7 @@ public class CardController {
             List<CardResponse> results = cardService.search(userId, query, topK);
             return ResponseEntity.ok(ApiResponse.ok(results));
         } catch (RuntimeException e) {
-            return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
         }
     }
 }

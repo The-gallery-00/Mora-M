@@ -54,6 +54,7 @@
 
 """OCR router — scan and commit endpoints."""
 import json
+import logging
 import uuid
 from pathlib import Path
 
@@ -65,6 +66,7 @@ from services import pipeline, parsing_skill
 from storage import persist_image, save_upload_file
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/scan")
@@ -94,9 +96,13 @@ async def scan(file: UploadFile = File(...)):
                 "image_url": persist_image(img_path, img_name, file.content_type),
             }
         })
-    except Exception as e:
-        # 에러 발생 시 500 응답
-        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+    except Exception as exc:
+        # Exception text can contain OCR text, filenames, or provider details.
+        logger.error("OCR scan failed (type=%s)", type(exc).__name__)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": "OCR processing failed"},
+        )
 
 
 @router.post("/commit")
@@ -124,5 +130,9 @@ async def commit(
                 "count": count + (len(fields) if isinstance(fields, dict) else 0),
             }
         })
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+    except Exception as exc:
+        logger.error("OCR commit failed (type=%s)", type(exc).__name__)
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": "OCR commit failed"},
+        )
