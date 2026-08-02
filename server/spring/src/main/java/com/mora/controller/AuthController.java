@@ -127,4 +127,20 @@ public class AuthController {
             return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
         }
     }
+
+    // 계정과 명함 이미지(GCS)를 모두 삭제하는 엔드포인트
+    @DeleteMapping("/me")
+    public ResponseEntity<ApiResponse<Void>> deleteMe(HttpServletRequest request) {
+        try {
+            String header = request.getHeader("Authorization");
+            if (header == null || !header.startsWith("Bearer "))
+                return ResponseEntity.status(401).body(ApiResponse.fail("Token required"));
+
+            UUID userId = jwtUtil.getUserId(header.substring(7));
+            authService.deleteAccount(userId);
+            return ResponseEntity.ok(ApiResponse.ok(null));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
+        }
+    }
 }

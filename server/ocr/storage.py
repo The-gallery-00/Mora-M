@@ -73,6 +73,21 @@ def persist_image(local_path: Path, image_name: str, content_type: str | None) -
     return f"/uploads/{image_name}"
 
 
+def delete_image(image_name: str) -> None:
+    # 이미지가 이미 없어도 에러 없이 넘어간다 (멱등성 - 계정 삭제 중 재시도 가능하게)
+    safe_name = _safe_image_name(image_name)
+
+    if is_gcs_enabled():
+        blob = _bucket().blob(_object_name(safe_name))
+        if blob.exists():
+            blob.delete()
+        return
+
+    local_path = UPLOAD_DIR / safe_name
+    if local_path.exists():
+        local_path.unlink()
+
+
 def get_upload_response(image_name: str):
     """Return an uploaded image from GCS in production or disk in local dev."""
     safe_name = _safe_image_name(image_name)
