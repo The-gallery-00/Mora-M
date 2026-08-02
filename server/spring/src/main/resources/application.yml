@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/mora?stringtype=unspecified}
     username: ${DATABASE_USERNAME:mora}
@@ -17,3 +19,7 @@ app:
   jwt-expiration: ${JWT_EXPIRATION:1209600000}
   ocr-service-url: ${OCR_SERVICE_URL:http://localhost:8000}
   openai-api-key: ${OPENAI_API_KEY:}
+
+logging:
+  level:
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF
