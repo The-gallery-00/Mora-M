@@ -71,10 +71,12 @@ public class CardService {
 
     private final BusinessCardRepository cardRepository;
     private final EmbeddingService embeddingService;
+    private final OcrService ocrService;
 
-    public CardService(BusinessCardRepository cardRepository, EmbeddingService embeddingService) {
+    public CardService(BusinessCardRepository cardRepository, EmbeddingService embeddingService, OcrService ocrService) {
         this.cardRepository = cardRepository;
         this.embeddingService = embeddingService;
+        this.ocrService = ocrService;
     }
 
     /**
@@ -171,6 +173,7 @@ public class CardService {
             throw new RuntimeException("Unauthorized");
         }
 
+        deleteImageIfUploaded(card.getImageUrl());
         cardRepository.delete(card);
     }
 
@@ -233,5 +236,11 @@ public class CardService {
         if (email != null) sb.append(email).append(" ");
         if (rawOcrText != null) sb.append(rawOcrText);
         return sb.toString().trim();
+    }
+
+    private void deleteImageIfUploaded(String imageUrl) {
+        if (imageUrl != null && imageUrl.startsWith("/uploads/")) {
+            ocrService.deleteImage(imageUrl.substring("/uploads/".length()));
+        }
     }
 }

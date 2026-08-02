@@ -84,17 +84,19 @@ public class AuthService {
      * 이메일 중복 시 RuntimeException을 던진다.
      */
     public AuthResponse signup(SignupRequest request) {
+        String email = normalizeEmail(request.getEmail());
+
         // 이메일 중복 확인
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByEmail(email)) {
             throw new RuntimeException("Email already exists");
         }
 
         // User 엔티티 생성 및 필드 설정
         User user = new User();
         user.setProvider("local");  // 직접 가입 = "local" 제공자
-        user.setEmail(request.getEmail());
+        user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));  // BCrypt 해싱
-        user.setName(request.getName());
+        user.setName(normalizeName(request.getName(), email));
 
         // DB에 저장 (JPA가 UUID 자동 생성, @PrePersist로 createdAt 설정)
         user = userRepository.save(user);
@@ -110,7 +112,7 @@ public class AuthService {
      */
     public AuthResponse login(LoginRequest request) {
         // 이메일로 사용자 조회 (없으면 예외)
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(normalizeEmail(request.getEmail()))
                 .orElseThrow(() -> new RuntimeException("Invalid email or password"));
 
         // 입력된 평문 비밀번호와 저장된 BCrypt 해시를 비교
@@ -148,5 +150,25 @@ public class AuthService {
         }
 
         userRepository.delete(user);
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null) {
+            throw new RuntimeException("Email is required");
+        }
+        String normalized = email.trim().toLowerCase();
+        if (normalized.isBlank()) {
+            throw new RuntimeException("Email is required");
+        }
+        return normalized;
+    }
+
+    private String normalizeName(String name, String email) {
+        if (name != null && !name.trim().isBlank()) {
+            return name.trim();
+        }
+
+        String localPart = email.split("@", 2)[0].trim();
+        return localPart.isBlank() ? "사용자" : localPart;
     }
 }
