@@ -1,6 +1,13 @@
-// app/calendar.tsx
+// app/(tabs)/calendar.tsx
 //
 // SCR-07 캘린더(월간) — 원본 대시보드 안의 한 섹션을 독립 화면으로 분리한 것.
+//
+// **탭 5번째 슬롯이다**(예전 설정 자리). 파일은 `app/calendar.tsx` 에서 옮겨 왔고, `(tabs)` 는
+// 그룹 세그먼트라 **경로는 `/calendar` 그대로**다 — 홈의 `router.push(href('/calendar'))` 4곳과
+// 위젯 딥링크 `mora://calendar[?date=…]` 가 그대로 산다. 탭 루트가 되면서 달라진 것 3가지:
+//   1. 헤더의 뒤로가기를 뺀다 — 탭 루트는 되돌아갈 곳이 없다(`router.back()` 이 탭 밖으로 튄다).
+//   2. 하단 스크롤 패딩을 `tabScrollBottomPadding` 으로 바꾼다 — 탭바 높이만큼 더 비워야 한다.
+//   3. 인증 가드는 `(tabs)/_layout` 이 대신한다(화면이 직접 들지 않는다, Navigation Map §6-3 규칙 1).
 //
 // ── 이 화면의 데이터가 서버 캘린더 API 가 아닌 이유 ────────────────────────────
 // `GET /api/google-calendar/month` 는 **껍데기다.** `GoogleCalendarService.getMonth()` 가
@@ -45,9 +52,9 @@ import {
 import { DOC_ROUTE_SEGMENT } from '@/features/documents';
 import { ArchiveHeader, href } from '@/features/documents/ArchiveList';
 import { haptics } from '@/lib/haptics';
+import { tabScrollBottomPadding } from '@/navigation/shell';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/theme/ThemeProvider';
-import { spacing } from '@/theme/scale';
 
 /* ── 날짜 문구 ─────────────────────────────────────────────────────── */
 
@@ -159,9 +166,10 @@ export default function CalendarScreen() {
 
   return (
     <View className="flex-1 bg-bg-base">
+      {/* 탭 루트라 뒤로가기가 없다 — `ArchiveHeader` 는 `onBack` 이 없으면 좌측에 `w-2` 만 둔다.
+          안드로이드 하드웨어 백은 `(tabs)/_layout` 의 `useTabsBackPolicy` 가 홈 탭으로 보낸다. */}
       <ArchiveHeader
         title="캘린더"
-        onBack={() => router.back()}
         trailing={
           <Pressable
             accessibilityRole="button"
@@ -271,7 +279,7 @@ export default function CalendarScreen() {
 
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
+          contentContainerStyle={{ paddingBottom: tabScrollBottomPadding(insets.bottom) }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

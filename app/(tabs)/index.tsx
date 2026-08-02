@@ -21,7 +21,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { MoraLogo } from '@/components/brand/MoraLogo';
 import {
@@ -38,7 +38,6 @@ import {
   monthLabel,
   todayString,
   useDashboard,
-  WEEKDAY_LABELS,
   type DashboardDeadline,
   type DashboardSchedule,
 } from '@/features/dashboard';
@@ -67,18 +66,33 @@ function BellIcon({ color, size = 22 }: { color?: string; size?: number }) {
   );
 }
 
-/* ── 날짜 문구 ─────────────────────────────────────────────────────── */
-
-/** `2026-07-28` → `07.28 화` (SCR-06 배너). 서버가 준 기준일을 그대로 쓴다. */
-function formatBannerDate(iso: string): string {
-  const parts = iso.split('-');
-  const year = Number(parts[0]);
-  const month = Number(parts[1]);
-  const day = Number(parts[2]);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return '';
-  const weekday = WEEKDAY_LABELS[new Date(year, month - 1, day).getDay()] ?? '';
-  return `${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')} ${weekday}`;
+/**
+ * 설정이 탭바에서 빠지면서(5번째 슬롯은 캘린더가 됐다) **여기가 유일한 진입점**이다.
+ * lucide `settings` 공식 path 를 그대로 쓴다 — 탭바 아이콘 5종도 같은 규격(strokeWidth 2,
+ * linecap/linejoin round)으로 옮겼으므로 헤더만 옛 수제 실루엣으로 남으면 굵기가 어긋난다.
+ *
+ * `color` 에 **기본값을 주면 안 된다.** IconButton 은 `icon.props.color === undefined` 일 때만
+ * cloneElement 로 tone 색을 주입한다(`src/components/ui/IconButton.tsx`). 위 BellIcon 과 같은 규칙.
+ */
+function SettingsIcon({ color, size = 22 }: { color?: string; size?: number }) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <Circle cx={12} cy={12} r={3} />
+    </Svg>
+  );
 }
+
+/* ── 날짜 문구 ─────────────────────────────────────────────────────── */
 
 /** `2026-07-28` → `7월 28일` (일정 섹션 헤더). */
 function formatDayHeading(iso: string): string {
@@ -158,10 +172,9 @@ function SectionHeader({
 function HomeSkeleton({ slow }: { slow: boolean }) {
   return (
     <View>
-      <Skeleton height={116} radius={16} />
       {/* 치수를 적지 않고 StatTile 상수를 쓴다 — 예전에 여기 하드코딩된 96 이 실제 타일 높이와
           어긋나 있었고, 그 어긋남이 통계 타일 잘림 버그의 표식이었다. */}
-      <View className="mt-5 flex-row gap-3">
+      <View className="flex-row gap-3">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} width={STAT_TILE_WIDTH} height={STAT_TILE_MIN_HEIGHT} radius={12} />
         ))}
@@ -262,6 +275,14 @@ export default function HomeScreen() {
         <MoraLogo variant="full" size={24} />
 
         <View className="flex-row items-center gap-1">
+          {/* 설정 — 탭바 5번째 슬롯이 캘린더로 바뀌면서 여기가 유일한 진입점이 됐다. */}
+          <IconButton
+            icon={<SettingsIcon />}
+            accessibilityLabel="설정"
+            haptic
+            onPress={() => router.push('/(tabs)/settings')}
+            testID="home-settings"
+          />
           <IconButton
             icon={<BellIcon />}
             accessibilityLabel={unread.count > 0 ? `알림 ${unread.count}건` : '알림'}
@@ -292,22 +313,11 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* ── 오늘의 MORA 배너 (원본 대시보드 배너 문구 그대로) ── */}
-        <View className="rounded-xl bg-brand p-5">
-          <Text className="text-label font-w600 text-text-inverse opacity-70">오늘의 MORA</Text>
-          <Text className="mt-1 text-stat font-w800 text-text-inverse">
-            {formatBannerDate(baseDate)}
-          </Text>
-          <Text className="mt-2 text-caption text-text-inverse opacity-60">
-            일상의 요약된 정보를 확인하세요
-          </Text>
-        </View>
-
         {/* ── 에러 (상태 표 "에러": 상단 인라인 에러 카드 + 다시 시도) ──
             원본은 `res.success === false` 를 빈 배열로 삼켰다. 상용 앱에선 부적절하다. */}
         {dashboard.isError ? (
           <View
-            className="mt-4 items-center gap-3 rounded-card border border-danger-border bg-danger-container p-5"
+            className="mt-2 items-center gap-3 rounded-card border border-danger-border bg-danger-container p-5"
             accessibilityLiveRegion="polite"
           >
             <Text className="text-center text-base font-w600 text-danger" maxFontSizeMultiplier={1.3}>
@@ -323,7 +333,7 @@ export default function HomeScreen() {
         ) : null}
 
         {dashboard.isPending ? (
-          <View className="mt-5">
+          <View className="mt-2">
             <HomeSkeleton slow={slow} />
           </View>
         ) : data ? (
@@ -338,7 +348,7 @@ export default function HomeScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={{ marginHorizontal: -16, marginTop: 20 }}
+              style={{ marginHorizontal: -16, marginTop: spacing.sm }}
               contentContainerStyle={{ paddingHorizontal: 16, gap: CARD_GAP, alignItems: 'stretch' }}
             >
               <StatTile
