@@ -5,6 +5,7 @@ import com.mora.dto.TicketResponse;
 import com.mora.dto.TicketRequest;
 import com.mora.security.JwtUtil;
 import com.mora.service.TicketService;
+import com.mora.service.SearchHistoryService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -19,10 +20,12 @@ public class TicketController {
 
     private final TicketService ticketService;
     private final JwtUtil jwtUtil;
+    private final SearchHistoryService searchHistoryService;
 
-    public TicketController(TicketService ticketService, JwtUtil jwtUtil) {
+    public TicketController(TicketService ticketService, JwtUtil jwtUtil, SearchHistoryService searchHistoryService) {
         this.ticketService = ticketService;
         this.jwtUtil = jwtUtil;
+        this.searchHistoryService = searchHistoryService;
     }
 
     private UUID getUserId(HttpServletRequest request) {
@@ -111,6 +114,7 @@ public class TicketController {
         try {
             UUID userId = getUserId(request);
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
+            searchHistoryService.record(userId, "TICKET", query);
             return ResponseEntity.ok(ApiResponse.ok(ticketService.hybridSearch(userId, query, topK)));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
