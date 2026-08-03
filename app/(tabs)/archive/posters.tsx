@@ -49,7 +49,7 @@ export default function ArchivePostersScreen() {
       <ArchiveHeader
         title="포스터"
         count={total}
-        onBack={() => router.back()}
+        onBack={() => router.replace({ pathname: '/(tabs)/archive', params: { type: 'POSTER' } })}
         onSort={() => setSortOpen(true)}
         view={view}
         onToggleView={toggleView}
@@ -61,6 +61,7 @@ export default function ArchivePostersScreen() {
         view={view}
         sort={sort}
         gridAspectRatio={GRID_ASPECT_POSTER}
+        showTypeBadge={false}
         empty={{
           title: '아직 저장된 포스터가 없습니다',
           description: '포스터를 촬영하면 행사일과 마감일을 챙겨 드려요.',

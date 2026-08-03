@@ -375,6 +375,8 @@ export interface ArchiveHeaderProps {
   /** 지정하면 `⊞`/`☰` 토글이 붙는다 */
   view?: ArchiveView;
   onToggleView?: () => void;
+  /** 헤더 오른쪽 액션 슬롯. 정렬 버튼 왼쪽에 들어간다. */
+  leadingAction?: ReactNode;
   /** 헤더 우측 커스텀 슬롯 (토글보다 오른쪽) */
   trailing?: ReactNode;
   /**
@@ -400,6 +402,7 @@ export function ArchiveHeader({
   onSort,
   view,
   onToggleView,
+  leadingAction,
   trailing,
   offlineBanner = true,
   testID,
@@ -434,6 +437,8 @@ export function ArchiveHeader({
         >
           {count === undefined ? title : `${title} ${count}`}
         </Text>
+
+        {leadingAction ? <View className="mr-1">{leadingAction}</View> : null}
 
         {onSort ? (
           <IconButton
@@ -668,24 +673,33 @@ type ArchiveCellProps = ArchiveCellCallbacks & {
   doc: DocumentDetail;
   /** 마운트 시점에 고정된 `YYYY-MM-DD`. D-day 계산이 렌더 중 `new Date()` 를 부르지 않게 한다. */
   today: string;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (doc: DocumentDetail) => void;
 };
 
 const ArchiveDocRow = memo(function ArchiveDocRow({
   doc,
   today,
   showTypeBadge = true,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
   onOpen,
   onLongPress,
   onDelete,
 }: ArchiveCellProps & { showTypeBadge?: boolean }) {
   const row = useMemo(() => toRowView(doc, today), [doc, today]);
 
-  const handlePress = useCallback(() => onOpen(doc), [doc, onOpen]);
+  const handlePress = useCallback(
+    () => (selectionMode && onToggleSelect ? onToggleSelect(doc) : onOpen(doc)),
+    [doc, onOpen, onToggleSelect, selectionMode],
+  );
   const handleLongPress = useCallback(() => onLongPress(doc), [doc, onLongPress]);
 
   const swipeActions = useMemo<SwipeAction[]>(
-    () => [{ label: '삭제', tone: 'danger', onPress: () => onDelete(doc) }],
-    [doc, onDelete],
+    () => (selectionMode ? [] : [{ label: '삭제', tone: 'danger', onPress: () => onDelete(doc) }]),
+    [doc, onDelete, selectionMode],
   );
 
   /** 영수증은 금액(우측 강조), 티켓·포스터는 D-day 배지. 둘 다 없으면 `›` 셰브런을 남긴다. */
@@ -717,6 +731,8 @@ const ArchiveDocRow = memo(function ArchiveDocRow({
       {...(trailingTop ? { trailingTop, showChevron: false } : {})}
       showTypeBadge={showTypeBadge}
       {...(showTypeBadge ? {} : { showChevron: false })}
+      selectionMode={selectionMode}
+      selected={selected}
       onPress={handlePress}
       onLongPress={handleLongPress}
       swipeActions={swipeActions}
@@ -731,10 +747,17 @@ const ArchiveDocCard = memo(function ArchiveDocCard({
   aspectRatio,
   onOpen,
   onLongPress,
-}: Omit<ArchiveCellProps, 'onDelete'> & { aspectRatio: number }) {
+  showTypeBadge = true,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
+}: Omit<ArchiveCellProps, 'onDelete'> & { aspectRatio: number; showTypeBadge?: boolean }) {
   const row = useMemo(() => toRowView(doc, today), [doc, today]);
 
-  const handlePress = useCallback(() => onOpen(doc), [doc, onOpen]);
+  const handlePress = useCallback(
+    () => (selectionMode && onToggleSelect ? onToggleSelect(doc) : onOpen(doc)),
+    [doc, onOpen, onToggleSelect, selectionMode],
+  );
   const handleLongPress = useCallback(() => onLongPress(doc), [doc, onLongPress]);
 
   /* SCR-17 — D-day 는 이미지 우상단 오버레이(`bg rgba(0,0,0,.6)`).
@@ -760,6 +783,10 @@ const ArchiveDocCard = memo(function ArchiveDocCard({
         title={row.title}
         {...(row.subtitle ? { subtitle: row.subtitle } : {})}
         aspectRatio={aspectRatio}
+        showTypeBadge={showTypeBadge}
+        selectionMode={selectionMode}
+        selected={selected}
+        onToggleSelect={onToggleSelect ? () => onToggleSelect(doc) : undefined}
         onPress={handlePress}
         onLongPress={handleLongPress}
         {...(overlay ? { overlay } : {})}
@@ -859,6 +886,12 @@ export interface ArchiveListProps {
    * 한 유형만 담는 목록에서는 모든 행이 같은 배지를 반복해 정보가 0이라 끈다(피그마 SCR-16).
    */
   showTypeBadge?: boolean;
+  /** 선택 모드일 때 줄 선택 기능을 활성화한다. */
+  selectionMode?: boolean;
+  /** 선택된 문서 ID 목록. */
+  selectedIds?: string[];
+  /** 항목을 탭하여 선택/해제할 때 호출된다. */
+  onToggleSelect?: (doc: DocumentDetail) => void;
   view: ArchiveView;
   /** 기본 정렬. `compare` 를 주면 무시된다. */
   sort?: ArchiveSort;
@@ -918,7 +951,10 @@ export function ArchiveList({
   errorMessage,
   header,
   gridAspectRatio = GRID_ASPECT_CARD,
-  showTypeBadge = true,
+  showTypeBadge,
+  selectionMode = false,
+  selectedIds,
+  onToggleSelect,
   bottomPadding,
   onDataChange,
   autoLoadPages,
@@ -927,6 +963,10 @@ export function ArchiveList({
   const router = useRouter();
   const listRef = useRef<FlashListRef<ArchiveItem>>(null);
   const today = useMemo(() => todayIso(), []);
+  const showTypeBadgeFinal = useMemo(
+    () => (showTypeBadge === undefined ? types.length !== 1 : showTypeBadge),
+    [showTypeBadge, types],
+  );
 
   /* 메모하지 않는다 — 호출부가 `types={['TICKET']}` 처럼 인라인 배열을 넘기므로 어차피 매 렌더
      새 값이다. 여기서 뽑아내는 것은 원시 불리언 4개뿐이고, 메모가 필요한 것은 그 불리언을
@@ -1189,6 +1229,10 @@ export function ArchiveList({
             doc={item.doc}
             today={today}
             aspectRatio={gridAspectRatio}
+            showTypeBadge={showTypeBadgeFinal}
+            selectionMode={selectionMode}
+            selected={selectedIds?.includes(String(item.doc.id))}
+            onToggleSelect={onToggleSelect ? () => onToggleSelect(item.doc) : undefined}
             onOpen={openDoc}
             onLongPress={openSheet}
           />
@@ -1198,14 +1242,17 @@ export function ArchiveList({
         <ArchiveDocRow
           doc={item.doc}
           today={today}
-          showTypeBadge={showTypeBadge}
+          showTypeBadge={showTypeBadgeFinal}
+          selectionMode={selectionMode}
+          selected={selectedIds?.includes(String(item.doc.id))}
+          onToggleSelect={onToggleSelect}
           onOpen={openDoc}
           onLongPress={openSheet}
           onDelete={confirmDelete}
         />
       );
     },
-    [confirmDelete, gridAspectRatio, openDoc, openSheet, showTypeBadge, today, view],
+    [confirmDelete, gridAspectRatio, openDoc, openSheet, onToggleSelect, selectedIds, selectionMode, showTypeBadgeFinal, today, view],
   );
 
   // ① 최초 로딩 — 캐시가 없을 때만. 재진입은 캐시가 먼저 그려진다(로딩 위계 0).
@@ -1306,6 +1353,7 @@ function ArchiveEmptyState({ title, description, actionLabel, onAction }: Archiv
   return (
     <View className="px-4">
       <EmptyState
+        hideIcon
         title={title}
         {...(description ? { description } : {})}
         {...(actionLabel && onAction ? { actionLabel, onAction } : {})}

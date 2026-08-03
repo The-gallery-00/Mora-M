@@ -13,6 +13,7 @@ import { Button } from './Button';
 
 export interface EmptyStateProps {
   icon?: ReactNode;
+  hideIcon?: boolean;
   title: string;
   description?: string;
   actionLabel?: string;
@@ -27,6 +28,7 @@ export interface EmptyStateProps {
 
 export function EmptyState({
   icon,
+  hideIcon = false,
   title,
   description,
   actionLabel,
@@ -47,9 +49,11 @@ export function EmptyState({
       accessible
       accessibilityLabel={description ? `${title}. ${description}` : title}
     >
-      <View className="mb-4 h-16 w-16 items-center justify-center rounded-xl border border-border-subtle bg-surface-alt">
-        {icon}
-      </View>
+      {!hideIcon ? (
+        <View className="mb-4 h-16 w-16 items-center justify-center rounded-xl border border-border-subtle bg-surface-alt">
+          {icon}
+        </View>
+      ) : null}
 
       <Text className="text-center text-h3 font-w700 text-text-primary">{title}</Text>
 

@@ -7,8 +7,9 @@
 // 전면 교체했다. 구조(썸네일 + 제목 + 부제)와 제목 정규화 규칙은 그대로 계승한다.
 // 원본 우상단 삭제 버튼 + `ConfirmPopover` 는 제거하고 롱프레스 ActionSheet 로 대체한다(CMP-30 결정).
 import { Image } from 'expo-image';
-import { memo, useState, type ReactNode } from 'react';
+import { memo, useCallback, useState, type ReactNode } from 'react';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { resolveImageUrl } from '@/config/env';
 import { TYPE_LABELS, type DocumentType } from '@/features/scan/types';
@@ -32,11 +33,29 @@ export interface DocumentGridCardProps {
   aspectRatio?: number;
   /** 카드 폭. 화면이 `(width - 거터*2 - gap) / 2` 를 계산해 넘긴다. 미지정이면 부모를 채운다 */
   width?: number;
+  showTypeBadge?: boolean;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
   onPress: () => void;
   onLongPress?: () => void;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+}
+
+function CheckIcon({ color }: { color: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 12l4 4 8-8"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
 }
 
 function DocumentGridCardBase({
@@ -47,6 +66,10 @@ function DocumentGridCardBase({
   overlay,
   aspectRatio = 4 / 3,
   width,
+  showTypeBadge = true,
+  selectionMode = false,
+  selected = false,
+  onToggleSelect,
   onPress,
   onLongPress,
   accessibilityLabel,
@@ -65,14 +88,21 @@ function DocumentGridCardBase({
   const label =
     accessibilityLabel ?? [TYPE_LABELS[docType], displayTitle, subtitle].filter(Boolean).join(', ');
 
+  const handlePress = useCallback(
+    () => (selectionMode && onToggleSelect ? onToggleSelect() : onPress()),
+    [selectionMode, onToggleSelect, onPress],
+  );
+
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
-      onPress={onPress}
+      onPress={handlePress}
       onLongPress={onLongPress}
-      className="overflow-hidden rounded-card border border-border-subtle bg-bg-elevated"
+      className={`relative overflow-hidden rounded-card border ${
+        selected ? 'border-action bg-surface-active' : 'border-border-subtle bg-bg-elevated'
+      }`}
       // UX-01 — hover 대체. 카드는 scale 0.98 (SCR-17 인터랙션 표)
       style={({ pressed }) => [
         width === undefined ? { width: '100%' } : { width },
@@ -118,7 +148,7 @@ function DocumentGridCardBase({
           >
             {displayTitle}
           </Text>
-          <DocTypeBadge docType={docType} style={{ marginTop: 2 }} />
+          {showTypeBadge ? <DocTypeBadge docType={docType} style={{ marginTop: 2 }} /> : null}
         </View>
 
         {subtitle ? (

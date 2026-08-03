@@ -45,8 +45,8 @@ type ToneColors = { bg: string; fg: string; border: string };
 const toneColors = (tone: ToastTone, t: ThemeTokens): ToneColors => {
   switch (tone) {
     case 'success':
-      // 라이트는 success.base 가 아니라 success.text 를 써야 텍스트 대비가 확보된다(§14-4)
-      return { bg: t.success.container, fg: t.success.text, border: t.success.base };
+      // 성공 피드백은 MORA 브랜드 판으로 통일한다. text.inverse 는 양 테마에서 대비를 보장한다.
+      return { bg: t.brand.base, fg: t.text.inverse, border: t.brand.pressed };
     case 'error':
       return { bg: t.danger.container, fg: t.danger.strong, border: t.danger.border };
     case 'warn':
@@ -146,6 +146,7 @@ export function ToastHost({ bottomOffset, testID }: ToastHostProps) {
   if (!shown) return null;
 
   const colors = toneColors(shown.tone, t);
+  const actionColor = shown.tone === 'success' ? colors.fg : t.action.base;
   const bottom = bottomOffset ?? insets.bottom + 16;
 
   return (
@@ -158,15 +159,20 @@ export function ToastHost({ bottomOffset, testID }: ToastHostProps) {
         style={[
           // elevation 은 배경 토큰을 함께 들고 온다 → tone 배경으로 덮어쓴다(§10-6 규칙 1)
           t.elevation.dropdown,
-          { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1, borderRadius: 12 },
+          {
+            backgroundColor: colors.bg,
+            borderColor: colors.border,
+            borderWidth: 1,
+            borderRadius: 16,
+          },
           animStyle,
         ]}
       >
         <View
-          className="flex-row items-center gap-3 px-4 py-3"
+          className="flex-row items-center gap-3 px-4 py-4"
           accessibilityLiveRegion="polite"
         >
-          <Text className="flex-1 text-body-sm font-w500" style={{ color: colors.fg }}>
+          <Text className="flex-1 text-body-sm font-w600" style={{ color: colors.fg }}>
             {shown.message}
           </Text>
 
@@ -183,7 +189,7 @@ export function ToastHost({ bottomOffset, testID }: ToastHostProps) {
               className="min-h-[44px] justify-center"
             >
               {/* 액션 라벨은 5초 안에 찾아 눌러야 하므로 대비 4.5:1 을 지킨다(§14-4) */}
-              <Text className="text-label font-w700" style={{ color: t.action.base }}>
+              <Text className="text-label font-w700" style={{ color: actionColor }}>
                 {shown.actionLabel}
               </Text>
             </Pressable>

@@ -177,7 +177,7 @@ export default function ArchiveReceiptsScreen() {
     <View className="flex-1 bg-bg-base">
       <ArchiveHeader
         title="가계부"
-        onBack={() => router.back()}
+        onBack={() => router.replace({ pathname: '/(tabs)/archive', params: { type: 'RECEIPT' } })}
         onSort={() => setSortOpen(true)}
         testID="archive-receipts-header"
       />
@@ -187,6 +187,7 @@ export default function ArchiveReceiptsScreen() {
         view={view}
         sort={sort}
         filter={filter}
+        showTypeBadge={false}
         // 일자 소계는 구매일 축으로 정렬돼 있을 때만 뜻이 통한다. 금액 순에서는 섹션을 끈다.
         {...(sort === 'purchaseDate' ? { section: DAY_SECTION } : {})}
         header={header}

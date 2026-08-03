@@ -305,36 +305,7 @@ export default function ScanAnalyzingScreen() {
 
         {running ? (
           <>
-            {/* ── 스텝 인디케이터 4개 ──────────────────────────────── */}
-            <View
-              className="mt-8 flex-row items-center"
-              accessibilityRole="progressbar"
-              accessibilityLabel={`문서 분석 ${stageIndex + 1}단계 / 4단계, ${stageLabel}`}
-            >
-              {STEP_ICONS.map(({ key, Icon }, index) => {
-                const active = index <= stageIndex;
-                return (
-                  <View key={key} className="flex-row items-center">
-                    <View
-                      className={`h-11 w-11 items-center justify-center rounded-full border-2 ${
-                        active ? 'border-action bg-surface-active' : 'border-border-subtle bg-surface'
-                      }`}
-                    >
-                      {/* 아이콘에 accessibilityLabel 을 붙이지 않는다 — 부모 progressbar 가
-                          `N단계 / 4단계, 라벨` 을 이미 읽는다. 붙이면 같은 정보를 5번 읽는다. */}
-                      <Icon color={active ? t.action.base : t.text.disabled} />
-                    </View>
-                    {index < STEP_ICONS.length - 1 ? (
-                      <View
-                        className={`h-0.5 w-6 ${active ? 'bg-action' : 'bg-border-subtle'}`}
-                      />
-                    ) : null}
-                  </View>
-                );
-              })}
-            </View>
-
-            <Text className="mt-6 text-h3 font-w700 text-brand">{stageLabel}</Text>
+            <Text className="mt-8 text-h3 font-w700 text-brand">{stageLabel}</Text>
             <Text className="mt-1 text-body-sm text-text-muted">잠시만 기다려 주세요</Text>
 
             {/* determinate 는 실측 업로드 구간에서만. 그 뒤는 indeterminate. */}
@@ -381,7 +352,7 @@ export default function ScanAnalyzingScreen() {
                 haptic="selection"
               />
               <Button
-                label="그래도 직접 입력"
+                label="직접 입력"
                 onPress={handleManualEntry}
                 variant="ghost"
                 size="md"
