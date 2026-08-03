@@ -146,7 +146,7 @@ function SectionHeader({
   return (
     <View className="mb-3 mt-7 flex-row items-center gap-2">
       <Text
-        className="text-input font-w600 text-text-primary"
+        className="text-h3 font-w800 text-text-primary"
         accessibilityRole="header"
       >
         {title}
@@ -154,7 +154,7 @@ function SectionHeader({
       {badge ? (
         <View className="rounded-full bg-deadline-bg px-2 py-0.5">
           <Text
-            className="text-label font-w600 text-deadline"
+            className="text-label font-w800 text-deadline"
             maxFontSizeMultiplier={1.2}
           >
             {badge}
