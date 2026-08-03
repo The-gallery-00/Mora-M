@@ -12,9 +12,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.LocalDate;
 
 @Repository
 public interface TicketRepository extends JpaRepository<Ticket, Integer> {
+
+    long countByUserId(UUID userId);
+    List<Ticket> findByUserIdAndDepartureDateBetweenOrderByDepartureDateAscDepartureTimeAsc(
+            UUID userId, LocalDate start, LocalDate end);
+    List<Ticket> findByUserIdAndDepartureDateOrderByDepartureTimeAsc(UUID userId, LocalDate date);
 
     Page<Ticket> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 

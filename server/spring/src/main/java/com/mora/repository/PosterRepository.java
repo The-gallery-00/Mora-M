@@ -12,9 +12,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.LocalDate;
 
 @Repository
 public interface PosterRepository extends JpaRepository<Poster, Integer> {
+
+    long countByUserId(UUID userId);
+    List<Poster> findByUserIdAndEventStartDateBetweenOrderByEventStartDateAsc(
+            UUID userId, LocalDate start, LocalDate end);
+    List<Poster> findByUserIdAndEventStartDateOrderByCreatedAtAsc(UUID userId, LocalDate date);
 
     Page<Poster> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 

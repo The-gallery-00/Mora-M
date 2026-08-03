@@ -17,6 +17,8 @@ import java.util.UUID;
 @Repository
 public interface ReceiptRepository extends JpaRepository<Receipt, Integer> {
 
+    long countByUserId(UUID userId);
+
     @EntityGraph(attributePaths = "items")
     Page<Receipt> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
