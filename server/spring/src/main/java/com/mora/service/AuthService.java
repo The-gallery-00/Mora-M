@@ -141,7 +141,7 @@ public class AuthService {
         User user = getUserById(userId);
 
         // GCS 이미지를 DB보다 먼저 지운다 — 실패하면 유저 row가 남아있어 재시도 가능
-        List<BusinessCard> cards = businessCardRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<BusinessCard> cards = businessCardRepository.findByUserId(userId);
         for (BusinessCard card : cards) {
             String imageUrl = card.getImageUrl();
             if (imageUrl != null && imageUrl.startsWith("/uploads/")) {
