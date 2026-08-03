@@ -13,36 +13,36 @@
 // `kakao`/`naver` 가 CSS 변수가 아닌 리터럴로 박혀 있고 여기서는 그 클래스를 쓴다.
 // SVG fill 은 className 이 닿지 않으므로(§3-0 N-6) 아래 BRAND 상수를 통과한다 —
 // 이것은 테마 색이 아니라 타사 브랜드 자산이라 tokens.ts 에 둘 수 없다.
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
 
-import { SOCIAL_PROVIDERS, type SocialProvider } from '@/features/auth';
-import { radius } from '@/theme/scale';
-import { useTheme } from '@/theme/ThemeProvider';
+import { SOCIAL_PROVIDERS, type SocialProvider } from "@/features/auth";
+import { useTheme } from "@/theme/ThemeProvider";
 
 /** DK-10 — 타사 브랜드 자산. 원본 `lib/svgPaths.ts` 의 fill 값 그대로다. */
 const BRAND = {
-  kakaoFg: '#3C1E1E',
-  googleBlue: '#4285F4',
-  googleGreen: '#34A853',
-  googleYellow: '#FBBC05',
-  googleRed: '#EA4335',
+  kakaoFg: "#3C1E1E",
+  googleBlue: "#4285F4",
+  googleGreen: "#34A853",
+  googleYellow: "#FBBC05",
+  googleRed: "#EA4335",
 } as const;
 
 /* ── 아이콘: 원본 `lib/svgPaths.ts` 의 path 데이터를 글자 단위로 옮겼다 ────────── */
 
 const P = {
-  naver: 'M9.04698 20H4V4H9.04698L14.7275 12.6286V4H20V20H14.7275L9.04698 12.6286V20Z',
+  naver:
+    "M9.04698 20H4V4H9.04698L14.7275 12.6286V4H20V20H14.7275L9.04698 12.6286V20Z",
   kakao:
-    'M12 3C6.48 3 2 6.36 2 10.5C2 13.17 3.76 15.51 6.41 16.85L5.29 21L10.11 17.82C10.73 17.9 11.35 17.95 12 17.95C17.52 17.95 22 14.59 22 10.45C22 6.31 17.52 3 12 3Z',
+    "M12 3C6.48 3 2 6.36 2 10.5C2 13.17 3.76 15.51 6.41 16.85L5.29 21L10.11 17.82C10.73 17.9 11.35 17.95 12 17.95C17.52 17.95 22 14.59 22 10.45C22 6.31 17.52 3 12 3Z",
   googleBlue:
-    'M22.56 12.25C22.56 11.47 22.49 10.72 22.36 10H12V14.26H17.92C17.797 14.9334 17.5385 15.5749 17.1604 16.1456C16.7822 16.7162 16.2922 17.2042 15.72 17.58V20.35H19.29C21.37 18.43 22.57 15.61 22.57 12.25H22.56Z',
+    "M22.56 12.25C22.56 11.47 22.49 10.72 22.36 10H12V14.26H17.92C17.797 14.9334 17.5385 15.5749 17.1604 16.1456C16.7822 16.7162 16.2922 17.2042 15.72 17.58V20.35H19.29C21.37 18.43 22.57 15.61 22.57 12.25H22.56Z",
   googleGreen:
-    'M12 23C14.97 23 17.46 22.02 19.28 20.34L15.71 17.57C14.73 18.23 13.48 18.63 12 18.63C9.14 18.63 6.71 16.7 5.84 14.1H2.18V16.94C3.99 20.53 7.7 23 12 23Z',
+    "M12 23C14.97 23 17.46 22.02 19.28 20.34L15.71 17.57C14.73 18.23 13.48 18.63 12 18.63C9.14 18.63 6.71 16.7 5.84 14.1H2.18V16.94C3.99 20.53 7.7 23 12 23Z",
   googleYellow:
-    'M5.84 14.09C5.62 13.43 5.49 12.73 5.49 12C5.49 11.27 5.62 10.57 5.84 9.91V7.07H2.18C1.43 8.55 1 10.22 1 12C1 13.78 1.43 15.45 2.18 16.93L5.03 14.71L5.84 14.09Z',
+    "M5.84 14.09C5.62 13.43 5.49 12.73 5.49 12C5.49 11.27 5.62 10.57 5.84 9.91V7.07H2.18C1.43 8.55 1 10.22 1 12C1 13.78 1.43 15.45 2.18 16.93L5.03 14.71L5.84 14.09Z",
   googleRed:
-    'M12 5.38C13.62 5.38 15.06 5.94 16.21 7.02L19.36 3.87C17.45 2.09 14.97 1 12 1C7.7 1 3.99 3.47 2.18 7.07L5.84 9.91C6.71 7.31 9.14 5.38 12 5.38Z',
+    "M12 5.38C13.62 5.38 15.06 5.94 16.21 7.02L19.36 3.87C17.45 2.09 14.97 1 12 1C7.7 1 3.99 3.47 2.18 7.07L5.84 9.91C6.71 7.31 9.14 5.38 12 5.38Z",
 } as const;
 
 const ICON_SIZE = 22; // 원본 22×22
@@ -88,22 +88,22 @@ type ProviderStyle = {
 const STYLE: Record<SocialProvider, ProviderStyle> = {
   // 흰 배경 + #505050 보더 = bg.elevated + text.secondary(라이트 #505050). 라벨은 brand(#15293D).
   google: {
-    name: '구글',
-    label: 'Google로 시작하기',
-    container: 'bg-bg-elevated border border-text-secondary',
-    labelClass: 'text-brand',
+    name: "구글",
+    label: "Google로 시작하기",
+    container: "bg-bg-elevated border border-text-secondary",
+    labelClass: "text-brand",
   },
   kakao: {
-    name: '카카오',
-    label: '카카오로 시작하기',
-    container: 'bg-kakao',
-    labelClass: 'text-kakao-fg',
+    name: "카카오",
+    label: "카카오로 시작하기",
+    container: "bg-kakao",
+    labelClass: "text-kakao-fg",
   },
   naver: {
-    name: '네이버',
-    label: '네이버로 시작하기',
-    container: 'bg-naver-btn',
-    labelClass: 'text-text-inverse',
+    name: "네이버",
+    label: "네이버로 시작하기",
+    container: "bg-naver-btn",
+    labelClass: "text-text-inverse",
   },
 };
 
@@ -116,7 +116,12 @@ export interface SocialButtonsProps {
   testID?: string;
 }
 
-export function SocialButtons({ onPress, busy = null, disabled = false, testID }: SocialButtonsProps) {
+export function SocialButtons({
+  onPress,
+  busy = null,
+  disabled = false,
+  testID,
+}: SocialButtonsProps) {
   return (
     <View className="gap-3" testID={testID}>
       {SOCIAL_PROVIDERS.map((provider) => (
@@ -148,7 +153,7 @@ function SocialButton({
   const blocked = disabled || loading;
 
   // 스피너·네이버 아이콘 색은 SVG/네이티브라 className 이 닿지 않는다 (N-6).
-  const foreground = provider === 'naver' ? t.text.inverse : t.brand.base;
+  const foreground = provider === "naver" ? t.text.inverse : t.brand.base;
 
   return (
     <Pressable
@@ -160,22 +165,23 @@ function SocialButton({
       onPress={() => onPress(provider)}
       // 웹 hover → 모바일 pressed opacity (G-11)
       style={({ pressed }) => ({
-        height: 56,
-        borderRadius: radius.field,
         opacity: pressed ? 0.7 : blocked ? 0.6 : 1,
       })}
-      className={`w-full flex-row items-center justify-center gap-3 ${style.container}`}
+      className={`h-14 w-full flex-row items-center justify-center gap-3 rounded-xl overflow-hidden ${style.container}`}
     >
       {loading ? (
         <ActivityIndicator size="small" color={foreground} />
-      ) : provider === 'google' ? (
+      ) : provider === "google" ? (
         <GoogleIcon />
-      ) : provider === 'kakao' ? (
+      ) : provider === "kakao" ? (
         <KakaoIcon />
       ) : (
         <NaverIcon color={foreground} />
       )}
-      <Text className={`text-button font-w600 ${style.labelClass}`} numberOfLines={1}>
+      <Text
+        className={`text-button font-w600 ${style.labelClass}`}
+        numberOfLines={1}
+      >
         {style.label}
       </Text>
     </Pressable>
