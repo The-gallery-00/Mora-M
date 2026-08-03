@@ -82,7 +82,9 @@ const PAGES: readonly Page[] = [
   {
     key: 'ledger',
     eyebrow: 'STEP 04',
-    title: '말하듯 검색하고, 한눈에 요약하세요',
+    // 결정(SCR-02): 원문 `말하듯 검색하고, 한눈에 요약하세요` 는 19자라 text-stat(24px)에서 2줄로
+    // 넘쳤다. 13자로 줄여 1줄에 맞추고 어미도 2·3페이지와 같은 `-습니다` 로 통일한다.
+    title: '묻는 대로 찾아 요약합니다',
     body: '"3월 부산 출장 영수증"처럼 자연어로 검색하면, 관련 기록을 찾아 핵심 내용까지 AI가 정리해줍니다.',
   },
 ] as const;
@@ -143,21 +145,25 @@ export default function OnboardingScreen() {
 
   return (
     <View className="flex-1 bg-bg-base" style={{ paddingTop: insets.top }}>
-      {/* 헤더 — 건너뛰기 (44dp 터치 타깃) */}
+      {/* 헤더 — 건너뛰기 (44dp 터치 타깃).
+          마지막 페이지에는 하단에 `무료로 시작하기` / `로그인` CTA 2개가 이미 있어 중복이므로 숨긴다.
+          h-12 컨테이너 자체는 남긴다 — 같이 지우면 마지막 장에서만 페이저가 48dp 위로 튄다. */}
       <View className="h-12 flex-row items-center justify-end px-screen">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="건너뛰기"
-          onPress={() => {
-            haptics.selection();
-            leave('/(auth)/login');
-          }}
-          hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
-          className="min-h-11 justify-center px-2"
-          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
-        >
-          <Text className="text-button font-w600 text-text-muted">건너뛰기</Text>
-        </Pressable>
+        {page < LAST_INDEX && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="건너뛰기"
+            onPress={() => {
+              haptics.selection();
+              leave('/(auth)/login');
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
+            className="min-h-11 justify-center px-2"
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+          >
+            <Text className="text-button font-w600 text-text-muted">건너뛰기</Text>
+          </Pressable>
+        )}
       </View>
 
       <FlatList

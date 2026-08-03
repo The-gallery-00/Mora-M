@@ -1,6 +1,10 @@
 // app/(tabs)/_layout.tsx
 //
-// 하단 탭 4개(홈·보관함·검색·설정) + 중앙 스캔 액션 = 5슬롯. 정본: wiki/design/Navigation Map.md §3.
+// 하단 탭 4개(홈·보관함·검색·캘린더) + 중앙 스캔 액션 = 5슬롯. 정본: wiki/design/Navigation Map.md §3.
+//
+// **설정은 더 이상 탭이 아니다.** 5번째 슬롯이 캘린더로 바뀌었고, 설정은 홈 헤더에서만 들어온다.
+// 화면 파일은 `app/(tabs)/settings/index.tsx` 에 그대로 두고 `href: null` 로 **탭바 칸만** 없앤다 —
+// 라우트 `/settings` 가 살아 있어야 홈 헤더 push 와 DL-02 캘린더 콜백 착지가 깨지지 않는다.
 //
 // 중앙 슬롯은 **탭 화면이 아니라 액션**이다. `scan.tsx` 는 렌더되지 않는 플레이스홀더이고,
 // `tabPress` 를 가로채 `/scan`(fullScreenModal)을 push 한다 — 탭 상태를 오염시키지 않기 위한 규정이다.
@@ -12,9 +16,12 @@
 // Phase 4/5 에서 각 탭 화면이 `useScrollToTop`(expo-router 재export)으로 붙인다 — 리스트 ref 를
 // 소유한 화면이 할 일이지 레이아웃이 대신할 수 없다. 세 번째 슬롯(스캔)은 언제나 예외(항상 새 모달)다.
 //
-// 아이콘: lucide-react-native 는 설치되어 있지 않으므로(패키지 추가 금지) Navigation Map §3 이 지정한
-// lucide 아이콘(House/FolderOpen/ScanLine/Search/Settings)을 react-native-svg 로 같은 실루엣·24dp 로 그렸다.
-// lucide 도입 시 이 5개만 교체하면 된다. SVG stroke 는 className 이 닿지 않아 색은 탭바가 주는 tint 값을 쓴다.
+// 아이콘: lucide-react-native 는 설치되어 있지 않으므로(패키지 추가 금지) lucide 공식 아이콘
+// `house` / `folder-open` / `scan-line` / `search` / `calendar` 의 **path 데이터를 그대로**
+// react-native-svg 로 옮겼다. lucide 기본 렌더 규격(viewBox 0 0 24 24, strokeWidth 2,
+// strokeLinecap/strokeLinejoin round)도 같이 따른다 — 그래야 실루엣이 디자인과 픽셀로 일치한다.
+// stroke·strokeWidth 는 `<Svg>` 루트에 한 번만 주고 자식이 상속받는다.
+// SVG stroke 는 className 이 닿지 않아 색은 탭바가 주는 tint 값을 쓴다.
 import { Redirect, useFocusEffect, usePathname, useRouter } from 'expo-router';
 // SDK 57 에서 `expo-router` 의 `Tabs` re-export 는 deprecated 다 → 정식 경로로 가져온다.
 // (위키 §3 코드 발췌의 `from 'expo-router'` 는 SDK 54 시점 표기다.)
@@ -35,7 +42,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { toast } from '@/components/ui';
@@ -52,89 +59,101 @@ type TabIconProps = { color: ColorValue; size?: number };
 /** ColorValue 는 문자열이 아닐 수 있다(OpaqueColorValue) → SVG 에 넘길 문자열로 좁힌다. */
 const toStroke = (color: ColorValue): string => String(color);
 
+/** lucide `house` (https://lucide.dev/icons/house) — path 원문 그대로. */
 function HomeIcon({ color, size = 24 }: TabIconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M3.5 10.5L12 3.5L20.5 10.5V19A1.5 1.5 0 0 1 19 20.5H5A1.5 1.5 0 0 1 3.5 19V10.5Z"
-        stroke={toStroke(color)}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M9.5 20.5V14H14.5V20.5"
-        stroke={toStroke(color)}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={toStroke(color)}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+      <Path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
     </Svg>
   );
 }
 
+/** lucide `folder-open` (https://lucide.dev/icons/folder-open) — path 원문 그대로(단일 path). */
 function ArchiveIcon({ color, size = 24 }: TabIconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M3 8V18A1.5 1.5 0 0 0 4.5 19.5H19A1.5 1.5 0 0 0 20.5 18V10.5H11.5L9.5 8H3Z"
-        stroke={toStroke(color)}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M3 8V6A1.5 1.5 0 0 1 4.5 4.5H8.5L10.5 7"
-        stroke={toStroke(color)}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={toStroke(color)}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
     </Svg>
   );
 }
 
+/** lucide `scan-line` (https://lucide.dev/icons/scan-line) — path 원문 그대로. 중앙 스캔 버튼 전용. */
 function ScanIcon({ color, size = 24 }: TabIconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4H18.5A1.5 1.5 0 0 1 20 5.5V8M20 16V18.5A1.5 1.5 0 0 1 18.5 20H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"
-        stroke={toStroke(color)}
-        strokeWidth={1.9}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M4.5 12H19.5"
-        stroke={toStroke(color)}
-        strokeWidth={1.9}
-        strokeLinecap="round"
-      />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={toStroke(color)}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <Path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <Path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <Path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+      <Path d="M7 12h10" />
     </Svg>
   );
 }
 
+/** lucide `search` (https://lucide.dev/icons/search) — path 원문 그대로. */
 function SearchIcon({ color, size = 24 }: TabIconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={10.8} cy={10.8} r={6.8} stroke={toStroke(color)} strokeWidth={1.8} />
-      <Path
-        d="M15.8 15.8L20.5 20.5"
-        stroke={toStroke(color)}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={toStroke(color)}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="m21 21-4.34-4.34" />
+      <Circle cx={11} cy={11} r={8} />
     </Svg>
   );
 }
 
-function SettingsIcon({ color, size = 24 }: TabIconProps) {
+/** lucide `calendar` (https://lucide.dev/icons/calendar) — path 원문 그대로. 5번째 탭(설정 자리 대체). */
+function CalendarIcon({ color, size = 24 }: TabIconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={12} cy={12} r={3.4} stroke={toStroke(color)} strokeWidth={1.8} />
-      {/* 톱니 8개 — 45° 간격으로 r6.2 → r8.6 */}
-      <Path
-        d="M18.2 12H20.6M16.24 7.76L17.94 6.06M12 5.8V3.4M7.76 7.76L6.06 6.06M5.8 12H3.4M7.76 16.24L6.06 17.94M12 18.2V20.6M16.24 16.24L17.94 17.94"
-        stroke={toStroke(color)}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={toStroke(color)}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="M8 2v4" />
+      <Path d="M16 2v4" />
+      <Rect width={18} height={18} x={3} y={4} rx={2} />
+      <Path d="M3 10h18" />
     </Svg>
   );
 }
@@ -380,19 +399,36 @@ export default function TabsLayout() {
         listeners={TAB_PRESS_HAPTIC}
       />
 
+      {/*
+        5번째 슬롯 — 캘린더(SCR-07). 화면 파일은 `app/calendar.tsx` 에서 `app/(tabs)/calendar.tsx`
+        로 **이동**해 왔다. `(tabs)` 는 그룹 세그먼트라 경로는 `/calendar` 그대로이므로
+        홈의 `router.push(href('/calendar'))` 4곳과 위젯 딥링크 `mora://calendar[?date=…]` 가
+        전부 그대로 산다. **원본 `app/calendar.tsx` 는 반드시 삭제한다** — 남기면 같은 `/calendar`
+        가 둘이 되어 라우트가 충돌한다.
+      */}
       <Tabs.Screen
-        name="settings/index"
+        name="calendar"
         options={{
-          title: '설정',
-          tabBarAccessibilityLabel: '설정',
+          title: '캘린더',
+          tabBarAccessibilityLabel: '캘린더',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon focused={focused}>
-              <SettingsIcon color={color} size={size} />
+              <CalendarIcon color={color} size={size} />
             </TabIcon>
           ),
         }}
         listeners={TAB_PRESS_HAPTIC}
       />
+
+      {/*
+        설정 — **탭바에서만** 뺀다. 위 archive/* 4개와 똑같이 `href: null` 이고, 빠뜨리면
+        탭이 5칸 → 6칸으로 늘어나 캘린더 옆에 `settings` 칸이 되살아난다(실기기 재현 이력 있는 함정).
+        진입은 홈 헤더의 설정 버튼(`app/(tabs)/index.tsx`, `router.push('/(tabs)/settings')`)이고,
+        라우트 `/settings` 는 그대로라 DL-02 캘린더 콜백 착지도 유지된다.
+        화면이 이 내비게이터 안에 남아 있으므로 탭바는 계속 보인다 → iOS 에서도 홈 탭을 눌러
+        빠져나올 수 있다(막다른 골목이 아니다).
+      */}
+      <Tabs.Screen name="settings/index" options={{ href: null }} />
     </Tabs>
   );
 }

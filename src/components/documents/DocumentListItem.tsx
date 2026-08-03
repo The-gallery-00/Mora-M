@@ -128,6 +128,11 @@ export interface DocumentListItemProps {
   trailingBottom?: ReactNode;
   /** 우측 `›`. trailing 슬롯을 쓰면 화면이 false 로 끈다. default true */
   showChevron?: boolean;
+  /**
+   * 제목 옆 유형 배지 표시. default true.
+   * 한 유형만 담는 목록(명함 보관함 등)에서는 모든 행이 같은 배지를 반복해 정보가 0이므로 끈다.
+   */
+  showTypeBadge?: boolean;
   selected?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
@@ -150,6 +155,7 @@ function DocumentListItemBase({
   trailingTop,
   trailingBottom,
   showChevron = true,
+  showTypeBadge = true,
   selected = false,
   onPress,
   onLongPress,
@@ -218,7 +224,7 @@ function DocumentListItemBase({
           >
             {displayTitle}
           </Text>
-          <DocTypeBadge docType={docType} />
+          {showTypeBadge ? <DocTypeBadge docType={docType} /> : null}
         </View>
 
         {subtitle ? (

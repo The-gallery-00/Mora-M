@@ -1,4 +1,4 @@
-// app/chat.tsx — SCR-24 · 챗봇 (AI 모라냥)
+// app/chat.tsx — SCR-24 · 챗봇 (모라냥 AI)
 //
 // 정본: wiki/design/Screen Specs.md SCR-24 (와이어프레임 · 문구 전량 · 상태표 · 인터랙션표)
 //       wiki/design/Component Library.md CMP-38/39/40/22
@@ -299,7 +299,7 @@ export default function ChatScreen() {
         style={{ paddingTop: insets.top, height: HEADER_HEIGHT + insets.top }}
       >
         <Text
-          className="ml-2 flex-1 text-h2 font-w700 text-text-inverse"
+          className="ml-2 flex-1 text-h3 font-w700 text-text-inverse"
           numberOfLines={1}
           accessibilityRole="header"
           maxFontSizeMultiplier={1.3}

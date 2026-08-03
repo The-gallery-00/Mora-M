@@ -439,7 +439,10 @@ export function ArchiveHeader({
           <IconButton
             icon={<SortIcon color={t.text.secondary} />}
             onPress={onSort}
-            size="md"
+            // 우측 아이콘 여백 축소(피그마 개정) — md 40dp → sm 32dp.
+            // hitSlop 이 8dp 로 커져 옆 버튼과 판정이 겹친다: 겹치는 구간은 뒤에 그려진
+            // 뷰 토글이 먹는다. 실기기에서 정렬 버튼 우측 오탭이 나면 되돌릴 것.
+            size="sm"
             accessibilityLabel="정렬"
             testID="archive-sort"
           />
@@ -455,7 +458,7 @@ export function ArchiveHeader({
               )
             }
             onPress={onToggleView}
-            size="md"
+            size="sm"
             haptic
             accessibilityLabel={view === 'list' ? '그리드로 보기' : '리스트로 보기'}
             testID="archive-view-toggle"
@@ -670,10 +673,11 @@ type ArchiveCellProps = ArchiveCellCallbacks & {
 const ArchiveDocRow = memo(function ArchiveDocRow({
   doc,
   today,
+  showTypeBadge = true,
   onOpen,
   onLongPress,
   onDelete,
-}: ArchiveCellProps) {
+}: ArchiveCellProps & { showTypeBadge?: boolean }) {
   const row = useMemo(() => toRowView(doc, today), [doc, today]);
 
   const handlePress = useCallback(() => onOpen(doc), [doc, onOpen]);
@@ -711,6 +715,8 @@ const ArchiveDocRow = memo(function ArchiveDocRow({
       {...(row.subtitle ? { subtitle: row.subtitle } : {})}
       {...(row.meta ? { meta: row.meta } : {})}
       {...(trailingTop ? { trailingTop, showChevron: false } : {})}
+      showTypeBadge={showTypeBadge}
+      {...(showTypeBadge ? {} : { showChevron: false })}
       onPress={handlePress}
       onLongPress={handleLongPress}
       swipeActions={swipeActions}
@@ -848,6 +854,11 @@ export interface ArchiveEmptyCopy {
 export interface ArchiveListProps {
   /** 조회 대상 종류. 길이 1 = 종별 화면(SCR-15~18), 길이 4 = 허브 `전체`(SCR-14). */
   types: readonly DocumentType[];
+  /**
+   * 셀에 유형 배지·셰브런을 그릴지. default true.
+   * 한 유형만 담는 목록에서는 모든 행이 같은 배지를 반복해 정보가 0이라 끈다(피그마 SCR-16).
+   */
+  showTypeBadge?: boolean;
   view: ArchiveView;
   /** 기본 정렬. `compare` 를 주면 무시된다. */
   sort?: ArchiveSort;
@@ -907,6 +918,7 @@ export function ArchiveList({
   errorMessage,
   header,
   gridAspectRatio = GRID_ASPECT_CARD,
+  showTypeBadge = true,
   bottomPadding,
   onDataChange,
   autoLoadPages,
@@ -1186,13 +1198,14 @@ export function ArchiveList({
         <ArchiveDocRow
           doc={item.doc}
           today={today}
+          showTypeBadge={showTypeBadge}
           onOpen={openDoc}
           onLongPress={openSheet}
           onDelete={confirmDelete}
         />
       );
     },
-    [confirmDelete, gridAspectRatio, openDoc, openSheet, today, view],
+    [confirmDelete, gridAspectRatio, openDoc, openSheet, showTypeBadge, today, view],
   );
 
   // ① 최초 로딩 — 캐시가 없을 때만. 재진입은 캐시가 먼저 그려진다(로딩 위계 0).

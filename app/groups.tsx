@@ -76,19 +76,6 @@ function PlusIcon({ color }: { color: string }) {
   );
 }
 
-function FolderIcon({ color }: { color: string }) {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M3 8V18A1.5 1.5 0 0 0 4.5 19.5H19.5A1.5 1.5 0 0 0 21 18V9.5H11.5L9.5 7H4.5A1.5 1.5 0 0 0 3 8.5V8Z"
-        stroke={color}
-        strokeWidth={1.7}
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 function ChevronIcon({ color }: { color: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -130,7 +117,6 @@ function GroupRow({
       style={({ pressed }) => (pressed ? { opacity: 0.9 } : null)}
       testID={testID}
     >
-      <FolderIcon color={fixed ? t.text.muted : t.text.secondary} />
       <Text
         className={`flex-1 text-input ${fixed ? 'font-w500 text-text-muted' : 'font-w600 text-text-primary'}`}
         numberOfLines={1}

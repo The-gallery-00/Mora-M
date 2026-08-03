@@ -61,8 +61,9 @@ function WarningIcon({ color, size = 22 }: { color: string; size?: number }) {
 }
 
 /* ── 위험 카드 ──────────────────────────────────────────────────────────────
-   와이어프레임 `bg#FEFAFA b#FECACA` = danger.container / danger.border 토큰이다
-   (새 HEX 를 만들지 않는다 — DK-09). */
+   피그마 개정: 카드 채움(`bg#FEFAFA` = danger.container)을 걷어내고 `b#FECACA` = danger.border
+   테두리만 남긴다. 위험 신호는 보더 + ⚠ 아이콘 + `text-danger` 제목 + danger 버튼이 함께 진다.
+   (새 HEX 를 만들지 않는다 — DK-09.) */
 
 function DangerCard({
   title,
@@ -83,7 +84,7 @@ function DangerCard({
 
   return (
     <View
-      className="gap-3 rounded-card border border-danger-border bg-danger-container p-4"
+      className="gap-3 rounded-card border border-danger-border p-4"
       testID={testID}
     >
       <View className="flex-row items-center gap-2">

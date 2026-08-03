@@ -66,6 +66,13 @@ export interface TextFieldProps {
   trailing?: ReactNode;
   /** true 면 BottomSheetTextInput 사용 — 시트 안에서 일반 TextInput 은 키보드와 충돌한다 */
   inSheet?: boolean;
+  /**
+   * 배경을 비우고 **테두리만** 남긴다 (SCR-27 피그마 개정). default false.
+   * 상태 구분은 보더 색·굵기(focus `border-action` / error `border-danger` 1.5dp)와
+   * 텍스트 색이 그대로 지므로 §14-4(색 외 단서)는 유지된다.
+   * `variant` 와 직교한다 — 그쪽은 높이/반경 축이다.
+   */
+  unfilled?: boolean;
   variant?: TextFieldVariant; // default 'default'
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -130,6 +137,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
     onBlur,
     trailing,
     inSheet = false,
+    unfilled = false,
     variant = 'default',
     style,
     testID,
@@ -157,14 +165,18 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
 
   const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
 
-  /* 상태별 배경·보더 (§3-2). 다크 값은 같은 토큰 이름으로 치환된다(N-1) */
-  const surfaceClass = disabled
-    ? 'bg-surface-alt'
-    : hasError
-      ? 'bg-danger-container' // 원본 dangerFaint(red-50)는 tokens.ts 에 없어 danger.container 로 매핑
-      : focused
-        ? 'bg-bg-elevated'
-        : 'bg-surface';
+  /* 상태별 배경·보더 (§3-2). 다크 값은 같은 토큰 이름으로 치환된다(N-1)
+     `unfilled` 는 상태와 무관하게 배경을 비운다 — 채움으로 주던 신호는 보더 색/굵기가 대신 진다.
+     disabled 도 마찬가지라 배경 대신 `text-disabled` 글자색 + `border-border-subtle` 로만 읽힌다. */
+  const surfaceClass = unfilled
+    ? 'bg-transparent'
+    : disabled
+      ? 'bg-surface-alt'
+      : hasError
+        ? 'bg-danger-container' // 원본 dangerFaint(red-50)는 tokens.ts 에 없어 danger.container 로 매핑
+        : focused
+          ? 'bg-bg-elevated'
+          : 'bg-surface';
 
   const borderClass = disabled
     ? 'border-border-subtle'

@@ -6,7 +6,8 @@
 // 알림 row 를 쌓고 있으므로 소비 UI 를 모바일에서 완성한다.
 //
 // 미읽음 = 좌측 4dp 바(`bg-action`) + 배경 `surface-active`(라이트 `#F0F9FF` — 정본 값과 같다).
-// 읽음 = `bg-bg-elevated`. 아이콘은 유형별 이모지 + 유형색 원형 배경이다.
+// 읽음 = `bg-bg-elevated`. 유형별 이모지 원형 아이콘은 피그마 개정으로 삭제됐다 — 유형 구분은
+// 제목(`title` 없으면 `NOTIFICATION_COPY.typeLabel[type]`)이 그대로 담당한다.
 //
 // **메시지 정규화**: 서버가 `…남았습니다입니다.` 를 그대로 저장한다(`formatDDay()` 이중 어미 버그).
 // 데이터 계층 `toNotification()` 이 이미 고쳐서 주지만, 이 컴포넌트도 **표시 직전에 한 번 더** 태운다.
@@ -38,19 +39,6 @@ export interface NotificationItemProps {
   testID?: string;
 }
 
-/** SCR-08 구성 요소 표 — 유형별 아이콘/색. */
-const ICON: Record<NotificationType, string> = {
-  DEADLINE: '⏰',
-  SCHEDULE: '🎫',
-  GENERAL: '🔔',
-};
-
-const ICON_CLASS: Record<NotificationType, { box: string; text: string }> = {
-  DEADLINE: { box: 'bg-deadline-bg', text: 'text-deadline' },
-  SCHEDULE: { box: 'bg-ticket-bg', text: 'text-ticket' },
-  GENERAL: { box: 'bg-info-container', text: 'text-action' },
-};
-
 function NotificationItemBase({
   type,
   title,
@@ -62,7 +50,6 @@ function NotificationItemBase({
   style,
   testID,
 }: NotificationItemProps) {
-  const visual = ICON_CLASS[type];
   const body = normalizeNotificationMessage(message);
   const when = formatRelativeTime(createdAt);
   const heading = title || NOTIFICATION_COPY.typeLabel[type];
@@ -80,37 +67,30 @@ function NotificationItemBase({
       {/* 미읽음 좌측 4dp 바(행 전체 높이). 읽으면 같은 폭의 투명 자리만 남아 정렬이 흔들리지 않는다. */}
       <View className={`w-1 ${read ? 'bg-transparent' : 'bg-action'}`} />
 
-      <View className="flex-1 flex-row items-start gap-3 py-3 pl-3 pr-4">
-        <View className={`h-8 w-8 items-center justify-center rounded-full ${visual.box}`}>
-          <Text className={`text-body-sm ${visual.text}`} maxFontSizeMultiplier={1.2}>
-            {ICON[type]}
-          </Text>
-        </View>
-
-        <View className="flex-1">
-          <View className="flex-row items-center gap-2">
-            <Text
-              className="flex-1 text-base font-w600 text-text-primary"
-              numberOfLines={1}
-              maxFontSizeMultiplier={1.3}
-            >
-              {heading}
-            </Text>
-            {when ? (
-              <Text className="text-caption text-text-muted" maxFontSizeMultiplier={1.2}>
-                {when}
-              </Text>
-            ) : null}
-          </View>
-
+      {/* `pl-3` 유지 — 바깥 미읽음 바가 w-1(4dp)이라 4 + 12 = 16dp 로 화면 거터·구분선과 맞는다. */}
+      <View className="flex-1 py-3 pl-3 pr-4">
+        <View className="flex-row items-center gap-2">
           <Text
-            className="mt-0.5 text-body-sm text-text-secondary"
-            numberOfLines={2}
+            className="flex-1 text-base font-w600 text-text-primary"
+            numberOfLines={1}
             maxFontSizeMultiplier={1.3}
           >
-            {body}
+            {heading}
           </Text>
+          {when ? (
+            <Text className="text-caption text-text-muted" maxFontSizeMultiplier={1.2}>
+              {when}
+            </Text>
+          ) : null}
         </View>
+
+        <Text
+          className="mt-0.5 text-body-sm text-text-secondary"
+          numberOfLines={2}
+          maxFontSizeMultiplier={1.3}
+        >
+          {body}
+        </Text>
       </View>
     </Pressable>
   );

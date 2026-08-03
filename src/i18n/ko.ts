@@ -50,9 +50,9 @@ export const ko = {
      chat — 원본: src/features/chat/store.ts `CHAT_COPY` (SCR-24)
      ───────────────────────────────────────────────────────────────────── */
   chat: {
-    title: 'AI 모라냥',
+    title: '모라냥 AI',
     greeting:
-      '안녕하세요. MORA 챗봇 AI 모라냥입니다. 업로드, 검색, 일정 등록 관련해서 무엇이든 물어보세요.',
+      '안녕하세요. MORA 챗봇 모라냥 AI입니다. 업로드, 검색, 일정 등록 관련해서 무엇이든 물어보세요.',
     typing: '답변 작성 중...',
     emptyAnswer: '관련 문서를 찾았지만 답변 내용이 비어 있어요.',
     noResult: '관련된 데이터를 찾을 수 없어 답변하기 어렵습니다. 다른 키워드로 검색해 보세요.',
@@ -64,7 +64,7 @@ export const ko = {
     sourceNotFound: '문서를 찾을 수 없습니다.',
     copied: '복사했습니다.',
     help: {
-      title: 'AI 모라냥 이용 안내',
+      title: '모라냥 AI 이용 안내',
       confirm: '확인',
       items: [
         '키워드만 입력하기보다 대화형 문장으로 질문해 주세요.',

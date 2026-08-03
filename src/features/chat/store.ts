@@ -34,9 +34,9 @@ import { CHAT_TOP_K, sendChatMessage, type ChatDocType } from './api';
  * 원본 `ChatbotWidget.tsx` 에서 계승된 카피이며 여기서 새로 짓는 문장은 없다.
  */
 export const CHAT_COPY = {
-  title: 'AI 모라냥',
+  title: '모라냥 AI',
   greeting:
-    '안녕하세요. MORA 챗봇 AI 모라냥입니다. 업로드, 검색, 일정 등록 관련해서 무엇이든 물어보세요.',
+    '안녕하세요. MORA 챗봇 모라냥 AI입니다. 업로드, 검색, 일정 등록 관련해서 무엇이든 물어보세요.',
   typing: '답변 작성 중...',
   /** 서버가 답변을 비워 보낸 경우의 폴백. 검색 0건 문구와 다른 상황이다. */
   emptyAnswer: '관련 문서를 찾았지만 답변 내용이 비어 있어요.',
@@ -50,7 +50,7 @@ export const CHAT_COPY = {
   sourceNotFound: '문서를 찾을 수 없습니다.',
   copied: '복사했습니다.',
   help: {
-    title: 'AI 모라냥 이용 안내',
+    title: '모라냥 AI 이용 안내',
     confirm: '확인',
     items: [
       '키워드만 입력하기보다 대화형 문장으로 질문해 주세요.',

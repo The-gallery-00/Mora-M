@@ -54,12 +54,9 @@ function NotificationSkeleton() {
   return (
     <View className="gap-px bg-bg-sunken">
       {[0, 1, 2, 3, 4].map((i) => (
-        <View key={i} className="flex-row items-center gap-3 bg-bg-elevated px-4 py-3">
-          <Skeleton width={32} height={32} radius={16} />
-          <View className="flex-1 gap-2">
-            <Skeleton width="40%" height={14} radius={4} />
-            <Skeleton width="85%" height={12} radius={4} />
-          </View>
+        <View key={i} className="gap-2 bg-bg-elevated px-4 py-3">
+          <Skeleton width="40%" height={14} radius={4} />
+          <Skeleton width="85%" height={12} radius={4} />
         </View>
       ))}
     </View>

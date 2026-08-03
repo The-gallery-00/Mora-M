@@ -29,7 +29,7 @@ export interface ChatFabProps {
   testID?: string;
 }
 
-/** 말풍선 + 고양이 귀 — AI 모라냥 실루엣. */
+/** 말풍선 + 고양이 귀 — 모라냥 AI 실루엣. */
 function CatChatIcon({ color, size }: { color: string; size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -66,7 +66,7 @@ export function ChatFab({ onPress, collapsed = false, hidden = false, bottom, te
       testID={testID}
       accessibilityRole="button"
       // 아이콘만 있으므로 라벨 필수 (A11Y-01). 원본 툴팁 문구가 없어 화면 이름을 그대로 쓴다.
-      accessibilityLabel="AI 모라냥"
+      accessibilityLabel="모라냥 AI"
       onPress={() => {
         haptics.impact('medium'); // SCR-06 FAB 탭
         onPress();
