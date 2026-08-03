@@ -113,6 +113,9 @@ export default function ArchiveCardsScreen() {
         view={view}
         sort={sort}
         group={groupFilter}
+        // 명함만 담는 목록이라 모든 행에 `명함` 배지가 반복돼 정보가 0이다 → 배지·셰브런 모두 끈다
+        // (피그마 SCR-16 개정). 허브의 `명함` 필터에서는 다른 유형과 섞이므로 배지를 유지한다.
+        showTypeBadge={false}
         // 날짜 헤더는 등록일 축으로 정렬돼 있을 때만 의미가 있다.
         {...(view === 'list' ? { section: DATE_SECTION } : {})}
         empty={

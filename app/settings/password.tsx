@@ -198,6 +198,7 @@ export default function PasswordScreen() {
                 onBlur={field.onBlur}
                 label={PASSWORD_FORM_COPY.currentLabel}
                 placeholder={PASSWORD_FORM_COPY.currentPlaceholder}
+                unfilled
                 secureTextEntry
                 autoCapitalize="none"
                 autoComplete="current-password"
@@ -226,6 +227,7 @@ export default function PasswordScreen() {
                 label={PASSWORD_FORM_COPY.newLabel}
                 placeholder={PASSWORD_FORM_COPY.newPlaceholder}
                 hint={PASSWORD_FORM_COPY.newHint}
+                unfilled
                 secureTextEntry
                 autoCapitalize="none"
                 autoComplete="new-password"
@@ -251,6 +253,7 @@ export default function PasswordScreen() {
                 onBlur={field.onBlur}
                 label={PASSWORD_FORM_COPY.confirmLabel}
                 placeholder={PASSWORD_FORM_COPY.confirmPlaceholder}
+                unfilled
                 secureTextEntry
                 autoCapitalize="none"
                 autoComplete="new-password"
