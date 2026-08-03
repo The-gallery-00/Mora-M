@@ -6,9 +6,8 @@ This directory contains the server code imported from the original MORA web repo
 
 ```text
 server/
-├─ spring/   Spring Boot API server
-├─ ocr/      FastAPI OCR server
-└─ db/       Local database schema
+├─ spring/   Spring Boot API server (schema managed by Flyway, see spring/src/main/resources/db/migration)
+└─ ocr/      FastAPI OCR server
 ```
 
 ## Current State
@@ -101,7 +100,7 @@ Console data inventory.
 ## Recommended Deployment Order
 
 1. Create or select the Google Cloud project.
-2. Create Cloud SQL for PostgreSQL and apply `db/init.sql`.
+2. Create Cloud SQL for PostgreSQL. Schema is managed by Flyway (`spring/src/main/resources/db/migration`) and applies automatically on Spring Boot startup.
 3. Create a private GCS bucket for uploaded originals.
 4. Grant the OCR Cloud Run service account access to the GCS bucket.
 5. Deploy OCR to Cloud Run with `GCS_BUCKET_NAME`.
