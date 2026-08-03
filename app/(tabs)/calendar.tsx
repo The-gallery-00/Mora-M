@@ -168,6 +168,7 @@ export default function CalendarScreen() {
     <View className="flex-1 bg-bg-base">
       {/* 탭 루트라 뒤로가기가 없다 — `ArchiveHeader` 는 `onBack` 이 없으면 좌측에 `w-2` 만 둔다.
           안드로이드 하드웨어 백은 `(tabs)/_layout` 의 `useTabsBackPolicy` 가 홈 탭으로 보낸다. */}
+      {false ? (
       <ArchiveHeader
         title="캘린더"
         trailing={
@@ -193,9 +194,10 @@ export default function CalendarScreen() {
         }
         testID="calendar-header"
       />
+      ) : null}
 
       {/* ── 상단: 월간 그리드 (고정) ───────────────────────────────── */}
-      <View className="px-4 pt-3">
+      <View className="px-4 pt-3" style={{ paddingTop: insets.top + 12 }}>
         {isError ? (
           <View
             className="items-center gap-3 rounded-card border border-danger-border bg-danger-container p-5"

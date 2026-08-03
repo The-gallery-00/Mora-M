@@ -296,7 +296,8 @@ export default function HomeScreen() {
   const now = new Date();
   const [selectedWeekDate, setSelectedWeekDate] = useState(() => todayString());
   const { days: weekDays, eventsByDate: weekEventsByDate } = useWeekStrip(baseDate);
-  const selectedDateSchedules = weekEventsByDate[selectedWeekDate] ?? [];
+  const selectedDateEvents = weekEventsByDate[selectedWeekDate] ?? [];
+  const selectedScheduleCount = selectedDateEvents.length;
 
   const openCalendarEvent = useCallback(
     (event: CalendarEvent) => {
@@ -607,11 +608,11 @@ export default function HomeScreen() {
             <SectionHeader
               title={`${formatDayHeading(selectedWeekDate)} 일정`}
               todayTag={selectedWeekDate === todayString()}
-              {...(selectedDateSchedules.length > 0
-                ? { badge: `${selectedDateSchedules.length}건` }
+              {...(selectedScheduleCount > 0
+                ? { badge: `${selectedScheduleCount}건` }
                 : {})}
             />
-            {selectedDateSchedules.length === 0 ? (
+            {selectedScheduleCount === 0 ? (
               <View className="items-center rounded-card border border-border-subtle bg-bg-elevated py-8">
                 <Text className="text-body-sm text-text-muted" maxFontSizeMultiplier={1.3}>
                   {DASHBOARD_COPY.emptySchedules}
@@ -619,7 +620,7 @@ export default function HomeScreen() {
               </View>
             ) : (
               <View className="overflow-hidden rounded-card">
-                {selectedDateSchedules.map((item, index) => (
+                {selectedDateEvents.map((item, index) => (
                   <View key={item.key}>
                     {index > 0 ? <View className="h-px bg-bg-base" /> : null}
                     <ScheduleListItem

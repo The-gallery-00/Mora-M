@@ -154,7 +154,7 @@ function MonthCalendarBase({
   return (
     <View
       testID={testID}
-      className="rounded-card border border-border-subtle bg-bg-elevated py-3"
+      className="rounded-card bg-bg-elevated py-3"
     >
       {/* ── 월 네비게이션 ─────────────────────────────────────────────── */}
       <View className="mb-2 flex-row items-center justify-center gap-6">
