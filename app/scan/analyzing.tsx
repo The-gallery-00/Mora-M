@@ -22,6 +22,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { Button, ProgressBar, toast } from '@/components/ui';
 import { SCR11_STEP_LABELS, useScan, useScanStore } from '@/features/scan';
@@ -33,8 +34,62 @@ import { radius, spacing } from '@/theme/scale';
 const PREVIEW_WIDTH = 240;
 const PREVIEW_HEIGHT = 160;
 
-/** 원본 웹 `처리 과정` 4스텝의 아이콘 글리프를 그대로 승계한다. */
-const STEP_GLYPHS = ['↑', '◎', '▤', '✓'] as const;
+/* ── 스텝 아이콘 ────────────────────────────────────────────────────────────
+   lucide-react-native 는 설치하지 않는다(패키지 추가 금지). Lucide 공식 24×24 path 를
+   react-native-svg 로 그대로 그린다 — crop.tsx / TextField.tsx 와 같은 방식이다.
+   색은 className 이 SVG 에 닿지 않으므로 호출부가 토큰 객체를 넘긴다(tokens.ts §13-0). */
+
+type StepIconProps = { color: string; size?: number };
+
+/** lucide `upload` */
+function UploadIcon({ color, size = 20 }: StepIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <Path d="M17 8l-5-5-5 5" />
+      <Path d="M12 3v12" />
+    </Svg>
+  );
+}
+
+/** lucide `eye` */
+function EyeIcon({ color, size = 20 }: StepIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+      <Circle cx={12} cy={12} r={3} />
+    </Svg>
+  );
+}
+
+/** lucide `file-text` */
+function FileTextIcon({ color, size = 20 }: StepIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <Path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <Path d="M16 13H8" />
+      <Path d="M16 17H8" />
+    </Svg>
+  );
+}
+
+/** lucide `check` */
+function CheckStepIcon({ color, size = 20 }: StepIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20 6 9 17l-5-5" />
+    </Svg>
+  );
+}
+
+/** 원본 웹 `처리 과정` 4스텝. 순서는 단계 라벨과 1:1 이다. */
+const STEP_ICONS = [
+  { key: 'upload', Icon: UploadIcon },
+  { key: 'read', Icon: EyeIcon },
+  { key: 'extract', Icon: FileTextIcon },
+  { key: 'done', Icon: CheckStepIcon },
+] as const;
 
 /** §8 — 백그라운드 30초를 넘기면 태스크를 버리고 재시도 화면으로 전환한다. */
 const BACKGROUND_LIMIT_MS = 30_000;
@@ -108,7 +163,7 @@ export default function ScanAnalyzingScreen() {
     if (uploadPhase === null) return;
     setStageIndex(1);
     const timer = setInterval(() => {
-      setStageIndex((prev) => Math.min(STEP_GLYPHS.length - 1, prev + 1));
+      setStageIndex((prev) => Math.min(STEP_ICONS.length - 1, prev + 1));
     }, STAGE_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [uploadPhase]);
@@ -256,23 +311,20 @@ export default function ScanAnalyzingScreen() {
               accessibilityRole="progressbar"
               accessibilityLabel={`문서 분석 ${stageIndex + 1}단계 / 4단계, ${stageLabel}`}
             >
-              {STEP_GLYPHS.map((glyph, index) => {
+              {STEP_ICONS.map(({ key, Icon }, index) => {
                 const active = index <= stageIndex;
                 return (
-                  <View key={glyph} className="flex-row items-center">
+                  <View key={key} className="flex-row items-center">
                     <View
                       className={`h-11 w-11 items-center justify-center rounded-full border-2 ${
                         active ? 'border-action bg-surface-active' : 'border-border-subtle bg-surface'
                       }`}
                     >
-                      <Text
-                        className={`text-h3 ${active ? 'text-action' : 'text-text-disabled'}`}
-                        maxFontSizeMultiplier={1.2}
-                      >
-                        {glyph}
-                      </Text>
+                      {/* 아이콘에 accessibilityLabel 을 붙이지 않는다 — 부모 progressbar 가
+                          `N단계 / 4단계, 라벨` 을 이미 읽는다. 붙이면 같은 정보를 5번 읽는다. */}
+                      <Icon color={active ? t.action.base : t.text.disabled} />
                     </View>
-                    {index < STEP_GLYPHS.length - 1 ? (
+                    {index < STEP_ICONS.length - 1 ? (
                       <View
                         className={`h-0.5 w-6 ${active ? 'bg-action' : 'bg-border-subtle'}`}
                       />

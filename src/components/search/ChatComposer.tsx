@@ -13,6 +13,7 @@
 // `전송` 이 어차피 비활성이므로 같은 자리를 `취소` 로 바꾼다 — 버튼을 하나 더 늘리면 입력폭이
 // 좁아지고, 진행 중에만 의미 있는 액션이라 상시 노출할 이유가 없다.
 import { ScrollView, TextInput, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { Button, Chip } from '@/components/ui';
 import { CHAT_COPY, canSendChat, chatPlaceholder, type ChatDocType } from '@/features/chat';
@@ -35,6 +36,17 @@ export interface ChatComposerProps {
   /** 오프라인 — 입력바 전체를 잠근다 (SCR-24 상태표). */
   disabled?: boolean;
   testID?: string;
+}
+
+/* lucide-react-native 미설치(패키지 추가 금지) — lucide `send` 공식 path 를 그대로 그린다.
+   `SearchBar.tsx` / `ChatFab.tsx` 와 같은 방식이다. */
+function SendIcon({ color }: { color: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+      <Path d="m21.854 2.147-10.94 10.939" />
+    </Svg>
+  );
 }
 
 export function ChatComposer({
@@ -132,6 +144,9 @@ export function ChatComposer({
         ) : (
           <Button
             label={CHAT_COPY.send}
+            // 아이콘 색은 SVG stroke 라 className 이 닿지 않는다 → useTheme (§3-0 N-6).
+            // primary 는 disabled 에서도 라벨색이 text.inverse 고정이라 아이콘도 같은 색이다.
+            leadingIcon={<SendIcon color={t.text.inverse} />}
             onPress={onSend}
             variant="primary"
             size="md"

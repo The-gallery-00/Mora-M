@@ -16,11 +16,11 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
-import { Button } from '@/components/ui';
-import { TYPE_LABELS, useScan, type DocumentType } from '@/features/scan';
+import { Button, toast } from '@/components/ui';
+import { TYPE_LABELS, useScan } from '@/features/scan';
 import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
-import { radius, spacing } from '@/theme/scale';
+import { spacing } from '@/theme/scale';
 
 /**
  * 보관함 허브 / 탭 루트 경로.
@@ -30,15 +30,6 @@ import { radius, spacing } from '@/theme/scale';
  */
 const ARCHIVE_HREF = '/(tabs)/archive' as Href;
 const HOME_HREF = '/(tabs)' as Href;
-
-/** 문서 4종 → 배경 토큰(체크 원). ETC 는 이 화면에 도달할 수 없다(CLS-04). */
-const DOC_TONE_CLASS: Record<DocumentType, string> = {
-  BUSINESS_CARD: 'bg-card',
-  TICKET: 'bg-ticket',
-  POSTER: 'bg-poster',
-  RECEIPT: 'bg-receipt',
-  ETC: 'bg-action',
-};
 
 function CheckIcon({ color, size = 28 }: { color: string; size?: number }) {
   return (
@@ -70,6 +61,16 @@ export default function ScanDoneScreen() {
     if (reduceMotion) return;
     scale.value = withSpring(1, { damping: 12, stiffness: 180 });
   }, [reduceMotion, scale]);
+
+  /**
+   * 부분 성공 통지 — 예전에는 화면 안 경고 배너였는데 디자인 결정으로 배너를 뺐다.
+   * 다만 "이미지 없이 저장됨"을 **조용히 넘기면 안 된다**(Camera and Scan §11-2 가 지정한
+   * 유일한 서버 원문 노출 지점이다) → 진입 시 토스트 1회로 옮겼다.
+   */
+  const warningText = saveWarning ?? (imageMissing ? '이미지 없이 정보만 저장되었습니다.' : null);
+  useEffect(() => {
+    if (warningText) toast.info(warningText);
+  }, [warningText]);
 
   const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -110,35 +111,22 @@ export default function ScanDoneScreen() {
     return () => sub.remove();
   }, [goHome]);
 
-  // 부분 성공(임베딩 실패)의 서버 `message` 는 §11-2 가 지정한 유일한 원문 노출 지점이다.
-  const warningText = saveWarning ?? (imageMissing ? '이미지 없이 정보만 저장되었습니다.' : null);
-
   return (
     <View
       className="flex-1 bg-bg-base px-6"
       style={{ paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xxl }}
     >
       <View className="flex-1 items-center justify-center">
+        {/* 원형 배경은 문서 유형색이 아니라 action 고정이다 — 유형 구분은 아래 부제가 이미 한다. */}
         <Animated.View
           style={checkStyle}
-          className={`h-14 w-14 items-center justify-center rounded-full ${DOC_TONE_CLASS[docType]}`}
+          className="h-14 w-14 items-center justify-center rounded-full bg-action"
         >
           <CheckIcon color={t.text.inverse} />
         </Animated.View>
 
         <Text className="mt-4 text-center text-h2 font-w700 text-text-primary">저장되었습니다</Text>
         <Text className="mt-2 text-center text-body-sm text-text-muted">{subtitle}</Text>
-
-        {warningText ? (
-          <View
-            className="mt-5 w-full border border-warn-border bg-warn-container px-4 py-3"
-            style={{ borderRadius: radius.button }}
-            accessible
-            accessibilityLabel={`경고. ${warningText}`}
-          >
-            <Text className="text-body-sm text-warn">{warningText}</Text>
-          </View>
-        ) : null}
       </View>
 
       <View className="w-full items-center gap-3">

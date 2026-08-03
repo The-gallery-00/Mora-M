@@ -35,8 +35,6 @@ export interface SearchResultCardProps {
   preview?: string;
   /** 하이라이트할 검색어. **첫 매칭 1회만** 강조한다(원본 `highlightText` 규칙). */
   query?: string;
-  /** 0~1. 있으면 우상단 `98%` 배지. 영수증은 임베딩이 없어 값이 낮게 나온다(정상). */
-  similarity?: number | null;
   /** `전체` 검색일 때만 true — 유형이 섞이므로 배지가 필수다. 단일 유형은 헤더에 이미 있다. */
   showTypeBadge?: boolean;
   onPress: () => void;
@@ -160,15 +158,12 @@ function SearchResultCardBase({
   facts,
   preview,
   query,
-  similarity,
   showTypeBadge = false,
   onPress,
   testID,
 }: SearchResultCardProps) {
   const t = useTheme();
   const uri = resolveImageUrl(imageUri);
-  const percent =
-    similarity === null || similarity === undefined ? null : `${Math.round(similarity * 100)}%`;
 
   return (
     <Pressable
@@ -205,14 +200,6 @@ function SearchResultCardBase({
             {title}
           </Text>
           {showTypeBadge ? <DocTypeBadge docType={docType} /> : null}
-          <View className="flex-1" />
-          {percent ? (
-            <View className="rounded-full bg-info-container px-2 py-0.5">
-              <Text className="text-micro font-w700 text-info" maxFontSizeMultiplier={1.2}>
-                {percent}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         {subtitle ? (

@@ -89,14 +89,15 @@ const SORT_OPTIONS: SortOption<SearchSortOrder>[] = [
   { value: 'recent', label: SEARCH_COPY.sortRecent },
 ];
 
-/** `⇅` 정렬 (ArchiveList 와 같은 실루엣 — lucide 미설치). */
-function SortIcon({ color }: { color: string }) {
+/** 정렬 트리거의 `⌄` — lucide `chevron-down` 공식 path (Design Tokens §12 매핑 `▾`→ChevronDown).
+    lucide-react-native 는 설치하지 않는다 — 다른 아이콘과 같이 react-native-svg 로 그린다. */
+function ChevronDownIcon({ color }: { color: string }) {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M7 3.5V20.5M7 20.5L3.5 17M7 20.5L10.5 17M17 20.5V3.5M17 3.5L13.5 7M17 3.5L20.5 7"
+        d="m6 9 6 6 6-6"
         stroke={color}
-        strokeWidth={1.8}
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -261,7 +262,6 @@ export default function SearchScreen() {
           facts={searchFactsOf(item.document)}
           preview={item.preview}
           query={submitted}
-          similarity={item.similarity ?? null}
           showTypeBadge={showTypeBadge}
           onPress={() => openHit(item)}
           testID={`search-result-${item.key}`}
@@ -278,6 +278,9 @@ export default function SearchScreen() {
   const blockedOffline = offline && hits.length === 0;
   const showResultHeader =
     submitted !== '' && !search.isLoading && !search.isError && !blockedOffline;
+  /** 정렬 트리거 라벨. 시트(`SortSheet`)가 보여 주는 라벨과 **같은 배열**에서 뽑는다 —
+      두 곳에 따로 적으면 반드시 어긋난다. */
+  const sortLabel = SORT_OPTIONS.find((option) => option.value === order)?.label ?? '';
 
   let body: ReactNode;
 
@@ -418,19 +421,28 @@ export default function SearchScreen() {
 
       {offline ? <Banner text={SEARCH_COPY.offline} tone="warn" /> : null}
 
-      {/* ── 결과 헤더 (`명함 3건` + `⇅`) — 검색을 실행했을 때만 ── */}
+      {/* ── 결과 헤더 (`명함 3건` + `관련도순 ⌄`) — 검색을 실행했을 때만 ── */}
       {showResultHeader ? (
         <View className="flex-row items-center justify-between border-b border-bg-sunken px-4 pb-2">
           <Text className="text-body-sm font-w700 text-text-secondary" maxFontSizeMultiplier={1.3}>
             {search.countLabel}
           </Text>
-          <IconButton
-            icon={<SortIcon color={t.text.secondary} />}
+          {/* 아이콘(`⇅`)만 있던 자리를 **현재 정렬 라벨 + chevron** 으로 바꾼다 — 시트를 열지
+              않고도 지금 무슨 순서인지 보여야 한다. 한 줄(20dp)이라 44dp 하한은 hitSlop 으로 채운다. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`정렬, 현재 ${sortLabel}`}
             onPress={() => setSortOpen(true)}
-            size="sm"
-            accessibilityLabel="정렬"
+            className="flex-row items-center gap-1"
+            hitSlop={{ top: 12, bottom: 12, left: 16, right: 8 }}
+            style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
             testID="search-sort"
-          />
+          >
+            <Text className="text-body-sm font-w600 text-text-secondary" maxFontSizeMultiplier={1.3}>
+              {sortLabel}
+            </Text>
+            <ChevronDownIcon color={t.text.secondary} />
+          </Pressable>
         </View>
       ) : null}
 

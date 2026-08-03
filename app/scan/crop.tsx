@@ -253,11 +253,6 @@ export default function ScanCropScreen() {
     }
   }, [processing, rotation, router, setAdjusted, sourceUri, toSourceRect]);
 
-  const handleSkip = useCallback(() => {
-    // 크롭/회전 없이 원본 그대로 분석한다. SCAN-04 가 원본 URI 를 입력으로 쓴다.
-    router.replace('/scan/analyzing');
-  }, [router]);
-
   /* ── 제스처 ────────────────────────────────────────────────────────────── */
 
   const moveStartX = useSharedValue(0);
@@ -436,17 +431,8 @@ export default function ScanCropScreen() {
         <ToolButton icon={<ResetIcon />} label="초기화" onPress={handleReset} />
       </View>
 
-      {/* 크롭을 건너뛰고 원본 그대로 분석한다. 촬영이 이미 반듯한 경우가 흔해 1탭 경로를 남긴다. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="자르기 건너뛰고 분석 시작"
-        onPress={handleSkip}
-        disabled={processing}
-        hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}
-        className="h-11 items-center justify-center"
-      >
-        <Text className="text-body-sm font-w600 text-white/80">건너뛰기</Text>
-      </Pressable>
+      {/* 건너뛰기 링크는 뺐다(디자인 결정) — 경로 자체는 살아 있다:
+          `handleDone` 이 크롭 없음 + 회전 0 이면 재인코딩 없이 원본 그대로 넘긴다. */}
     </View>
   );
 }
