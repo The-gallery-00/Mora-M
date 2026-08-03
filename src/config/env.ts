@@ -3,16 +3,20 @@ import Constants from 'expo-constants';
 import { StorageKey, storage } from '@/store/storage';
 
 /**
- * 서버 주소 해석 (ADR-002: LAN IP 직결 + 런타임 오버라이드).
+ * 서버 주소 해석 (ADR-002: 배포 서버 기본값 + 런타임 오버라이드).
  *
  * 우선순위:
  *   1. MMKV 런타임 오버라이드 — 진단 화면(SCR-31)에서 사용자가 입력한 값.
  *      APK 를 다시 빌드하지 않고 개발 PC 의 IP 변경에 대응하기 위한 장치다.
  *   2. 빌드 시 주입된 EXPO_PUBLIC_* 환경변수.
- *   3. 하드코딩 폴백 — 안드로이드 에뮬레이터에서 호스트 PC 를 가리키는 특수 주소.
+ *   3. 하드코딩 폴백 — 로컬 Gradle APK 처럼 EAS env 를 거치지 않는 빌드도
+ *      팀원이 바로 테스트할 수 있도록 Cloud Run 배포 서버를 가리킨다.
+ *
+ * 로컬 개발 서버에 붙일 때는 `.env` 또는 진단 화면(SCR-31)에서
+ * http://10.0.2.2:8080 / http://10.0.2.2:8000 으로 오버라이드한다.
  */
-const FALLBACK_API = 'http://10.0.2.2:8080';
-const FALLBACK_OCR = 'http://10.0.2.2:8000';
+const FALLBACK_API = 'https://mora-mobile-spring-971562891559.asia-northeast3.run.app';
+const FALLBACK_OCR = 'https://mora-mobile-ocr-971562891559.asia-northeast3.run.app';
 
 export type Variant = 'development' | 'preview' | 'production';
 
