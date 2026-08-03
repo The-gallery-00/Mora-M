@@ -16,6 +16,8 @@ import java.util.UUID;
 @Repository
 public interface BusinessCardRepository extends JpaRepository<BusinessCard, UUID> {
 
+    long countByUserId(UUID userId);
+
     Page<BusinessCard> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
     // 계정 삭제 시 전체 명함을 순회하기 위한 비페이지네이션 조회

@@ -7,6 +7,7 @@ import com.mora.dto.CardSaveRequest;
 import com.mora.security.JwtUtil;
 import com.mora.service.CardService;
 import com.mora.service.OcrService;
+import com.mora.service.SearchHistoryService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -24,11 +25,13 @@ public class CardController {
     private final CardService cardService;
     private final OcrService ocrService;
     private final JwtUtil jwtUtil;
+    private final SearchHistoryService searchHistoryService;
 
-    public CardController(CardService cardService, OcrService ocrService, JwtUtil jwtUtil) {
+    public CardController(CardService cardService, OcrService ocrService, JwtUtil jwtUtil, SearchHistoryService searchHistoryService) {
         this.cardService = cardService;
         this.ocrService = ocrService;
         this.jwtUtil = jwtUtil;
+        this.searchHistoryService = searchHistoryService;
     }
 
     private UUID getUserId(HttpServletRequest request) {
@@ -141,7 +144,7 @@ public class CardController {
     }
 
     // 하이브리드 검색: fuzzy*0.6 + vector*0.4
-    @GetMapping("/search")
+    @GetMapping("/cards/search")
     public ResponseEntity<ApiResponse<List<CardResponse>>> search(
             HttpServletRequest request,
             @RequestParam("q") String query,
@@ -149,6 +152,7 @@ public class CardController {
         try {
             UUID userId = getUserId(request);
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
+            searchHistoryService.record(userId, "BUSINESS_CARD", query);
             List<CardResponse> results = cardService.hybridSearch(userId, query, topK);
             return ResponseEntity.ok(ApiResponse.ok(results));
         } catch (RuntimeException e) {

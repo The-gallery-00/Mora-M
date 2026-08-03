@@ -21,14 +21,16 @@ Implemented today:
 - Business card OCR scan
 - Business card save, list, update, delete
 - Business card semantic search with PostgreSQL + pgvector
+- Poster, receipt, ticket, calendar, and card-group APIs
+- Dashboard summary for today's schedules, upcoming deadlines, and document counts
+- Notification list/read/delete APIs, notification preferences, and the daily 09:00 KST generator
+- Search-history recording, listing, and full deletion for all four document searches
+- Flyway-managed schema and Cloud Run Secret Manager deployment script
 
 Still required for the final mobile app:
 
-- Poster, receipt, and ticket APIs
-- Dashboard, notifications, recent searches, and full mobile API parity
-- Cloud Run deployment files
 - GCS-backed image storage instead of local `/uploads`
-- Production secrets and OAuth redirect handling for `mora://`
+- Actual Google Cloud secret creation/deployment and production OAuth redirect verification
 
 ## Local Development
 

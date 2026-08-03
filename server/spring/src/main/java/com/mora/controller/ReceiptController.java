@@ -5,6 +5,7 @@ import com.mora.dto.ReceiptResponse;
 import com.mora.dto.ReceiptSaveRequest;
 import com.mora.security.JwtUtil;
 import com.mora.service.ReceiptService;
+import com.mora.service.SearchHistoryService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -19,10 +20,12 @@ public class ReceiptController {
 
     private final ReceiptService receiptService;
     private final JwtUtil jwtUtil;
+    private final SearchHistoryService searchHistoryService;
 
-    public ReceiptController(ReceiptService receiptService, JwtUtil jwtUtil) {
+    public ReceiptController(ReceiptService receiptService, JwtUtil jwtUtil, SearchHistoryService searchHistoryService) {
         this.receiptService = receiptService;
         this.jwtUtil = jwtUtil;
+        this.searchHistoryService = searchHistoryService;
     }
 
     private UUID getUserId(HttpServletRequest request) {
@@ -111,6 +114,7 @@ public class ReceiptController {
         try {
             UUID userId = getUserId(request);
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
+            searchHistoryService.record(userId, "RECEIPT", query);
             return ResponseEntity.ok(ApiResponse.ok(receiptService.hybridSearch(userId, query, topK)));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
