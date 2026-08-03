@@ -77,7 +77,7 @@ const light = {
     RECEIPT: { fg: '#166534', bg: '#CFE5D0' },
     DEADLINE: { fg: '#B45309', bg: '#FEF3E2' },
   },
-  calendar: { sunday: '#DC2626', saturday: '#2563EB', selected: '#E8EDF3' },
+  calendar: { sunday: '#DC2626', saturday: '#2563EB', selected: '#E8EDF3', poster: '#0D9488' },
   skeleton: { base: '#F1F5F9', highlight: '#FFFFFF' },
   elevation: mkElevation('light', {
     raised: '#FFFFFF',
@@ -111,7 +111,7 @@ const dark: ThemeTokens = {
     RECEIPT: { fg: '#7BD69A', bg: '#16301F' },
     DEADLINE: { fg: '#E8B172', bg: '#33240F' },
   },
-  calendar: { sunday: '#F0908C', saturday: '#7FB0EF', selected: '#1B2A3C' },
+  calendar: { sunday: '#F0908C', saturday: '#7FB0EF', selected: '#1B2A3C', poster: '#5EEAD4' },
   skeleton: { base: '#232E3E', highlight: '#2E3B4D' },
   elevation: mkElevation('dark', {
     raised: '#17202D',

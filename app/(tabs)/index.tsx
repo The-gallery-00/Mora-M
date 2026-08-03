@@ -37,6 +37,7 @@ import {
   STAT_TILE_MIN_HEIGHT,
   STAT_TILE_WIDTH,
   StatTile,
+  WeekCalendar,
 } from "@/components/dashboard";
 import {
   Button,
@@ -50,6 +51,8 @@ import {
   monthLabel,
   todayString,
   useDashboard,
+  useWeekStrip,
+  type CalendarEvent,
   type DashboardDeadline,
   type DashboardSchedule,
 } from "@/features/dashboard";
@@ -108,23 +111,6 @@ function formatDayHeading(iso: string): string {
    색 클래스는 tailwind 가 정적 추출하므로 문자열을 조립하지 않고 통째로 적는다.
    개수를 붙이지 않는다 — API-24 는 4종 **합계**(`storedDocumentCount`)만 준다. 종별 숫자를
    채우려면 목록 4콜이 필요하고, 그것은 FR-081(홈 1콜)을 깨뜨린다. */
-const DOC_SHORTCUTS = [
-  {
-    type: "BUSINESS_CARD",
-    label: "명함",
-    box: "bg-card-bg",
-    text: "text-card",
-  },
-  { type: "TICKET", label: "티켓", box: "bg-ticket-bg", text: "text-ticket" },
-  { type: "POSTER", label: "포스터", box: "bg-poster-bg", text: "text-poster" },
-  {
-    type: "RECEIPT",
-    label: "영수증",
-    box: "bg-receipt-bg",
-    text: "text-receipt",
-  },
-] as const;
-
 /** 마감 카드 캐러셀의 스냅 간격 = 카드 폭 + 카드 사이 간격. */
 const CARD_GAP = spacing.md;
 const SNAP_INTERVAL = DEADLINE_CARD_WIDTH + CARD_GAP;
@@ -135,11 +121,13 @@ const SNAP_INTERVAL = DEADLINE_CARD_WIDTH + CARD_GAP;
 function SectionHeader({
   title,
   badge,
+  todayTag,
   linkLabel,
   onLink,
 }: {
   title: string;
   badge?: string;
+  todayTag?: boolean;
   linkLabel?: string;
   onLink?: () => void;
 }) {
@@ -151,6 +139,13 @@ function SectionHeader({
       >
         {title}
       </Text>
+      {todayTag ? (
+        <View className="rounded-full border border-info-border bg-info-container px-2 py-0.5">
+          <Text className="text-caption font-w600 text-action" maxFontSizeMultiplier={1.2}>
+            오늘
+          </Text>
+        </View>
+      ) : null}
       {badge ? (
         <View className="rounded-full bg-deadline-bg px-2 py-0.5">
           <Text
@@ -299,6 +294,16 @@ export default function HomeScreen() {
   const deadlines = data?.upcomingDeadlines ?? [];
   const schedules = data?.todaySchedules ?? [];
   const now = new Date();
+  const [selectedWeekDate, setSelectedWeekDate] = useState(() => todayString());
+  const { days: weekDays, eventsByDate: weekEventsByDate } = useWeekStrip(baseDate);
+  const selectedDateSchedules = weekEventsByDate[selectedWeekDate] ?? [];
+
+  const openCalendarEvent = useCallback(
+    (event: CalendarEvent) => {
+      router.push(href(`/doc/${DOC_ROUTE_SEGMENT[event.type]}/${event.id}`));
+    },
+    [router],
+  );
 
   return (
     <View className="flex-1 bg-bg-base">
@@ -452,8 +457,6 @@ export default function HomeScreen() {
                   {...(deadlines.length > 0
                     ? { badge: `${deadlines.length}건` }
                     : {})}
-                  linkLabel="전체"
-                  onLink={() => router.push(href("/calendar"))}
                 />
 
                 {deadlines.length === 0 ? (
@@ -498,6 +501,8 @@ export default function HomeScreen() {
 
                 {/* ── 오늘 일정 ──
                     우측 링크는 SCR-06 와이어프레임의 `2026년 7월 >` 이다. 월간 전체는 SCR-07 이 맡는다. */}
+                {false ? (
+                <>
                 <SectionHeader
                   title={`${formatDayHeading(baseDate)} 일정`}
                   {...(schedules.length > 0
@@ -534,12 +539,15 @@ export default function HomeScreen() {
                     ))}
                   </View>
                 )}
+                </>
+                ) : null}
               </>
             )}
           </>
         ) : null}
 
         {/* ── 문서 4종 바로가기 → 보관함(SCR-14)의 해당 유형 필터 ── */}
+        {/*
         <Text
           className="mb-3 mt-7 text-input font-w600 text-text-primary"
           accessibilityRole="header"
@@ -567,8 +575,66 @@ export default function HomeScreen() {
             </Pressable>
           ))}
         </View>
+        */}
 
+        {false ? (
+        <>
         {/* ── 주 CTA. 용어집(§7-4)상 등록 진입은 `스캔하기` 다 ── */}
+        <Button
+          label="스캔하기"
+          onPress={() => router.push("/scan")}
+          variant="primary"
+          size="lg"
+          fullWidth
+          haptic="medium"
+          style={{ marginTop: 28 }}
+        />
+        </>
+        ) : null}
+
+        <SectionHeader
+          title="이번 주"
+        />
+        <WeekCalendar
+          days={weekDays}
+          selectedDate={selectedWeekDate}
+          eventsByDate={weekEventsByDate}
+          onSelectDate={setSelectedWeekDate}
+          testID="home-week-calendar"
+        />
+        {data ? (
+          <>
+            <SectionHeader
+              title={`${formatDayHeading(selectedWeekDate)} 일정`}
+              todayTag={selectedWeekDate === todayString()}
+              {...(selectedDateSchedules.length > 0
+                ? { badge: `${selectedDateSchedules.length}건` }
+                : {})}
+            />
+            {selectedDateSchedules.length === 0 ? (
+              <View className="items-center rounded-card border border-border-subtle bg-bg-elevated py-8">
+                <Text className="text-body-sm text-text-muted" maxFontSizeMultiplier={1.3}>
+                  {DASHBOARD_COPY.emptySchedules}
+                </Text>
+              </View>
+            ) : (
+              <View className="overflow-hidden rounded-card">
+                {selectedDateSchedules.map((item, index) => (
+                  <View key={item.key}>
+                    {index > 0 ? <View className="h-px bg-bg-base" /> : null}
+                    <ScheduleListItem
+                      docType={item.type}
+                      title={item.title}
+                      {...(item.time ? { time: item.time } : {})}
+                      onPress={() => openCalendarEvent(item)}
+                      testID={`schedule-${item.key}`}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        ) : null}
         <Button
           label="스캔하기"
           onPress={() => router.push("/scan")}
