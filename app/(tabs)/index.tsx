@@ -27,7 +27,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 
 import { MoraLogo } from "@/components/brand/MoraLogo";
 import {
@@ -91,23 +91,6 @@ function BellIcon({ color, size = 22 }: { color?: string; size?: number }) {
  * `color` 에 **기본값을 주면 안 된다.** IconButton 은 `icon.props.color === undefined` 일 때만
  * cloneElement 로 tone 색을 주입한다(`src/components/ui/IconButton.tsx`). 위 BellIcon 과 같은 규칙.
  */
-function SettingsIcon({ color, size = 22 }: { color?: string; size?: number }) {
-  return (
-    <Svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={color}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-      <Circle cx={12} cy={12} r={3} />
-    </Svg>
-  );
-}
 
 /* ── 날짜 문구 ─────────────────────────────────────────────────────── */
 
@@ -327,14 +310,6 @@ export default function HomeScreen() {
         <MoraLogo variant="full" size={24} />
 
         <View className="flex-row items-center gap-1">
-          {/* 설정 — 탭바 5번째 슬롯이 캘린더로 바뀌면서 여기가 유일한 진입점이 됐다. */}
-          <IconButton
-            icon={<SettingsIcon />}
-            accessibilityLabel="설정"
-            haptic
-            onPress={() => router.push("/(tabs)/settings")}
-            testID="home-settings"
-          />
           <IconButton
             icon={<BellIcon />}
             accessibilityLabel={
