@@ -17,37 +17,52 @@
 //
 // 헤더 벨은 Phase 0 스텁에서 `toast.info('준비 중입니다.')` 로 막혀 있었다 — 목적지(SCR-08)가
 // 생겼으므로 `/notifications` 로 실제 연결하고 미읽음 배지를 붙인다.
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Path } from 'react-native-svg';
-
-import { MoraLogo } from '@/components/brand/MoraLogo';
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
-  DeadlineCard,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
+
+import { MoraLogo } from "@/components/brand/MoraLogo";
+import {
   DEADLINE_CARD_WIDTH,
+  DeadlineCard,
   ScheduleListItem,
-  StatTile,
   STAT_TILE_MIN_HEIGHT,
   STAT_TILE_WIDTH,
-} from '@/components/dashboard';
-import { Button, EmptyState, IconButton, Skeleton, toast } from '@/components/ui';
+  StatTile,
+  WeekCalendar,
+} from "@/components/dashboard";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Skeleton,
+  toast,
+} from "@/components/ui";
 import {
   DASHBOARD_COPY,
   monthLabel,
   todayString,
   useDashboard,
+  useWeekStrip,
+  type CalendarEvent,
   type DashboardDeadline,
   type DashboardSchedule,
-} from '@/features/dashboard';
-import { DOC_ROUTE_SEGMENT } from '@/features/documents';
-import { formatDateShortKo, href } from '@/features/documents/ArchiveList';
-import { useUnreadCount } from '@/features/notifications';
-import { haptics } from '@/lib/haptics';
-import { HEADER_HEIGHT, tabScrollBottomPadding } from '@/navigation/shell';
-import { useAuthStore } from '@/store/authStore';
-import { spacing } from '@/theme/scale';
+} from "@/features/dashboard";
+import { DOC_ROUTE_SEGMENT } from "@/features/documents";
+import { formatDateShortKo, href } from "@/features/documents/ArchiveList";
+import { useUnreadCount } from "@/features/notifications";
+import { haptics } from "@/lib/haptics";
+import { HEADER_HEIGHT, tabScrollBottomPadding } from "@/navigation/shell";
+import { useAuthStore } from "@/store/authStore";
+import { spacing } from "@/theme/scale";
 
 /* ── 아이콘 (lucide 미설치 → 같은 실루엣으로 인라인 SVG) ─────────────── */
 
@@ -61,7 +76,12 @@ function BellIcon({ color, size = 22 }: { color?: string; size?: number }) {
         strokeWidth={1.8}
         strokeLinejoin="round"
       />
-      <Path d="M9.8 20A2.4 2.4 0 0 0 14.2 20" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path
+        d="M9.8 20A2.4 2.4 0 0 0 14.2 20"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
     </Svg>
   );
 }
@@ -74,32 +94,15 @@ function BellIcon({ color, size = 22 }: { color?: string; size?: number }) {
  * `color` 에 **기본값을 주면 안 된다.** IconButton 은 `icon.props.color === undefined` 일 때만
  * cloneElement 로 tone 색을 주입한다(`src/components/ui/IconButton.tsx`). 위 BellIcon 과 같은 규칙.
  */
-function SettingsIcon({ color, size = 22 }: { color?: string; size?: number }) {
-  return (
-    <Svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={color}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-      <Circle cx={12} cy={12} r={3} />
-    </Svg>
-  );
-}
 
 /* ── 날짜 문구 ─────────────────────────────────────────────────────── */
 
 /** `2026-07-28` → `7월 28일` (일정 섹션 헤더). */
 function formatDayHeading(iso: string): string {
-  const parts = iso.split('-');
+  const parts = iso.split("-");
   const month = Number(parts[1]);
   const day = Number(parts[2]);
-  if (!Number.isFinite(month) || !Number.isFinite(day)) return '';
+  if (!Number.isFinite(month) || !Number.isFinite(day)) return "";
   return `${month}월 ${day}일`;
 }
 
@@ -108,13 +111,6 @@ function formatDayHeading(iso: string): string {
    색 클래스는 tailwind 가 정적 추출하므로 문자열을 조립하지 않고 통째로 적는다.
    개수를 붙이지 않는다 — API-24 는 4종 **합계**(`storedDocumentCount`)만 준다. 종별 숫자를
    채우려면 목록 4콜이 필요하고, 그것은 FR-081(홈 1콜)을 깨뜨린다. */
-const DOC_SHORTCUTS = [
-  { type: 'BUSINESS_CARD', label: '명함', box: 'bg-card-bg', text: 'text-card' },
-  { type: 'TICKET', label: '티켓', box: 'bg-ticket-bg', text: 'text-ticket' },
-  { type: 'POSTER', label: '포스터', box: 'bg-poster-bg', text: 'text-poster' },
-  { type: 'RECEIPT', label: '영수증', box: 'bg-receipt-bg', text: 'text-receipt' },
-] as const;
-
 /** 마감 카드 캐러셀의 스냅 간격 = 카드 폭 + 카드 사이 간격. */
 const CARD_GAP = spacing.md;
 const SNAP_INTERVAL = DEADLINE_CARD_WIDTH + CARD_GAP;
@@ -125,22 +121,37 @@ const SNAP_INTERVAL = DEADLINE_CARD_WIDTH + CARD_GAP;
 function SectionHeader({
   title,
   badge,
+  todayTag,
   linkLabel,
   onLink,
 }: {
   title: string;
   badge?: string;
+  todayTag?: boolean;
   linkLabel?: string;
   onLink?: () => void;
 }) {
   return (
     <View className="mb-3 mt-7 flex-row items-center gap-2">
-      <Text className="text-input font-w600 text-text-primary" accessibilityRole="header">
+      <Text
+        className="text-h3 font-w800 text-text-primary"
+        accessibilityRole="header"
+      >
         {title}
       </Text>
+      {todayTag ? (
+        <View className="rounded-full border border-info-border bg-info-container px-2 py-0.5">
+          <Text className="text-caption font-w600 text-action" maxFontSizeMultiplier={1.2}>
+            오늘
+          </Text>
+        </View>
+      ) : null}
       {badge ? (
         <View className="rounded-full bg-deadline-bg px-2 py-0.5">
-          <Text className="text-label font-w600 text-deadline" maxFontSizeMultiplier={1.2}>
+          <Text
+            className="text-label font-w800 text-deadline"
+            maxFontSizeMultiplier={1.2}
+          >
             {badge}
           </Text>
         </View>
@@ -158,7 +169,10 @@ function SectionHeader({
           hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}
           style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
         >
-          <Text className="text-body-sm font-w600 text-action" maxFontSizeMultiplier={1.2}>
+          <Text
+            className="text-body-sm font-w600 text-action"
+            maxFontSizeMultiplier={1.2}
+          >
             {`${linkLabel} ›`}
           </Text>
         </Pressable>
@@ -176,16 +190,28 @@ function HomeSkeleton({ slow }: { slow: boolean }) {
           어긋나 있었고, 그 어긋남이 통계 타일 잘림 버그의 표식이었다. */}
       <View className="flex-row gap-3">
         {[0, 1, 2].map((i) => (
-          <Skeleton key={i} width={STAT_TILE_WIDTH} height={STAT_TILE_MIN_HEIGHT} radius={12} />
+          <Skeleton
+            key={i}
+            width={STAT_TILE_WIDTH}
+            height={STAT_TILE_MIN_HEIGHT}
+            radius={12}
+          />
         ))}
       </View>
       <View className="mt-7 flex-row gap-3">
         {[0, 1].map((i) => (
-          <Skeleton key={i} width={DEADLINE_CARD_WIDTH} height={120} radius={12} />
+          <Skeleton
+            key={i}
+            width={DEADLINE_CARD_WIDTH}
+            height={120}
+            radius={12}
+          />
         ))}
       </View>
       {slow ? (
-        <Text className="mt-4 text-center text-body-sm text-text-muted">불러오는 중...</Text>
+        <Text className="mt-4 text-center text-body-sm text-text-muted">
+          불러오는 중...
+        </Text>
       ) : null}
     </View>
   );
@@ -225,7 +251,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    haptics.impact('light');
+    haptics.impact("light");
     void Promise.all([refetchDashboard(), refetchUnread()])
       .then(([result]) => {
         // 실패해도 기존 데이터는 유지된다 — 토스트로만 알린다 (SCR-06 인터랙션 표).
@@ -241,7 +267,9 @@ export default function HomeScreen() {
         toast.error(DASHBOARD_COPY.documentMissing);
         return;
       }
-      router.push(href(`/doc/${DOC_ROUTE_SEGMENT[item.type]}/${item.documentId}`));
+      router.push(
+        href(`/doc/${DOC_ROUTE_SEGMENT[item.type]}/${item.documentId}`),
+      );
     },
     [router],
   );
@@ -252,18 +280,31 @@ export default function HomeScreen() {
         toast.error(DASHBOARD_COPY.documentMissing);
         return;
       }
-      router.push(href(`/doc/${DOC_ROUTE_SEGMENT[item.type]}/${item.documentId}`));
+      router.push(
+        href(`/doc/${DOC_ROUTE_SEGMENT[item.type]}/${item.documentId}`),
+      );
     },
     [router],
   );
 
   // 아바타 이니셜 — 이름이 없으면 원본 폴백 `U` (Screen Specs SCR-06 구성 요소).
-  const initial = user?.name?.trim().charAt(0) || 'U';
+  const initial = user?.name?.trim().charAt(0) || "U";
 
   const baseDate = data?.date || todayString();
   const deadlines = data?.upcomingDeadlines ?? [];
   const schedules = data?.todaySchedules ?? [];
   const now = new Date();
+  const [selectedWeekDate, setSelectedWeekDate] = useState(() => todayString());
+  const { days: weekDays, eventsByDate: weekEventsByDate } = useWeekStrip(baseDate);
+  const selectedDateEvents = weekEventsByDate[selectedWeekDate] ?? [];
+  const selectedScheduleCount = selectedDateEvents.length;
+
+  const openCalendarEvent = useCallback(
+    (event: CalendarEvent) => {
+      router.push(href(`/doc/${DOC_ROUTE_SEGMENT[event.type]}/${event.id}`));
+    },
+    [router],
+  );
 
   return (
     <View className="flex-1 bg-bg-base">
@@ -275,30 +316,26 @@ export default function HomeScreen() {
         <MoraLogo variant="full" size={24} />
 
         <View className="flex-row items-center gap-1">
-          {/* 설정 — 탭바 5번째 슬롯이 캘린더로 바뀌면서 여기가 유일한 진입점이 됐다. */}
-          <IconButton
-            icon={<SettingsIcon />}
-            accessibilityLabel="설정"
-            haptic
-            onPress={() => router.push('/(tabs)/settings')}
-            testID="home-settings"
-          />
           <IconButton
             icon={<BellIcon />}
-            accessibilityLabel={unread.count > 0 ? `알림 ${unread.count}건` : '알림'}
+            accessibilityLabel={
+              unread.count > 0 ? `알림 ${unread.count}건` : "알림"
+            }
             badgeCount={unread.count}
             haptic
-            onPress={() => router.push(href('/notifications'))}
+            onPress={() => router.push(href("/notifications"))}
             testID="home-bell"
           />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="내 계정"
-            onPress={() => router.push('/(tabs)/settings')}
+            onPress={() => router.push("/(tabs)/settings")}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             className="h-8 w-8 items-center justify-center rounded-full bg-brand"
           >
-            <Text className="text-body-sm font-w700 text-text-inverse">{initial}</Text>
+            <Text className="text-body-sm font-w700 text-text-inverse">
+              {initial}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -311,7 +348,9 @@ export default function HomeScreen() {
           paddingBottom: tabScrollBottomPadding(insets.bottom),
         }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         {/* ── 에러 (상태 표 "에러": 상단 인라인 에러 카드 + 다시 시도) ──
             원본은 `res.success === false` 를 빈 배열로 삼켰다. 상용 앱에선 부적절하다. */}
@@ -320,7 +359,10 @@ export default function HomeScreen() {
             className="mt-2 items-center gap-3 rounded-card border border-danger-border bg-danger-container p-5"
             accessibilityLiveRegion="polite"
           >
-            <Text className="text-center text-base font-w600 text-danger" maxFontSizeMultiplier={1.3}>
+            <Text
+              className="text-center text-base font-w600 text-danger"
+              maxFontSizeMultiplier={1.3}
+            >
               {dashboard.error?.message ?? DASHBOARD_COPY.loadFailed}
             </Text>
             <Button
@@ -345,43 +387,57 @@ export default function HomeScreen() {
                 유일한 장치이기 때문이다 — 한 타일이 (큰 글꼴 배율 등으로) 더 커지면 나머지 둘이
                 따라 늘어난다. 여기서 `alignItems: 'flex-start'` 로 바꾸면 세 타일 높이가 어긋나고,
                 캐러셀이 잰 높이보다 큰 타일은 잘린다. */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginHorizontal: -16, marginTop: spacing.sm }}
-              contentContainerStyle={{ paddingHorizontal: 16, gap: CARD_GAP, alignItems: 'stretch' }}
+            <View
+              style={{
+                width: "100%",
+                flexDirection: "row",
+                gap: CARD_GAP,
+                marginTop: spacing.sm,
+                minHeight: STAT_TILE_MIN_HEIGHT,
+              }}
             >
-              <StatTile
-                icon="📅"
-                tone="schedule"
-                label="오늘 일정"
-                value={data.todayScheduleCount}
-                unit="건"
-                hint="예정된 일정"
-                onPress={() => router.push(href('/calendar'))}
-                testID="stat-today"
-              />
-              <StatTile
-                icon="⏰"
-                tone="deadline"
-                label="마감 임박"
-                value={data.upcomingDeadlineCount}
-                unit="건"
-                hint={`${data.deadlineDays}일 이내 마감`}
-                onPress={() => router.push(href('/calendar'))}
-                testID="stat-deadline"
-              />
-              <StatTile
-                icon="📄"
-                tone="stored"
-                label="보관 문서"
-                value={data.storedDocumentCount}
-                unit="건"
-                hint="전체 저장 문서"
-                onPress={() => router.push('/(tabs)/archive')}
-                testID="stat-stored"
-              />
-            </ScrollView>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <StatTile
+                  icon="📅"
+                  tone="schedule"
+                  label="오늘 일정"
+                  value={data.todayScheduleCount}
+                  unit="건"
+                  hint="예정된 일정"
+                  style={{ width: "100%" }}
+                  onPress={() => router.push(href("/calendar"))}
+                  testID="stat-today"
+                />
+              </View>
+
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <StatTile
+                  icon="⏰"
+                  tone="deadline"
+                  label="마감 임박"
+                  value={data.upcomingDeadlineCount}
+                  unit="건"
+                  hint={`${data.deadlineDays}일 이내 마감`}
+                  style={{ width: "100%" }}
+                  onPress={() => router.push(href("/calendar"))}
+                  testID="stat-deadline"
+                />
+              </View>
+
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <StatTile
+                  icon="📄"
+                  tone="stored"
+                  label="보관 문서"
+                  value={data.storedDocumentCount}
+                  unit="건"
+                  hint="전체 저장 문서"
+                  style={{ width: "100%" }}
+                  onPress={() => router.push("/(tabs)/archive")}
+                  testID="stat-stored"
+                />
+              </View>
+            </View>
 
             {dashboard.isBrandNew ? (
               /* ── 빈(전체 신규 유저) — 통계 전부 0 ── */
@@ -390,7 +446,7 @@ export default function HomeScreen() {
                   title="아직 저장된 문서가 없어요"
                   description="첫 문서를 스캔하고 MORA를 시작해 보세요."
                   actionLabel="문서 스캔하기"
-                  onAction={() => router.push('/scan')}
+                  onAction={() => router.push("/scan")}
                   testID="home-empty"
                 />
               </View>
@@ -399,14 +455,17 @@ export default function HomeScreen() {
                 {/* ── 마감 임박 ── */}
                 <SectionHeader
                   title="마감 임박"
-                  {...(deadlines.length > 0 ? { badge: `${deadlines.length}건` } : {})}
-                  linkLabel="전체"
-                  onLink={() => router.push(href('/calendar'))}
+                  {...(deadlines.length > 0
+                    ? { badge: `${deadlines.length}건` }
+                    : {})}
                 />
 
                 {deadlines.length === 0 ? (
                   <View className="h-24 items-center justify-center rounded-card border border-dashed border-border-subtle">
-                    <Text className="text-body-sm text-text-muted" maxFontSizeMultiplier={1.3}>
+                    <Text
+                      className="text-body-sm text-text-muted"
+                      maxFontSizeMultiplier={1.3}
+                    >
                       {DASHBOARD_COPY.emptyDeadlines}
                     </Text>
                   </View>
@@ -420,7 +479,10 @@ export default function HomeScreen() {
                     snapToInterval={SNAP_INTERVAL}
                     decelerationRate="fast"
                     style={{ marginHorizontal: -16 }}
-                    contentContainerStyle={{ paddingHorizontal: 16, gap: CARD_GAP }}
+                    contentContainerStyle={{
+                      paddingHorizontal: 16,
+                      gap: CARD_GAP,
+                    }}
                   >
                     {deadlines.map((item) => (
                       <DeadlineCard
@@ -440,16 +502,23 @@ export default function HomeScreen() {
 
                 {/* ── 오늘 일정 ──
                     우측 링크는 SCR-06 와이어프레임의 `2026년 7월 >` 이다. 월간 전체는 SCR-07 이 맡는다. */}
+                {false ? (
+                <>
                 <SectionHeader
                   title={`${formatDayHeading(baseDate)} 일정`}
-                  {...(schedules.length > 0 ? { badge: `${schedules.length}건` } : {})}
+                  {...(schedules.length > 0
+                    ? { badge: `${schedules.length}건` }
+                    : {})}
                   linkLabel={monthLabel(now.getFullYear(), now.getMonth() + 1)}
-                  onLink={() => router.push(href('/calendar'))}
+                  onLink={() => router.push(href("/calendar"))}
                 />
 
                 {schedules.length === 0 ? (
                   <View className="items-center rounded-card border border-border-subtle bg-bg-elevated py-8">
-                    <Text className="text-body-sm text-text-muted" maxFontSizeMultiplier={1.3}>
+                    <Text
+                      className="text-body-sm text-text-muted"
+                      maxFontSizeMultiplier={1.3}
+                    >
                       {DASHBOARD_COPY.emptySchedules}
                     </Text>
                   </View>
@@ -457,7 +526,9 @@ export default function HomeScreen() {
                   <View className="overflow-hidden rounded-card">
                     {schedules.map((item, index) => (
                       <View key={item.key}>
-                        {index > 0 ? <View className="h-px bg-bg-base" /> : null}
+                        {index > 0 ? (
+                          <View className="h-px bg-bg-base" />
+                        ) : null}
                         <ScheduleListItem
                           docType={item.type}
                           title={item.title}
@@ -469,13 +540,19 @@ export default function HomeScreen() {
                     ))}
                   </View>
                 )}
+                </>
+                ) : null}
               </>
             )}
           </>
         ) : null}
 
         {/* ── 문서 4종 바로가기 → 보관함(SCR-14)의 해당 유형 필터 ── */}
-        <Text className="mb-3 mt-7 text-input font-w600 text-text-primary" accessibilityRole="header">
+        {/*
+        <Text
+          className="mb-3 mt-7 text-input font-w600 text-text-primary"
+          accessibilityRole="header"
+        >
           문서 유형
         </Text>
         <View className="flex-row flex-wrap gap-3">
@@ -484,19 +561,84 @@ export default function HomeScreen() {
               key={doc.type}
               accessibilityRole="button"
               accessibilityLabel={`${doc.label} 보관함 열기`}
-              onPress={() => router.push({ pathname: '/(tabs)/archive', params: { type: doc.type } })}
+              onPress={() =>
+                router.push({
+                  pathname: "/(tabs)/archive",
+                  params: { type: doc.type },
+                })
+              }
               // 2열 그리드 — 47% 두 칸 + gap 12 가 한 줄에 들어가고 남는 폭은 grow 가 나눠 갖는다
               className={`h-20 grow basis-[47%] justify-end rounded-card p-4 ${doc.box}`}
             >
-              <Text className={`text-h3 font-w700 ${doc.text}`}>{doc.label}</Text>
+              <Text className={`text-h3 font-w700 ${doc.text}`}>
+                {doc.label}
+              </Text>
             </Pressable>
           ))}
         </View>
+        */}
 
+        {false ? (
+        <>
         {/* ── 주 CTA. 용어집(§7-4)상 등록 진입은 `스캔하기` 다 ── */}
         <Button
           label="스캔하기"
-          onPress={() => router.push('/scan')}
+          onPress={() => router.push("/scan")}
+          variant="primary"
+          size="lg"
+          fullWidth
+          haptic="medium"
+          style={{ marginTop: 28 }}
+        />
+        </>
+        ) : null}
+
+        <SectionHeader
+          title="이번 주"
+        />
+        <WeekCalendar
+          days={weekDays}
+          selectedDate={selectedWeekDate}
+          eventsByDate={weekEventsByDate}
+          onSelectDate={setSelectedWeekDate}
+          testID="home-week-calendar"
+        />
+        {data ? (
+          <>
+            <SectionHeader
+              title={`${formatDayHeading(selectedWeekDate)} 일정`}
+              todayTag={selectedWeekDate === todayString()}
+              {...(selectedScheduleCount > 0
+                ? { badge: `${selectedScheduleCount}건` }
+                : {})}
+            />
+            {selectedScheduleCount === 0 ? (
+              <View className="items-center rounded-card border border-border-subtle bg-bg-elevated py-8">
+                <Text className="text-body-sm text-text-muted" maxFontSizeMultiplier={1.3}>
+                  {DASHBOARD_COPY.emptySchedules}
+                </Text>
+              </View>
+            ) : (
+              <View className="overflow-hidden rounded-card">
+                {selectedDateEvents.map((item, index) => (
+                  <View key={item.key}>
+                    {index > 0 ? <View className="h-px bg-bg-base" /> : null}
+                    <ScheduleListItem
+                      docType={item.type}
+                      title={item.title}
+                      {...(item.time ? { time: item.time } : {})}
+                      onPress={() => openCalendarEvent(item)}
+                      testID={`schedule-${item.key}`}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        ) : null}
+        <Button
+          label="스캔하기"
+          onPress={() => router.push("/scan")}
           variant="primary"
           size="lg"
           fullWidth

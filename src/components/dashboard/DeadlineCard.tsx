@@ -8,15 +8,21 @@
 //
 // 색 규칙(SCR-06 구성 요소 표): D-day 는 `dDay <= 3` 이면 마감색, 아니면 포인트색.
 // 정본 HEX `#DC8540` / `#0077B6` 는 각각 `deadline` / `action` 토큰이다 — HEX 를 적지 않는다.
-import { Image } from 'expo-image';
-import { memo, useState } from 'react';
-import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Image } from "expo-image";
+import { memo, useState } from "react";
+import {
+  Pressable,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 
-import { resolveImageUrl } from '@/config/env';
-import { useTheme } from '@/theme/ThemeProvider';
+import { resolveImageUrl } from "@/config/env";
+import { useTheme } from "@/theme/ThemeProvider";
 
 /** 마감 대상은 티켓·포스터 2종뿐이다 (서버 `DeadlineNotificationScheduler` 기준). */
-export type DeadlineDocType = 'TICKET' | 'POSTER';
+export type DeadlineDocType = "TICKET" | "POSTER";
 
 export interface DeadlineCardProps {
   docType: DeadlineDocType;
@@ -39,19 +45,25 @@ export const DEADLINE_CARD_HEIGHT = 120;
 const IMAGE_WIDTH = 100;
 
 /** 이미지 부재 시 이모지 폴백 (원본 규칙). */
-const FALLBACK_EMOJI: Record<DeadlineDocType, string> = { TICKET: '🎫', POSTER: '📄' };
+const FALLBACK_EMOJI: Record<DeadlineDocType, string> = {
+  TICKET: "🎫",
+  POSTER: "📄",
+};
 
-const TYPE_LABEL: Record<DeadlineDocType, string> = { TICKET: '티켓', POSTER: '포스터' };
+const TYPE_LABEL: Record<DeadlineDocType, string> = {
+  TICKET: "티켓",
+  POSTER: "포스터",
+};
 
 const BADGE_CLASS: Record<DeadlineDocType, { box: string; text: string }> = {
-  TICKET: { box: 'bg-ticket-bg', text: 'text-ticket' },
-  POSTER: { box: 'bg-poster-bg', text: 'text-poster' },
+  TICKET: { box: "bg-ticket-bg", text: "text-ticket" },
+  POSTER: { box: "bg-poster-bg", text: "text-poster" },
 };
 
 /** SCR-06: `dDay===0` → `D-DAY`. 음수는 서버가 만들지 않지만 들어와도 날짜만 보여 준다. */
 export function dDayLabel(dDay: number): string {
-  if (dDay === 0) return 'D-DAY';
-  return dDay > 0 ? `D-${dDay}` : '';
+  if (dDay === 0) return "D-DAY";
+  return dDay > 0 ? `D-${dDay}` : "";
 }
 
 function DeadlineCardBase({
@@ -73,15 +85,21 @@ function DeadlineCardBase({
   const badge = BADGE_CLASS[docType];
   const label = dDayLabel(dDay);
   // 임박(3일 이내)은 마감색, 그 밖은 포인트색.
-  const dDayClass = dDay <= 3 ? 'text-deadline' : 'text-action';
+  const dDayClass = dDay <= 3 ? "text-deadline" : "text-action";
 
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={[TYPE_LABEL[docType], title, subtitle, label, dateLabel]
+      accessibilityLabel={[
+        TYPE_LABEL[docType],
+        title,
+        subtitle,
+        label,
+        dateLabel,
+      ]
         .filter(Boolean)
-        .join(', ')}
+        .join(", ")}
       onPress={onPress}
       className="flex-row overflow-hidden rounded-card border border-border-subtle bg-bg-elevated"
       style={({ pressed }) => [
@@ -95,13 +113,16 @@ function DeadlineCardBase({
       <View className="flex-1 justify-between px-4 py-3">
         <View>
           <View className={`self-start rounded-xs px-2 py-0.5 ${badge.box}`}>
-            <Text className={`text-caption font-w600 ${badge.text}`} maxFontSizeMultiplier={1.2}>
+            <Text
+              className={`text-caption font-w600 ${badge.text}`}
+              maxFontSizeMultiplier={1.2}
+            >
               {TYPE_LABEL[docType]}
             </Text>
           </View>
 
           <Text
-            className="mt-2 text-base font-w600 text-text-primary"
+            className="mt-2 text-base font-w800 text-text-primary"
             numberOfLines={2}
             maxFontSizeMultiplier={1.2}
           >
@@ -111,11 +132,18 @@ function DeadlineCardBase({
 
         <View>
           {label ? (
-            <Text className={`text-body-sm font-w700 ${dDayClass}`} maxFontSizeMultiplier={1.2}>
+            <Text
+              className={`text-body-sm font-w800 ${dDayClass}`}
+              maxFontSizeMultiplier={1.2}
+            >
               {label}
             </Text>
           ) : null}
-          <Text className="text-label text-text-muted" numberOfLines={1} maxFontSizeMultiplier={1.2}>
+          <Text
+            className="text-label text-text-muted"
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.2}
+          >
             {subtitle ? `${dateLabel} · ${subtitle}` : dateLabel}
           </Text>
         </View>
@@ -124,12 +152,12 @@ function DeadlineCardBase({
       {/* 썸네일 — 다크에서 흰 문서가 카드 배경에 직접 닿지 않게 surface-alt 매트를 깐다(CMP-24). */}
       <View
         className="items-center justify-center bg-surface-alt"
-        style={{ width: IMAGE_WIDTH, height: '100%' }}
+        style={{ width: IMAGE_WIDTH, height: "100%" }}
       >
         {showImage ? (
           <Image
             source={{ uri }}
-            style={{ width: '100%', height: '100%' }}
+            style={{ width: "100%", height: "100%" }}
             contentFit="cover"
             transition={200}
             cachePolicy="memory-disk"
@@ -147,4 +175,4 @@ function DeadlineCardBase({
 }
 
 export const DeadlineCard = memo(DeadlineCardBase);
-DeadlineCard.displayName = 'DeadlineCard';
+DeadlineCard.displayName = "DeadlineCard";

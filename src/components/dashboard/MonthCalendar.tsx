@@ -48,7 +48,7 @@ export interface MonthCalendarProps {
 const CELL_HEIGHT = 56;
 /** 오늘 표시 원형 배지 지름. */
 const TODAY_BADGE = 28;
-const DOT_SIZE = 6;
+const DOT_SIZE = 5;
 /** 이만큼 끌면 월이 바뀐다. 세로 스크롤과 겨루지 않도록 넉넉히 잡았다. */
 const SWIPE_THRESHOLD = 60;
 
@@ -154,7 +154,7 @@ function MonthCalendarBase({
   return (
     <View
       testID={testID}
-      className="rounded-card border border-border-subtle bg-bg-elevated py-3"
+      className="rounded-card bg-bg-elevated py-3"
     >
       {/* ── 월 네비게이션 ─────────────────────────────────────────────── */}
       <View className="mb-2 flex-row items-center justify-center gap-6">
@@ -275,7 +275,7 @@ function MonthCalendarBase({
                               height: DOT_SIZE,
                               borderRadius: DOT_SIZE / 2,
                               backgroundColor:
-                                event.type === 'TICKET' ? t.doc.TICKET.fg : t.doc.POSTER.fg,
+                                event.type === 'TICKET' ? t.doc.TICKET.fg : t.calendar.poster,
                             }}
                           />
                         ))}
@@ -308,7 +308,7 @@ export function CalendarLegend({ testID }: { testID?: string }) {
   const t = useTheme();
   const items = [
     { label: '티켓', color: t.doc.TICKET.fg },
-    { label: '포스터', color: t.doc.POSTER.fg },
+    { label: '포스터', color: t.calendar.poster },
   ];
 
   return (

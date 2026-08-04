@@ -17,3 +17,6 @@ export type { NotificationItemProps } from './NotificationItem';
 
 export { CalendarLegend, MonthCalendar } from './MonthCalendar';
 export type { MonthCalendarProps } from './MonthCalendar';
+
+export { WeekCalendar } from './WeekCalendar';
+export type { WeekCalendarProps } from './WeekCalendar';
