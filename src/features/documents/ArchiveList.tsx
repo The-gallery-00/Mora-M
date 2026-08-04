@@ -82,8 +82,8 @@ export const GRID_ASPECT_POSTER = 3 / 4;
  * v2 는 RecyclerView 기반으로 첫 렌더에서 실제 높이를 측정하므로 그 prop 이 제거됐고,
  * 넘기면 TS 초과 프로퍼티 오류가 난다(`FlashListProps` 에 키가 없다 — node_modules 확인함).
  * 위키 Offline and State §"estimatedItemSize 리스트 96 / 그리드 220" 은 v1 시절 값이며,
- * v2 에서 같은 목적(선렌더 거리)을 담당하는 것은 `drawDistance` 다. 행 높이 80dp 기준
- * 화면 밖 3행 분량을 미리 그린다.
+ * v2 에서 같은 목적(선렌더 거리)을 담당하는 것은 `drawDistance` 다. 행과 구분 간격 94dp 기준
+ * 화면 밖 약 3행 분량을 미리 그린다.
  */
 const DRAW_DISTANCE = 250;
 
@@ -275,15 +275,14 @@ function daysBetween(fromIso: string, toIso: string): number {
 
 /**
  * D-day 라벨 (SCR-16/17 카드 데이터 매핑).
- * 오늘 `D-DAY`, 미래 `D-6`, **과거는 `MM.DD` 날짜로 대체**한다(스펙 명시).
+ * 오늘은 `D-DAY`, 미래는 `D-6` 형식이며 지난 날짜에는 배지를 표시하지 않는다.
  */
 export function ddayLabel(targetIso: string, today = todayIso()): string | null {
   if (!targetIso) return null;
   const diff = daysBetween(today, targetIso);
   if (diff === 0) return 'D-DAY';
   if (diff > 0) return `D-${diff}`;
-  const parts = targetIso.split('-');
-  return parts[1] && parts[2] ? `${parts[1]}.${parts[2]}` : null;
+  return null;
 }
 
 // ───────────────────────────────────────────────────────────── 라우팅
@@ -712,9 +711,21 @@ const ArchiveDocRow = memo(function ArchiveDocRow({
       );
     }
     if (row.badge) {
+      const isDueToday = row.badge === 'D-DAY';
       return (
-        <View className="rounded-full bg-surface-alt px-2 py-0.5">
-          <Text className="text-micro font-w700 text-text-secondary">{row.badge}</Text>
+        <View
+          className={`shrink-0 rounded-full px-2 py-0.5 ${
+            isDueToday ? 'border border-action bg-action' : 'bg-surface-alt'
+          }`}
+        >
+          <Text
+            className={`shrink-0 px-1 text-micro font-w700 ${
+              isDueToday ? 'text-white' : 'text-text-secondary'
+            }`}
+            maxFontSizeMultiplier={1.2}
+          >
+            {row.badge}
+          </Text>
         </View>
       );
     }
@@ -722,22 +733,24 @@ const ArchiveDocRow = memo(function ArchiveDocRow({
   }, [row.amount, row.badge]);
 
   return (
-    <DocumentListItem
-      docType={doc.type}
-      imageUri={row.thumbnailUrl}
-      title={row.title}
-      {...(row.subtitle ? { subtitle: row.subtitle } : {})}
-      {...(row.meta ? { meta: row.meta } : {})}
-      {...(trailingTop ? { trailingTop, showChevron: false } : {})}
-      showTypeBadge={showTypeBadge}
-      {...(showTypeBadge ? {} : { showChevron: false })}
-      selectionMode={selectionMode}
-      selected={selected}
-      onPress={handlePress}
-      onLongPress={handleLongPress}
-      swipeActions={swipeActions}
-      testID={`archive-row-${doc.type}-${doc.id}`}
-    />
+    <View className="pb-1.5">
+      <DocumentListItem
+        docType={doc.type}
+        imageUri={row.thumbnailUrl}
+        title={row.title}
+        {...(row.subtitle ? { subtitle: row.subtitle } : {})}
+        {...(row.meta ? { meta: row.meta } : {})}
+        {...(trailingTop ? { trailingTop } : {})}
+        showTypeBadge={showTypeBadge}
+        showChevron={false}
+        selectionMode={selectionMode}
+        selected={selected}
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        swipeActions={swipeActions}
+        testID={`archive-row-${doc.type}-${doc.id}`}
+      />
+    </View>
   );
 });
 
@@ -766,12 +779,24 @@ const ArchiveDocCard = memo(function ArchiveDocCard({
      (`bg-black/40`)와 같은 예외이며 HEX 가 아니라 tailwind 기본 팔레트 유틸이다
      (Component Library §3-0 예외 6). */
   const overlay = useMemo<ReactNode>(
-    () =>
-      row.badge ? (
-        <View className="rounded-full bg-black/60 px-2 py-0.5">
-          <Text className="text-micro font-w700 text-white">{row.badge}</Text>
+    () => {
+      if (!row.badge) return null;
+      const isDueToday = row.badge === 'D-DAY';
+      return (
+        <View
+          className={`shrink-0 rounded-full px-2 py-0.5 ${
+            isDueToday ? 'border border-action bg-action' : 'bg-black/60'
+          }`}
+        >
+          <Text
+            className="shrink-0 px-1 text-micro font-w700 text-white"
+            maxFontSizeMultiplier={1.2}
+          >
+            {row.badge}
+          </Text>
         </View>
-      ) : null,
+      );
+    },
     [row.badge],
   );
 
@@ -1291,8 +1316,9 @@ export function ArchiveList({
     <View className="flex-1" testID={testID}>
       <FlashList
         ref={listRef}
-        // 열 수가 바뀌면 레이아웃 캐시를 통째로 버려야 한다 — 토글 시 리마운트시킨다.
-        key={view}
+        // 열 수나 유형 필터가 바뀌면 목록을 리마운트해 레이아웃 캐시와 스크롤 위치를 초기화한다.
+        // 쿼리 데이터는 React Query 캐시에 남으므로 네트워크 재요청 없이 새 탭의 맨 위에서 시작한다.
+        key={`${view}:${types.join(',')}`}
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.key}

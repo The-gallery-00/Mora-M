@@ -10,7 +10,7 @@
 // **디바운스 없음(FR-071).** 이 컴포넌트는 `onChangeText` 로 로컬 상태만 올리고, 실행은
 // `onSubmit`(키보드 `검색` 또는 🔍 버튼) 에서만 일어난다. 서버가 검색 API 호출마다 검색기록을
 // 1건 적립하므로 타이핑 중 실행은 구조적으로 막아야 한다.
-import { forwardRef } from 'react';
+import { forwardRef, useState } from 'react';
 import { ActivityIndicator, Pressable, TextInput, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
@@ -77,15 +77,21 @@ export const SearchBar = forwardRef<TextInput, SearchBarProps>(function SearchBa
   ref,
 ) {
   const t = useTheme();
+  const [focused, setFocused] = useState(false);
   const showClear = !disabled && value.length > 0;
+
+  const surfaceClass = disabled
+    ? 'border-border-subtle bg-surface-alt'
+    : focused
+      ? 'border-action bg-bg-elevated'
+      : 'border-border-subtle bg-surface';
 
   return (
     <View
-      className={`flex-row items-center border ${
-        disabled ? 'border-border-subtle bg-surface-alt' : 'border-border-subtle bg-surface'
-      }`}
+      className={`flex-row items-center border ${surfaceClass}`}
       style={{
         height: BAR_HEIGHT,
+        borderWidth: !disabled && focused ? 1.5 : 1,
         borderRadius: radius.button,
         paddingHorizontal: spacing.md,
         gap: spacing.sm,
@@ -102,7 +108,9 @@ export const SearchBar = forwardRef<TextInput, SearchBarProps>(function SearchBa
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
       >
-        <SearchIcon color={disabled ? t.text.disabled : t.text.muted} />
+        <SearchIcon
+          color={disabled ? t.text.disabled : focused ? t.action.base : t.text.muted}
+        />
       </Pressable>
 
       <TextInput
@@ -117,6 +125,8 @@ export const SearchBar = forwardRef<TextInput, SearchBarProps>(function SearchBa
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         // 명시적 제출 지점 ①. `blurOnSubmit` 기본값(true)에 맡겨 키보드가 함께 내려간다.
         onSubmitEditing={onSubmit}
         accessibilityLabel={placeholder}

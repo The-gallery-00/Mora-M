@@ -1,7 +1,7 @@
 // src/components/documents/DocumentListItem.tsx
 //
 // CMP-29 DocumentListItem — Component Library §2 (1-E) 정본.
-// 보관함 목록(SCR-15/16/18)의 행 1개. 썸네일 72×48 r6 + 제목/부제/메타 + 우측 액션, 행 높이 80dp.
+// 보관함 목록(SCR-15/16/18)의 행 1개. 썸네일 80×54 r6 + 제목/부제/메타 + 우측 액션, 행 높이 88dp.
 //
 // 이 파일은 문서 4종 공통 부품 3개(`docToneOf` / `DocTypeBadge` / `DocPlaceholderIcon`)의 정의처이기도 하다.
 // 그리드 카드·스켈레톤이 같은 색 규칙을 써야 하므로 한 곳에서만 정의하고 재사용한다.
@@ -158,8 +158,8 @@ export interface DocumentListItemProps {
   testID?: string;
 }
 
-const THUMB_WIDTH = 72;
-const THUMB_HEIGHT = 48;
+const THUMB_WIDTH = 80;
+const THUMB_HEIGHT = 54;
 
 function DocumentListItemBase({
   docType,
@@ -202,11 +202,11 @@ function DocumentListItemBase({
       accessibilityState={{ selected }}
       onPress={onPress}
       onLongPress={onLongPress}
-      // 행 자체가 80dp 라 터치 타겟(44dp)은 이미 충족된다(§11-1)
-      className={`h-20 flex-row items-center px-4 ${selected ? 'bg-surface-active' : 'bg-bg-elevated'}`}
+      // 행 자체가 88dp 라 터치 타겟(44dp)은 이미 충족된다(§11-1)
+      className={`h-[88px] w-full flex-row items-center px-4 ${selected ? 'bg-surface-active' : 'bg-bg-elevated'}`}
       style={({ pressed }) => [pressed ? { opacity: 0.9 } : null, style]}
     >
-      {/* 썸네일 72×48 r6 — 다크에서 흰 문서가 배경에 직접 닿지 않도록 surface-alt 프레임을 깐다(CMP-24 mat) */}
+      {/* 썸네일 80×54 r6 — 다크에서 흰 문서가 배경에 직접 닿지 않도록 surface-alt 프레임을 깐다(CMP-24 mat) */}
       <View
         className="items-center justify-center overflow-hidden rounded-sm border border-border-subtle bg-surface-alt"
         style={{ width: THUMB_WIDTH, height: THUMB_HEIGHT }}
@@ -231,7 +231,7 @@ function DocumentListItemBase({
         )}
       </View>
 
-      <View className="ml-3 flex-1">
+      <View className="ml-3 min-w-0 flex-1">
         <View className="flex-row items-center gap-1.5">
           <Text
             className="shrink text-base font-w700 text-text-primary"
@@ -265,7 +265,7 @@ function DocumentListItemBase({
       </View>
 
       {trailingTop || trailingBottom ? (
-        <View className="ml-2 items-end justify-center gap-1">
+        <View className="ml-2 shrink-0 items-end justify-center gap-1">
           {trailingTop}
           {trailingBottom}
         </View>

@@ -1,6 +1,7 @@
 import '@/global.css';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useFonts } from 'expo-font';
 import { NavigationBar } from 'expo-navigation-bar';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -186,6 +187,20 @@ const ROOT_SCREEN_OPTIONS = {
  * `ToastHost` 는 화면 위에 떠야 하므로 `Stack` **뒤**에 온다.
  */
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    'Pretendard-Regular': require('../assets/fonts/Pretendard-Regular.ttf'),
+    'Pretendard-Medium': require('../assets/fonts/Pretendard-Medium.ttf'),
+    'Pretendard-SemiBold': require('../assets/fonts/Pretendard-SemiBold.ttf'),
+    'Pretendard-Bold': require('../assets/fonts/Pretendard-Bold.ttf'),
+    'Pretendard-ExtraBold': require('../assets/fonts/Pretendard-ExtraBold.ttf'),
+    'PatuaOne-Regular': require('../assets/fonts/PatuaOne-Regular.ttf'),
+  });
+
+  // 네이티브 스플래시는 모듈 스코프에서 이미 붙잡았다. 폰트가 준비되기 전에는 React 트리를
+  // 마운트하지 않아 시스템 폰트가 먼저 보였다가 Pretendard로 바뀌는 FOUT를 막는다.
+  // 로드 자체가 실패하면 앱을 멈추지 않고 시스템 폰트 폴백으로 계속 진행한다.
+  if (!fontsLoaded && !fontError) return null;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

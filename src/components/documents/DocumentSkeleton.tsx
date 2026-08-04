@@ -2,7 +2,7 @@
 //
 // 보관함 목록·그리드의 **최초 로드** 자리표시자 — Mobile UX Guide §6 로딩 위계 2단계.
 // "실제 카드와 같은 형태의 회색 블록 + shimmer 1200ms" 가 요구사항이므로 치수를 CMP-29/30 과 맞춘다:
-// 리스트 = 썸네일 72×48 / 행 높이 80, 그리드 = 카드 비율 + 제목 2줄.
+// 리스트 = 썸네일 80×54 / 행 높이 88 + 구분 간격 6, 그리드 = 카드 비율 + 제목 2줄.
 //
 // 위계 0(캐시)·1(낙관적 업데이트)이 가능한 상황에서는 이걸 쓰지 않는다. 재진입은 캐시가 먼저다.
 import { useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -24,19 +24,21 @@ export interface DocumentSkeletonProps {
   testID?: string;
 }
 
-const THUMB_WIDTH = 72;
-const THUMB_HEIGHT = 48;
+const THUMB_WIDTH = 80;
+const THUMB_HEIGHT = 54;
 const GRID_GAP = spacing.md; // 12
 const GRID_GUTTER = spacing.lg; // 16
 
 function ListRow() {
   return (
-    <View className="h-20 flex-row items-center px-4">
-      <Skeleton width={THUMB_WIDTH} height={THUMB_HEIGHT} radius={6} />
-      <View className="ml-3 flex-1 gap-1.5">
-        <Skeleton width="55%" height={16} radius={4} />
-        <Skeleton width="72%" height={13} radius={4} />
-        <Skeleton width="40%" height={11} radius={4} />
+    <View className="pb-1.5">
+      <View className="h-[88px] flex-row items-center bg-bg-elevated px-4">
+        <Skeleton width={THUMB_WIDTH} height={THUMB_HEIGHT} radius={6} />
+        <View className="ml-3 flex-1 gap-1.5">
+          <Skeleton width="55%" height={16} radius={4} />
+          <Skeleton width="72%" height={13} radius={4} />
+          <Skeleton width="40%" height={11} radius={4} />
+        </View>
       </View>
     </View>
   );
