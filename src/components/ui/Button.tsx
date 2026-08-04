@@ -147,7 +147,7 @@ export function Button({
   return (
     <Animated.View
       style={[
-        fullWidth ? { alignSelf: 'stretch' } : { alignSelf: 'flex-start' },
+        fullWidth ? { alignSelf: 'stretch' } : { alignSelf: 'center' },
         // §3-1 loading: 채움 variant 만 채움색 유지 + opacity 0.6.
         // secondary/ghost 는 "동일 + 스피너"라 투명도를 건드리지 않는다.
         loading && (variant === 'primary' || variant === 'danger') ? { opacity: 0.6 } : null,

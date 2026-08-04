@@ -26,7 +26,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { SwipeableRow, type SwipeAction } from '@/components/documents';
 import { Button, EmptyState, IconButton, Skeleton, TextField, toast } from '@/components/ui';
@@ -42,6 +42,7 @@ import {
   type Uuid,
 } from '@/features/documents';
 import { ArchiveHeader, href } from '@/features/documents/ArchiveList';
+import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { spacing } from '@/theme/scale';
 
@@ -76,6 +77,83 @@ function PlusIcon({ color }: { color: string }) {
   );
 }
 
+/** lucide `list-checks` — 명함첩 다중 선택 진입. */
+function ListChecksIcon({ color }: { color?: string }) {
+  return (
+    <Svg
+      width={22}
+      height={22}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="m3 7 2 2 4-4" />
+      <Path d="m3 17 2 2 4-4" />
+      <Path d="M13 6h8" />
+      <Path d="M13 12h8" />
+      <Path d="M13 18h8" />
+    </Svg>
+  );
+}
+
+/** lucide `trash-2` — 선택 모드의 삭제 액션. */
+function TrashIcon({ color }: { color?: string }) {
+  return (
+    <Svg
+      width={22}
+      height={22}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="M3 6h18" />
+      <Path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <Path d="M10 11v6" />
+      <Path d="M14 11v6" />
+    </Svg>
+  );
+}
+
+/** lucide `settings` — 사용자 명함첩 이름 변경 설정. */
+function SettingsIcon({ color }: { color?: string }) {
+  return (
+    <Svg
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <Circle cx={12} cy={12} r={3} />
+    </Svg>
+  );
+}
+
+function CheckIcon({ color }: { color: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 12l4 4 8-8"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 function ChevronIcon({ color }: { color: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -96,6 +174,9 @@ function GroupRow({
   name,
   fixed = false,
   onPress,
+  onRename,
+  selected,
+  onToggle,
   swipeActions,
   testID,
 }: {
@@ -103,17 +184,57 @@ function GroupRow({
   /** 고정 항목(전체 명함 / 미분류)은 편집·삭제할 수 없다. */
   fixed?: boolean;
   onPress: () => void;
+  onRename?: () => void;
+  selected?: boolean;
+  onToggle?: () => void;
   swipeActions?: SwipeAction[];
   testID?: string;
 }) {
   const t = useTheme();
+  const selectable = onToggle !== undefined;
+
+  if (onRename && !selectable) {
+    const editableRow = (
+      <View className="h-14 flex-row items-center bg-bg-elevated">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={name}
+          onPress={onPress}
+          className="h-full flex-1 flex-row items-center px-4 pr-0"
+          style={({ pressed }) => (pressed ? { opacity: 0.9 } : null)}
+          testID={testID}
+        >
+          <Text
+            className="flex-1 text-input font-w600 text-text-primary"
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.3}
+          >
+            {name}
+          </Text>
+        </Pressable>
+        <IconButton
+          icon={<SettingsIcon color={t.text.disabled} />}
+          onPress={onRename}
+          size="sm"
+          haptic
+          accessibilityLabel={`${name} 이름 변경`}
+          style={{ marginHorizontal: 4 }}
+          {...(testID ? { testID: `${testID}-rename` } : {})}
+        />
+      </View>
+    );
+
+    if (!swipeActions || swipeActions.length === 0) return editableRow;
+    return <SwipeableRow rightActions={swipeActions}>{editableRow}</SwipeableRow>;
+  }
 
   const row = (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={selectable ? 'checkbox' : 'button'}
       accessibilityLabel={name}
-      onPress={onPress}
-      className="h-14 flex-row items-center gap-3 bg-bg-elevated px-4"
+      {...(selectable ? { accessibilityState: { checked: selected === true } } : {})}
+      onPress={selectable ? onToggle : onPress}
+      className={`h-14 flex-row items-center gap-3 px-4 ${selected ? 'bg-surface-active' : 'bg-bg-elevated'}`}
       style={({ pressed }) => (pressed ? { opacity: 0.9 } : null)}
       testID={testID}
     >
@@ -124,11 +245,23 @@ function GroupRow({
       >
         {name}
       </Text>
-      <ChevronIcon color={t.text.disabled} />
+      {selectable ? (
+        <View className="ml-2 items-center justify-center">
+          <View
+            className={`h-5 w-5 items-center justify-center rounded-full border ${
+              selected ? 'border-action bg-action' : 'border-border-subtle bg-bg-base'
+            }`}
+          >
+            {selected ? <CheckIcon color={t.text.inverse} /> : null}
+          </View>
+        </View>
+      ) : (
+        <ChevronIcon color={t.text.disabled} />
+      )}
     </Pressable>
   );
 
-  if (!swipeActions || swipeActions.length === 0) return row;
+  if (selectable || !swipeActions || swipeActions.length === 0) return row;
   return <SwipeableRow rightActions={swipeActions}>{row}</SwipeableRow>;
 }
 
@@ -219,7 +352,7 @@ function ComposeSheet({
                   fullWidth
                 />
               </View>
-              <View className="flex-[2]">
+              <View className="flex-1">
                 <Button
                   label={isRename ? COMPOSE_COPY.renameSubmit : COMPOSE_COPY.createSubmit}
                   onPress={() => onSubmit(name)}
@@ -240,6 +373,83 @@ function ComposeSheet({
 
 /* ── 화면 ───────────────────────────────────────────────────────────────── */
 
+function DeleteConfirmDialog({
+  visible,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const t = useTheme();
+  const cancel = () => {
+    if (!busy) onCancel();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={cancel}
+    >
+      <Pressable
+        className="flex-1 items-center justify-center px-6"
+        style={{ backgroundColor: t.scrim }}
+        onPress={cancel}
+      >
+        <Pressable
+          className="w-full gap-5 rounded-card bg-bg-elevated p-5"
+          onPress={() => undefined}
+          accessibilityViewIsModal
+        >
+          <View className="gap-2">
+            <Text className="text-h3 font-w700 text-text-primary" accessibilityRole="header">
+              정말 삭제하시겠습니까?
+            </Text>
+            <Text className="text-base text-text-secondary">
+              명함첩 안의 명함은 삭제되지 않고 미분류 명함첩으로 이동됩니다.
+            </Text>
+            <Text className="text-base font-w600 text-danger">되돌릴 수 없습니다.</Text>
+          </View>
+
+          <View className="flex-row gap-2">
+            <View className="flex-1">
+              <Button
+                label="취소"
+                onPress={cancel}
+                variant="secondary"
+                size="md"
+                fullWidth
+                disabled={busy}
+                haptic="none"
+                testID="group-delete-cancel"
+              />
+            </View>
+            <View className="flex-1">
+              <Button
+                label="확인"
+                onPress={onConfirm}
+                variant="primary"
+                size="md"
+                fullWidth
+                loading={busy}
+                disabled={busy}
+                haptic="medium"
+                testID="group-delete-confirm"
+              />
+            </View>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function GroupsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -257,6 +467,10 @@ export default function GroupsScreen() {
     params.compose === '1' ? { mode: 'create' } : null,
   );
   const [composeError, setComposeError] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Uuid[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingSelected, setDeletingSelected] = useState(false);
 
   const groups = groupsQuery.data ?? [];
 
@@ -268,6 +482,60 @@ export default function GroupsScreen() {
   const closeCompose = () => {
     setCompose(null);
     setComposeError(null);
+  };
+
+  const closeSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds([]);
+    setDeleteDialogOpen(false);
+  };
+
+  const toggleGroupSelection = (id: Uuid) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id],
+    );
+  };
+
+  const openDeleteDialog = () => {
+    if (selectedIds.length === 0) {
+      toast.info('삭제할 명함첩을 선택해 주세요.');
+      return;
+    }
+    haptics.warning();
+    setDeleteDialogOpen(true);
+  };
+
+  const deleteSelectedGroups = async () => {
+    if (selectedIds.length === 0 || deletingSelected) return;
+
+    setDeletingSelected(true);
+    const failedIds: Uuid[] = [];
+    let deletedCount = 0;
+
+    for (const id of selectedIds) {
+      try {
+        await deleteMutation.mutateAsync(id);
+        deletedCount += 1;
+      } catch {
+        failedIds.push(id);
+      }
+    }
+
+    setDeletingSelected(false);
+    setDeleteDialogOpen(false);
+    setSelectedIds(failedIds);
+
+    if (failedIds.length === 0) {
+      setSelectionMode(false);
+      toast.success(`명함첩 ${deletedCount}개를 삭제했습니다. 명함은 미분류로 이동했습니다.`);
+      return;
+    }
+
+    toast.error(
+      deletedCount > 0
+        ? `명함첩 ${deletedCount}개를 삭제했고 ${failedIds.length}개는 삭제하지 못했습니다.`
+        : `명함첩 ${failedIds.length}개를 삭제하지 못했습니다.`,
+    );
   };
 
   const submitCompose = (raw: string) => {
@@ -341,15 +609,52 @@ export default function GroupsScreen() {
     <View className="flex-1 bg-bg-base">
       <ArchiveHeader
         title="명함첩 관리"
-        onBack={() => router.back()}
+        onBack={() => {
+          if (selectionMode) closeSelectionMode();
+          else router.back();
+        }}
         trailing={
-          <IconButton
-            icon={<PlusIcon color={t.text.primary} />}
-            onPress={() => setCompose({ mode: 'create' })}
-            size="md"
-            accessibilityLabel="명함첩 추가"
-            testID="group-add"
-          />
+          <View className="flex-row items-center">
+            {selectionMode ? (
+              <>
+                <Button
+                  label="취소"
+                  onPress={closeSelectionMode}
+                  variant="ghost"
+                  size="sm"
+                  haptic="selection"
+                  testID="group-selection-cancel"
+                />
+                <IconButton
+                  icon={<TrashIcon />}
+                  onPress={openDeleteDialog}
+                  size="md"
+                  tone="danger"
+                  accessibilityLabel={`선택한 명함첩 ${selectedIds.length}개 삭제`}
+                  testID="group-delete-selected"
+                />
+              </>
+            ) : (
+              <IconButton
+                icon={<ListChecksIcon />}
+                onPress={() => setSelectionMode(true)}
+                size="md"
+                haptic
+                accessibilityLabel="명함첩 선택"
+                testID="group-select"
+              />
+            )}
+            <IconButton
+              icon={<PlusIcon color={t.text.primary} />}
+              onPress={() => {
+                if (selectionMode) closeSelectionMode();
+                setCompose({ mode: 'create' });
+              }}
+              size="md"
+              accessibilityLabel="명함첩 추가"
+              testID="group-add"
+            />
+          </View>
         }
         testID="groups-header"
       />
@@ -417,6 +722,15 @@ export default function GroupsScreen() {
                 <GroupRow
                   name={group.name}
                   onPress={() => openGroup(group.id)}
+                  onRename={() =>
+                    setCompose({ mode: 'rename', id: group.id, original: group.name })
+                  }
+                  {...(selectionMode
+                    ? {
+                        selected: selectedIds.includes(group.id),
+                        onToggle: () => toggleGroupSelection(group.id),
+                      }
+                    : {})}
                   swipeActions={swipeActionsFor(group)}
                   testID={`group-row-${group.id}`}
                 />
@@ -445,6 +759,13 @@ export default function GroupsScreen() {
         error={composeError}
         onSubmit={submitCompose}
         onClose={closeCompose}
+      />
+
+      <DeleteConfirmDialog
+        visible={deleteDialogOpen}
+        busy={deletingSelected}
+        onCancel={() => setDeleteDialogOpen(false)}
+        onConfirm={() => void deleteSelectedGroups()}
       />
     </View>
   );

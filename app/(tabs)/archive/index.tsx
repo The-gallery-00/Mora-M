@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SortSheet, type SortOption } from '@/components/documents';
 import { Chip, type ChipDocTone } from '@/components/ui';
+import { DOCUMENT_TYPES, type DocumentType } from '@/features/documents';
 import {
   ARCHIVE_SORT_LABELS,
   ArchiveHeader,
@@ -26,7 +27,6 @@ import {
   useArchiveView,
   type ArchiveSort,
 } from '@/features/documents/ArchiveList';
-import { DOCUMENT_TYPES, type DocumentType } from '@/features/documents';
 import { haptics } from '@/lib/haptics';
 import { tabScrollBottomPadding } from '@/navigation/shell';
 
@@ -67,7 +67,7 @@ const FILTERS: readonly FilterMeta[] = [
     route: '/archive/cards',
     empty: {
       title: '아직 저장된 명함이 없어요',
-      description: '명함을 촬영하면 이름·회사·연락처를 자동으로 정리해 드려요.',
+      description: '명함을 촬영하면 이름·회사·연락처를 정리해 드려요.',
       action: '명함 스캔하기',
     },
   },

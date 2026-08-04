@@ -79,7 +79,7 @@ export default function ArchiveTicketsScreen() {
       <ArchiveHeader
         title="티켓"
         count={total}
-        onBack={() => router.back()}
+        onBack={() => router.replace({ pathname: '/(tabs)/archive', params: { type: 'TICKET' } })}
         onSort={() => setSortOpen(true)}
         testID="archive-tickets-header"
       />
@@ -90,6 +90,7 @@ export default function ArchiveTicketsScreen() {
         sort={sort}
         {...(compare ? { compare } : {})}
         {...(section && view === 'list' ? { section } : {})}
+        showTypeBadge={false}
         empty={{
           title: '아직 저장된 티켓이 없습니다',
           description: '티켓을 촬영하면 출발지·시간을 자동으로 정리해 드려요.',

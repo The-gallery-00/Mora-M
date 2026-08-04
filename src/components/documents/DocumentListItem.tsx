@@ -111,6 +111,20 @@ function ChevronIcon({ color }: { color: string }) {
   );
 }
 
+function CheckIcon({ color }: { color: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 12l4 4 8-8"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** 원본 규칙 그대로: `'김도윤 명함'` → `'김도윤'`. 유형이 배지로 이미 보이므로 꼬리말을 지운다. */
 export function normalizeDocumentTitle(title: string): string {
   return title.replace(/\s*(명함|티켓|포스터|영수증)\s*$/, '');
@@ -133,6 +147,7 @@ export interface DocumentListItemProps {
    * 한 유형만 담는 목록(명함 보관함 등)에서는 모든 행이 같은 배지를 반복해 정보가 0이므로 끈다.
    */
   showTypeBadge?: boolean;
+  selectionMode?: boolean;
   selected?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
@@ -156,6 +171,7 @@ function DocumentListItemBase({
   trailingBottom,
   showChevron = true,
   showTypeBadge = true,
+  selectionMode = false,
   selected = false,
   onPress,
   onLongPress,
@@ -255,7 +271,17 @@ function DocumentListItemBase({
         </View>
       ) : null}
 
-      {showChevron ? (
+      {selectionMode ? (
+        <View className="ml-2 items-center justify-center">
+          <View
+            className={`h-5 w-5 items-center justify-center rounded-full border ${
+              selected ? 'bg-action border-action' : 'border-border-subtle bg-bg-base'
+            }`}
+          >
+            {selected ? <CheckIcon color={t.text.inverse} /> : null}
+          </View>
+        </View>
+      ) : showChevron ? (
         <View className="ml-1">
           <ChevronIcon color={t.text.disabled} />
         </View>
