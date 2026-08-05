@@ -14,6 +14,13 @@ spring:
     exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   mvc:
     log-request-details: false
+  servlet:
+    multipart:
+      # 기본값은 파일 1MB / 요청 10MB 다. 앱은 스캔 이미지를 1.2MB 목표로 압축하되
+      # 상한을 8MB 로 잡으므로(src/features/scan/imagePipeline.ts) 1MB 기본값에서는
+      # 큰 사진이 본문 없는 413 으로 잘렸다.
+      max-file-size: 10MB
+      max-request-size: 12MB
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/mora?stringtype=unspecified}
     username: ${DATABASE_USERNAME:mora}
@@ -41,6 +48,10 @@ app:
 logging:
   level:
     root: INFO
+    # 서비스 자체 로그를 root 기본값에 묻히지 않게 명시한다. OcrService 가 업스트림 실패 시
+    # 상태코드와 예외 타입명을 남기므로, Cloud Run 로그만 보고 503(인스턴스 사망) /
+    # 500(추론 실패) / 타임아웃을 구분할 수 있어야 한다. 메시지 본문·URL·파일명은 남기지 않는다.
+    com.mora: INFO
     org.springframework.web: INFO
     org.springframework.security: INFO
     org.hibernate.SQL: OFF
