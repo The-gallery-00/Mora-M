@@ -58,7 +58,7 @@ flowchart TD
     COMP --> SZ{"SCF-04 8MB 초과"}
     SZ -- "예" --> SZF["재압축 사다리 IMG-05"]
     SZF --> UP
-    SZ -- "아니오" --> UP["SCAN-05 업로드 POST /api/scan<br/>진행률 · 취소 · 60s 타임아웃"]
+    SZ -- "아니오" --> UP["SCAN-05 업로드 POST /api/scan<br/>진행률 · 취소 · 120s 타임아웃"]
 
     UP -- "실패" --> UPF["SCF-06~09 실패 시트 · 동일 파일로 재시도"]
     UP -- "성공" --> UNW["SCAN-06 이중 언랩 data.data 우선"]
@@ -88,20 +88,22 @@ flowchart TD
 
 ### 2-1. 단계별 책임
 
-| ID | 단계 | 구현 위치(예정) | 실패 시 |
+| ID | 단계 | 구현 위치 | 실패 시 |
 |---|---|---|---|
-| SCAN-01 | 권한 확인 | `hooks/useCameraPermission.ts` | SCF-01 |
-| SCAN-02a | 촬영 | `app/(app)/scan/camera.tsx` | SCF-02 |
-| SCAN-02b | 앨범 선택 | 동일 화면의 앨범 버튼 | SCF-02 |
-| SCAN-03 | 크롭/회전 | `app/(app)/scan/adjust.tsx` | 되돌아가 재촬영 |
-| SCAN-04 | 압축 | `features/scan/prepareImage.ts` | SCF-03 / SCF-04 |
-| SCAN-05 | 스캔 업로드 | `features/scan/uploadScan.ts` | SCF-06~09 |
-| SCAN-06 | 응답 언랩 | `features/scan/unwrapScan.ts` | SCF-09 |
-| SCAN-07 | 분류 확정 | `features/scan/classify.ts` | CLS-03로 폴백 |
-| SCAN-08 | 동적 폼 | `app/(app)/scan/review.tsx` | — |
-| SCAN-09 | 커밋 | `features/scan/commitImage.ts` | SCF-11 |
-| SCAN-10~11 | 저장 | `features/scan/saveDocument.ts` | SCF-12 |
-| SCAN-12 | 완료 | `app/(app)/scan/done.tsx` | — |
+| SCAN-01 | 권한 확인 | `src/features/scan/useScan.ts` `ensureCameraPermission()` | SCF-01 |
+| SCAN-02a | 촬영 | `app/scan/index.tsx` → `useScan().acceptCapture()` | SCF-02 |
+| SCAN-02b | 앨범 선택 | 동일 화면의 앨범 버튼 → `useScan().pickFromLibrary()` | SCF-02 |
+| SCAN-03 | 크롭/회전 | `app/scan/crop.tsx` | 되돌아가 재촬영 |
+| SCAN-04 | 압축 | `src/features/scan/imagePipeline.ts` `prepareForUpload()` | SCF-03 / SCF-04 |
+| SCAN-05 | 스캔 업로드 | `src/features/scan/api.ts` `scanImage()` | SCF-06~09 |
+| SCAN-06 | 응답 언랩 | `src/features/scan/api.ts` `unwrapScan()` | SCF-09 |
+| SCAN-07 | 분류 확정 | `src/features/scan/scanStore.ts` `runScan()` (응답의 `type`/신뢰도를 스토어에 확정) | CLS-03로 폴백 |
+| SCAN-08 | 동적 폼 | `app/scan/review.tsx` | — |
+| SCAN-09 | 커밋 | `src/features/scan/api.ts` `commitDocument()` | SCF-11 |
+| SCAN-10~11 | 저장 | `src/features/scan/api.ts` `saveDocument()` | SCF-12 |
+| SCAN-12 | 완료 | `app/scan/done.tsx` | — |
+
+> **2026-08-05 4차 정정 — 이 표의 "구현 위치" 는 `(예정)` 열이었고, 적힌 12개 경로 중 실재하는 것이 하나도 없었다.** `hooks/useCameraPermission.ts` · `features/scan/uploadScan.ts` · `features/scan/unwrapScan.ts` · `features/scan/commitImage.ts` · `features/scan/saveDocument.ts` · `features/scan/prepareImage.ts` · `features/scan/classify.ts` · `app/(app)/scan/*` 전부 **미존재**다. 실제 구현은 `src/features/scan/` 아래 7개 파일(`api.ts` · `imagePipeline.ts` · `scanStore.ts` · `useScan.ts` · `fieldSchema.ts` · `types.ts` · `index.ts`)과 `app/scan/` 6개 화면으로 모였고, 라우트 그룹도 `(app)` 이 아니라 `app/scan/` 이다. `(예정)` 이라는 꼬리표가 붙어 있어도 **파일을 찾으러 간 사람에게는 거짓 신호**이므로 실제 위치로 교체했다([[Risks]] §5 규칙 6).
 
 디렉터리 규약 정본은 [[Directory Structure]].
 
@@ -361,11 +363,20 @@ const res = await fetch(`${API_BASE}/api/scan`, {
 
 ### 7-4. 타임아웃 (결정)
 
-| 요청 | 타임아웃 | 근거 |
-|---|---|---|
-| `POST /api/scan` | **60 s** | 서버 `RestTemplate`이 타임아웃 무제한(함정 21). PaddleOCR 첫 요청은 모델 lazy 로드까지 포함해 수십 초가 걸릴 수 있다 |
-| `POST /api/commit` | **45 s** | 이미지 저장 + 라벨 파일 쓰기. OCR 추론 없음 |
-| `POST /api/{종류}/save` | **20 s** | OpenAI 임베딩 호출 포함. 실패해도 서버가 부분성공으로 200을 준다 |
+**값의 정본은 `src/features/scan/api.ts` 의 상수다.** 이 표는 그것을 설명할 뿐이니 값을 여기서만 고치지 마라.
+
+| 요청 | 앱 타임아웃 (상수) | 서버 측 대응 상한 | 근거 |
+|---|---|---|---|
+| `POST /api/scan` | **120 s** (`SCAN_TIMEOUT_MS`) | Spring→OCR read **90 s** (`RestTemplateConfig` `OCR_SCAN_READ_TIMEOUT`) | Cloud Run 콜드스타트(**실측 18~33초**)가 첫 스캔 앞에 통째로 붙고, 그 뒤 명함 한 장 추론이 블록 수에 따라 5~13초다([[ADR-002 Backend Connectivity]] §0-D). 최악 약 46초를 덮는다 |
+| `POST /api/commit` | **90 s** (`COMMIT_TIMEOUT_MS`) | — (Spring 우회, OCR 직결) | 이미지 저장 + 라벨 파일 쓰기. OCR 추론 없음. 다만 **커밋도 같은 OCR 인스턴스를 깨우므로** 콜드스타트를 함께 덮어야 한다 |
+| `POST /api/{종류}/save` | **20 s** (`SAVE_TIMEOUT_MS`) | Spring→OpenAI read **15 s** (`EMBEDDING_READ_TIMEOUT`) | OpenAI 임베딩 호출 포함. 실패해도 서버가 부분성공으로 200을 준다 |
+
+**서버 read 상한은 반드시 앱 상한보다 짧다.** 그래야 앱이 끊기 전에 Spring 이 먼저 명확한 에러(502/500/503/504)를 돌려줘 원인이 업스트림으로 좁혀진다. 근거 전문은 `RestTemplateConfig.java` 의 타임아웃 표 주석.
+
+> **2026-08-05 4차 정정 — 종전 표는 `60 s` / `45 s` 였고 근거도 둘 다 틀렸다.**
+> · 값: 스캔은 콜드스타트 실측 반영으로 **120초**, 커밋은 **90초**로 상향된 지 오래다([[Risks]] RSK-43).
+> · 근거 ①: "서버 `RestTemplate` 이 타임아웃 무제한(함정 21)" — 그 함정 표는 **원본 웹 레포**의 상태를 적은 것이고, 이 레포의 `RestTemplateConfig.java` 는 용도별 3개 빈에 connect/read 를 모두 지정한다.
+> · 근거 ②: "PaddleOCR 첫 요청은 **모델 lazy 로드**까지 포함해" — 모델은 lazy 로드가 아니다. `server/ocr/services.py` 의 모듈 최상위 `pipeline = BusinessCardPipeline()` 이 **임포트 시점**에 엔진을 만든다. 느린 것은 lazy 로드가 아니라 **Cloud Run 콜드스타트**다([[Risks]] RSK-02).
 
 타임아웃은 자체 타이머로 구현하고 만료 시 업로드 태스크를 `cancelAsync()`한다. 네트워크 계층 공통 규약은 [[Networking]].
 
@@ -623,21 +634,61 @@ sequenceDiagram
 
 문구 열의 `원문`은 웹 코드에 실재하는 문구를 그대로 재사용한 것이고, `결정`은 이 문서에서 새로 정한 것이다.
 
+> **구현 정본은 `src/features/scan/useScan.ts` 의 `describeFailure()`(문구·액션) 와 `src/features/scan/api.ts` 의 `mapFailure`/`classifySaveFailure`(감지·코드 배정) 다.** 이 표는 그 두 곳과 2026-08-05 4차에 전수 대조했다. 아래 §13-1 이 대조에서 드러난 차이를 항목별로 남긴다 — 표를 고친 이유를 지우면 다음 라운드에 같은 값이 되돌아온다.
+
+### Spring 이 OCR 실패를 네 갈래로 가른다 — SCF-07/08/09 를 읽기 전에
+
+`POST /api/scan` 은 앱 → **Spring** → OCR(FastAPI) 2단 경유다. 그래서 "OCR 이 실패했다"에는 성질이 다른 네 가지가 있고, Spring 이 이를 **서로 다른 상태코드 + 본문 마커**로 갈라 내려보낸다(`CardController` 의 매핑 표 주석 · `OcrService.classifyIoFailure()`).
+
+| Spring 이 만난 상황 | 앱이 받는 status | 본문 마커 | 앱의 SCF | 재시도가 의미 있나 |
+|---|---|---|---|---|
+| OCR 주소에 **연결 자체가 안 됨**(DNS 실패·연결 거부·connect 타임아웃) | **503** | `OCR upstream unreachable` | **SCF-07** | ✗ 배포/설정 오류 |
+| 연결은 됐으나 read 타임아웃(90초) | **504** | `OCR upstream timeout` | **SCF-08** | ✓ |
+| OCR 이 **5xx 로 응답**(인스턴스 사망·추론 실패) | **502** | `OCR upstream failed (nnn)` | **SCF-09** | ✓ |
+| OCR 이 **4xx 로 응답**(multipart 계약 위반 등) | **500** | `OCR upstream contract error (nnn)` | **SCF-09** | ✗ 항상 같은 4xx |
+
+**판정 근거는 상태코드가 아니라 본문 마커다.** 503/504 는 Spring 컨테이너 자체가 죽거나 느릴 때 Google Frontend 도 내는 숫자라, 숫자만 믿으면 "OCR 이 안 붙는다"와 "백엔드가 죽었다"를 같은 문구로 말하게 된다. 마커 파싱은 `api.ts` 의 `springUpstreamFailure()` 이고, 마커가 없으면 상태코드 폴백(504 → SCF-08, 나머지 5xx → SCF-09 `서버 에러 (nnn)`)으로 떨어진다.
+
 | ID | 상황 | 감지 | 사용자에게 보이는 문구 | 표현 | 액션 |
 |---|---|---|---|---|---|
 | SCF-01 | 카메라 권한 거부 | `useCameraPermissions()` `granted === false` | `카메라 권한이 필요합니다`<br/>`문서를 촬영하려면 설정에서 카메라 접근을 허용해 주세요.` (결정) | 바텀시트 | `설정 열기` / `앨범에서 선택` / `닫기` |
-| SCF-02 | 앨범 권한 거부 · 선택 취소 | picker `canceled === true` 또는 권한 거부 | `사진 접근 권한이 필요합니다` (결정) | 바텀시트 | `설정 열기` / `카메라로 촬영` |
+| SCF-02 | 앨범 **권한 거부** | `requestMediaLibraryPermissionsAsync()` `granted === false`. **단순 취소(`canceled === true`)는 SCF-02 가 아니다** — §13-1 ① | `사진 접근 권한이 필요합니다`<br/>`설정에서 사진 접근을 허용해 주세요.` (결정) | 바텀시트 | `설정 열기` / `카메라로 촬영` |
 | SCF-03 | 저장공간 부족 | manipulate/`getInfoAsync` 실패, `ENOSPC`, `exists === false` | `기기 저장 공간이 부족해 사진을 준비하지 못했습니다.`<br/>`공간을 확보한 뒤 다시 시도해 주세요.` (결정) | 전체 시트 | `다시 시도` / `취소` |
 | SCF-04 | 압축 후에도 8MB 초과 | IMG 사다리 3회차 실패 | `이미지가 너무 큽니다. 다른 사진을 선택해 주세요.` (결정) | 토스트 + 시트 | `다시 촬영` |
 | SCF-05 | 10MB 초과가 서버까지 도달 | 응답이 `success` 키 없는 Spring 기본 에러 JSON, status 400/413 | `이미지가 너무 커서 업로드하지 못했습니다.` (결정) | 시트 | `다시 촬영` |
 | SCF-06 | 서버 다운 · LAN IP 불일치 | fetch reject / `Network request failed` | `백엔드 서버에 연결할 수 없습니다.` (원문)<br/>부제: `PC와 같은 Wi-Fi에 연결되어 있는지 확인해 주세요.` (결정) | 시트 | `다시 시도` / `서버 주소 확인` → 개발 설정 |
-| SCF-07 | OCR 서버(:8000) 다운 | `/api/commit` fetch reject | `OCR 서버에 연결할 수 없습니다.` (원문) | 시트 | `이미지 없이 저장` / `다시 시도` / `취소` |
-| SCF-08 | OCR 타임아웃 (60s) · 백그라운드 30s 초과로 태스크 소실 | 자체 타이머 만료 | `문서를 읽는 데 시간이 너무 오래 걸립니다.`<br/>`잠시 후 다시 시도해 주세요.` (결정) | 시트 | `다시 시도` / `취소` |
-| SCF-09 | 스캔 5xx | `res.status >= 500` | `서버 에러 (500)` (원문 `서버 에러 (${res.status})`) | 시트 | `다시 시도` |
+| SCF-07 ⓐ | 기기가 OCR 서버(:8000)에 **직접** 못 붙음 (커밋 경로) | `/api/commit` fetch reject (`kind === 'network'`). status 없음 | `OCR 서버에 연결할 수 없습니다.` (원문) | 시트 | `이미지 없이 저장` / `다시 시도` / `취소` |
+| SCF-07 ⓑ | **Spring 이** OCR 주소에 못 붙음 (스캔 경로) | 스캔 **503** + 본문 마커 `OCR upstream unreachable` | `OCR 서버에 연결할 수 없습니다.` (원문)<br/>`백엔드 서버가 OCR 서버 주소에 닿지 못했습니다. 주소가 잘못됐거나 OCR 서버가 꺼져 있는 상태라, 지금 다시 시도해도 같은 결과입니다.` (결정) | 시트 | `직접 입력` / `서버 주소 확인` / `취소` — **`다시 시도` 없음** |
+| SCF-08 ⓐ | 앱이 기다리다 지침 | 자체 타이머 만료 (**`SCAN_TIMEOUT_MS` 120초**, 커밋 `COMMIT_TIMEOUT_MS` 90초, 저장 `SAVE_TIMEOUT_MS` 20초) · 백그라운드 30초 초과로 태스크 소실 | `문서를 읽는 데 시간이 너무 오래 걸립니다.`<br/>`잠시 후 다시 시도해 주세요.` (결정) | 시트 | `다시 시도` / `취소` |
+| SCF-08 ⓑ | **Spring 의 read 타임아웃** (연결은 됐다) | 스캔 **504** + 마커 `OCR upstream timeout` (마커 없어도 504 면 여기로 폴백) | 제목 동일<br/>부제만 갈림: `OCR 서버가 제한 시간 안에 응답하지 않았습니다. 잠시 후 다시 시도해 주세요.` (결정) | 시트 | `다시 시도` / `취소` |
+| SCF-09 ⓐ | Spring 자체 실패 · 응답 파싱 실패 | 마커 없는 `res.status >= 500`, 또는 `unwrapScan()` 예외 | `서버 에러 (500)` (원문 `서버 에러 (${res.status})`) | 시트 | `다시 시도` |
+| SCF-09 ⓑ | **업스트림 5xx** — OCR 인스턴스 사망 또는 추론 실패 | 스캔 **502** + 마커 `OCR upstream failed (nnn)` | `OCR 서버가 문서를 처리하지 못했습니다 (nnn)` (결정)<br/>`연결은 됐지만 OCR 서버 쪽에서 실패했습니다. 잠시 후 다시 시도해 주세요.` | 시트 | `다시 시도` / `직접 입력` / `취소` |
+| SCF-09 ⓒ | **업스트림 4xx** — Spring↔OCR 계약 위반 | 스캔 **500** + 마커 `OCR upstream contract error (nnn)` | `서버가 요청을 거절했습니다 (nnn)` (결정)<br/>`앱과 서버의 요청 형식이 맞지 않습니다. 다시 시도해도 같은 결과가 나옵니다.` | 시트 | `직접 입력` / `서버 주소 확인` — **`다시 시도` 없음** |
 | SCF-10 | 빈 결과 (`raw_blocks` 0건 또는 `parsed` 전부 공백) | 응답 파싱 후 | `이미지에서 글자를 찾지 못했습니다.`<br/>`더 밝은 곳에서 글자가 선명하게 보이도록 다시 촬영해 주세요.` (결정) | 전체 화면 상태 | `다시 촬영` / `그래도 직접 입력` (빈 폼 진입) |
 | SCF-11 | 커밋 실패 (이미지 영구 저장 실패) | `/api/commit` 4xx/5xx | `이미지 저장 실패 (500)` (원문 `이미지 저장 실패 (${res.status})`)<br/>부제: `이미지 없이 정보만 저장할 수 있습니다.` (결정) | 다이얼로그 | `이미지 없이 저장` / `다시 시도` / `취소` |
 | SCF-12 | 문서 저장 실패 | `/save` 4xx/5xx 또는 `success:false` | `저장 실패 (500)` (원문 `저장 실패 (${res.status})`) | 시트 | `다시 시도`(save만) / `임시 보관` |
-| SCF-13 | 세션 만료 | `/save` 401 또는 400 | `로그인 세션이 만료되었습니다. 다시 로그인해 주세요.` (원문) | 전역 처리 | 스캔 초안 보존 후 로그인 화면 → 복귀 시 저장 재개 |
+| SCF-13 | 세션 만료 | `/save` **401 만** (`http.ts` `kind === 'unauthorized'`). **400 은 SCF-12 다** — §13-1 ③ | `로그인 세션이 만료되었습니다. 다시 로그인해 주세요.` (원문) | 전역 처리 | 스캔 초안 보존 후 로그인 화면 → 복귀 시 저장 재개 |
+
+### 13-1. 구현과의 대조 기록 (2026-08-05 4차)
+
+`useScan.describeFailure()` · `api.ts mapFailure`/`classifySaveFailure` 를 열어 SCF-01~13 을 전수 대조했다. 표를 고친 항목만 남긴다.
+
+① **SCF-02 — 단순 취소는 실패가 아니다.** 종전 표는 `canceled === true` 도 SCF-02 로 묶었으나, 구현은 **권한 거부만** SCF-02 로 올리고 취소는 `'canceled'` 로 조용히 돌려준다(`useScan.pickFromLibrary()`). 사용자가 스스로 `취소` 를 눌렀는데 권한 안내 시트를 띄우는 것은 오작동으로 읽히기 때문이다. **구현이 옳고 표가 틀렸다** → 표를 구현에 맞췄다. 부제(`설정에서 사진 접근을 허용해 주세요.`)도 표에 없던 것이라 추가했다.
+
+② **SCF-07 · SCF-08 · SCF-09 — Spring 4갈래 분리를 표가 따라오지 못했다.** 종전 표는 SCF-07 = "`/api/commit` fetch reject", SCF-08 = "OCR 타임아웃 **(60s)**", SCF-09 = "스캔 5xx" 한 줄씩이었다. 실제로는
+> · SCF-07 에 **스캔 503(업스트림 연결 불가)** 경로가 추가됐고, 그 갈래는 재시도로 풀리지 않으므로 **`다시 시도` 버튼을 뺀다.**
+> · SCF-08 에 **스캔 504(Spring read 타임아웃)** 경로가 추가됐고, 앱 자체 타이머는 **60초가 아니라 120초**(`SCAN_TIMEOUT_MS`)다. 60초는 상향 전의 값이 표에 남은 것이다.
+> · SCF-09 가 **세 갈래**(Spring 자체 실패 / 업스트림 5xx / 업스트림 4xx)로 갈리고 제목·액션이 각각 다르다. 특히 업스트림 4xx 에 `다시 시도` 를 주면 같은 요청이 항상 같은 4xx 로 돌아와 사용자를 무한 루프에 태운다.
+>
+> 이 분리의 목적은 **거짓 신호 제거**다. 종전에는 Spring 이 연결 실패까지 504 로 접었기 때문에 **50ms 만에 끝난 DNS 실패**에도 "시간이 너무 오래 걸립니다" 가 떴다. 반대로 502(업스트림이 *응답은 했다*)에 "연결할 수 없습니다" 를 붙이는 것도 거짓이다.
+
+③ **SCF-13 — `400` 을 뺐다.** 종전 표는 "`/save` 401 또는 400". 4개 컨트롤러(Card/Poster/Receipt/Ticket)의 `save()` 는 인증 누락에 **전부 401** 을 반환하며, 400 은 세션 만료가 아니라 검증 실패라 SCF-12 로 간다(`api.ts classifySaveFailure` 주석).
+
+④ **`서버 주소 확인` 액션은 production 빌드에서 자동으로 빠진다.** 진단 화면(SCR-31)이 `(dev)` 그룹이라 스토어 빌드에는 목적지가 없기 때문이다(`app/scan/analyzing.tsx` `DIAGNOSTICS_AVAILABLE`). 표의 액션 목록은 **개발/preview 빌드 기준**이다. production 에서는 SCF-06 이 `다시 시도` · `다른 사진 선택` · `직접 입력`, SCF-09ⓒ 가 `직접 입력` · `다른 사진 선택` 이 된다.
+
+⑤ **표의 액션 = 최소 집합이다.** `app/scan/analyzing.tsx` 는 여기에 `다른 사진 선택` · `직접 입력` 같은 보충 액션을 화면 사정에 따라 더한다(그 파일의 매핑 표 주석이 정본). 반대로 화면 단계에 맞지 않는 라벨은 조용히 빠진다 — SCF-07ⓐ 의 `이미지 없이 저장` 은 저장 단계 전용이라 스캔 화면에서는 그려지지 않는다.
+
+⑥ **SCF-01 · 03 · 04 · 05 · 06 · 10 · 11 · 12 는 구현과 일치**해 손대지 않았다.
 
 공통 규칙:
 - **서버 에러 문자열을 화면에 그대로 노출하지 않는다.** 백엔드 에러 메시지에 한글/영문이 혼재하고 인코딩 깨짐 전례가 있다(04-api 함정 3 — 검색 API만 서버 문구를 무시하도록 특수 처리되어 있음). 앱은 **HTTP status + `success` 불리언**만으로 분기하고 문구는 위 표에서 고른다.

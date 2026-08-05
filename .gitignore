@@ -51,9 +51,18 @@ example
 *.aab
 target/
 
+# 레포 스냅샷 zip. 워킹트리에 `MORA_mobile.zip`(193MB) 이 untracked 로 놓여 있어
+# `git add .` 한 번이면 그대로 커밋에 들어간다 — GitHub 100MB 상한에 걸려 push 가 막히고,
+# 되돌리려면 히스토리 재작성이 필요하다. 커밋해야 하는 zip 이 생기면 `git add -f` 로 명시할 것.
+*.zip
+
 # Python bytecode/cache
 __pycache__/
 *.py[cod]
+
+# LAN 개발 모드에서 OCR 이 업로드 원본을 여기에 쌓는다 (GCS_BUCKET_NAME 미설정 시).
+# 배포 환경은 GCS 를 쓰므로 이 디렉터리는 순수 로컬 산출물이다.
+server/uploads/
 
 # Obsidian 로컬 설정 (workspace.json 에 개인 경로가 들어간다)
 .obsidian/
