@@ -2,6 +2,7 @@ package com.mora.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -85,7 +86,12 @@ public class EmbeddingService {
     /** OpenAI Embeddings API 엔드포인트 */
     private static final String OPENAI_EMBEDDING_URL = "https://api.openai.com/v1/embeddings";
 
-    public EmbeddingService(RestTemplate restTemplate) {
+    // "embeddingRestTemplate" 빈(connect 5초 / read 15초)을 명시 주입한다.
+    // OCR 스캔용 빈은 read 90초라 앱의 SAVE_TIMEOUT_MS(20초)보다 4.5배 길어, 앱이 이미 끊은 요청을
+    // Spring이 계속 붙잡는 스레드 누수가 생긴다 — 근거는 RestTemplateConfig의 [타임아웃 표] 참조.
+    // RestTemplate 빈이 세 개(ocrScan/ocrDelete/embedding)이므로 @Qualifier 를 빼면
+    // NoUniqueBeanDefinitionException 으로 기동이 실패한다(의도된 설계).
+    public EmbeddingService(@Qualifier("embeddingRestTemplate") RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 

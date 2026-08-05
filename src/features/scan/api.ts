@@ -39,16 +39,32 @@ import {
 /**
  * PaddleOCR 첫 요청은 모델 lazy 로드까지 포함해 수십 초가 걸릴 수 있다.
  *
- * 60s → 120s 상향(2026-07-28). 서버가 Cloud Run 이라 인스턴스가 잠들면 **콜드스타트에
- * 컨테이너 기동 + 가중치 844MB 로드**가 얹힌다. gunicorn 자체는 `--timeout 300` 이므로
- * 앱이 먼저 끊는 구조였다 — [[Risks]] RSK-43. LAN 개발에서는 재현되지 않는다.
+ * 60s → 120s 상향(2026-07-28). 서버가 Cloud Run 이라 인스턴스가 잠들면 콜드스타트에
+ * 컨테이너 기동 + PaddleOCR 모델 lazy 로드가 통째로 얹힌다 — [[Risks]] RSK-43.
+ *
+ * **주석 정정(2026-08-05).** 이 자리에 있던 근거 두 줄은 둘 다 사실이 아니었다:
+ *  · "gunicorn 자체는 `--timeout 300`" → `server/ocr/Dockerfile` 은 gunicorn 을 쓰지 않는다.
+ *    단일 `uvicorn app:app` 으로 뜬다(레포 전체 gunicorn 사용처 0건). 앞단 워커 타임아웃이라는
+ *    안전망은 애초에 없었고, 앱 타임아웃이 유일한 상한이다.
+ *  · "가중치 844MB 로드" → 그런 크기의 NER 가중치는 레포에 없다. 분류기는
+ *    `server/ocr/src/classifier/rule_based.py` 의 순수 정규식이다.
+ *
+ * 값 120s 는 그대로 둔다 — 근거만 틀렸고 값은 이번 실측으로 정당화된다:
+ * Cloud Run 콜드스타트 실측 18~33s. 그리고 인스턴스가 OOM 으로 죽으면 앱 코드를 거치지 않고
+ * **Google Frontend 가 text/plain `Service Unavailable` 503** 을 돌려준다(FastAPI 는 실패 시
+ * 500 + JSON 만 낸다 — 503 을 보면 우리 코드가 낸 것이 아니다). LAN 개발에서는 둘 다 재현되지 않는다.
  */
 export const SCAN_TIMEOUT_MS = 120_000;
 /**
  * 이미지 저장 + 라벨 파일 쓰기만 하고 OCR 추론이 없다.
- * (API Contract §9 표는 60s 로 적혀 있으나 파이프라인 정본인 Camera and Scan §7-4 의 45s 를 따른다.)
+ *
+ * 45s → 90s 상향(2026-08-05). 커밋은 Spring 을 거치지 않고 `getOcrBaseUrl()` 로 OCR 을 직접 친다
+ * → 스캔이 깨운 인스턴스와 **별개 인스턴스의 콜드스타트를 그대로 맞는다**. 실측 콜드스타트가
+ * 18~33s 라 45s 는 여유가 12s 뿐이었고, 추론이 없는 요청이 SCF-08(시간 초과)로 튕겼다.
+ * (API Contract §9 표는 60s, 파이프라인 정본인 Camera and Scan §7-4 는 45s 로 적혀 있다 —
+ *  둘 다 Cloud Run 이전에 정해진 값이다.)
  */
-export const COMMIT_TIMEOUT_MS = 45_000;
+export const COMMIT_TIMEOUT_MS = 90_000;
 /** OpenAI 임베딩 호출을 포함하지만 실패해도 서버가 부분성공으로 200 을 준다. */
 export const SAVE_TIMEOUT_MS = 20_000;
 
@@ -100,10 +116,21 @@ export function unwrapScan(json: unknown): ScanResult {
   const rawBlocks = asRawBlocks(pick('raw_blocks'));
   const type = pick('type');
   const confidence = pick('confidence');
+  const classified = pick('classified');
   const imageSize = asRecord(pick('image_size'));
 
   return {
     type: isDocumentType(type) ? type : 'ETC',
+    /* `classified` — "서버가 문서 종류를 판정했는가" (2026-08-05 4차 신설).
+       `server/ocr` 은 명함 전용이라 분류기가 없고 `type:"BUSINESS_CARD"` / `confidence:0.0` 을
+       고정으로 내려준다. 그 사실을 앱이 알 방법이 그동안 없어서, 앱은 "0 = 신뢰도가 바닥" 으로
+       읽고 폼을 잠갔다 — 잰 적 없는 값을 근거로 잠그는 거짓 신호였다.
+       이제 서버가 `"classified": false` 로 명시하고 앱은 그것을 전용 상태로 다룬다.
+
+       **하위호환**: 키가 없으면(= 이 필드 이전에 배포된 서버) `true` 로 읽어 종전 동작을 그대로
+       유지한다. 없다고 `false` 로 떨어뜨리면 실제 분류기를 붙인 배포까지 미판정 취급하게 된다.
+       불리언이 아닌 값(문자열 "false" 등)도 계약 위반이므로 종전 동작 쪽으로 붙인다. */
+    classified: typeof classified === 'boolean' ? classified : true,
     confidence: typeof confidence === 'number' ? confidence : 0,
     parsed: asStringMap(pick('parsed')),
     fields: asStringMap(pick('fields')),
@@ -143,11 +170,21 @@ type UploadArgs<T> = {
   onProgress?: (ratio: number) => void;
   signal?: AbortSignal;
   parse: (json: unknown) => T;
+  /**
+   * 실패를 SCF 코드로 좁힌다.
+   *
+   * ⚠️ **4번째 인자의 의미가 `kind` 에 따라 다르다.** 이름이 `raw` 라 두 번이나 오독됐으므로
+   * 여기 못박는다 (실제 호출은 아래 `xhr.onload` / `fail(...)`):
+   *  · `kind === 'http'`  → 응답 **원문**(`xhr.responseText`)
+   *  · `kind === 'parse'` → `parse()` 가 던진 **예외 메시지**. 이때 원문은 넘기지 않는다
+   *    (파싱 실패의 원인은 서버 문구가 아니라 파서가 무엇에 걸렸는지이기 때문).
+   *  · `timeout`/`network`/`canceled` → 빈 문자열
+   */
   mapFailure: (
     kind: UploadFailureKind,
     status: number | null,
     body: unknown,
-    raw: string,
+    rawOrParseError: string,
   ) => ScanFailure;
 };
 
@@ -266,6 +303,158 @@ const isSpringDefaultError = (body: unknown): boolean => {
   return Object.keys(record).length > 0 && record.success === undefined;
 };
 
+/**
+ * 화면에 내보내도 되는 "사람이 읽을 수 있는 한 줄" 인지 판정한다 (2026-08-05 강화).
+ *
+ * **근거 정정(2026-08-05 3차).** 이 필터를 넣을 때 적어 둔 근거는 "SCF-11 로 pydantic JSON 이
+ * SCR-11 실패 부제에 떴다" 였는데, **그 시나리오는 당시 성립하지 않았다.** SCF-11(커밋 실패)은
+ * 저장 버튼을 누른 SCR-12(`app/scan/review.tsx`)에서만 발생하는데, 그 화면은 실패 배너에
+ * `title`/`body` 만 그리고 `detail` 을 아예 렌더하지 않았다. SCR-11(`analyzing.tsx`)은 `detail`
+ * 을 그리지만 커밋을 하지 않으므로 SCF-11 이 뜨지 않는다. 즉 그 JSON 은 어느 화면에도 뜬 적이 없다.
+ *
+ * 그럼에도 **되돌리지 않는다.** 같은 라운드에서 SCR-12 가 `detail` 한 줄을 그리도록 고쳐졌고
+ * (B6 — 목록에만 있고 도달하지 않는 코드를 없애기 위해), 그 순간부터 위 시나리오가 **실재하는
+ * 위험**이 된다. `/api/commit` 은 Spring 을 우회해 FastAPI 를 직접 치므로 파트명이 어긋나면
+ * `{"detail":[{"type":"missing","loc":["body","file"],...,"url":"https://errors.pydantic.dev/…"}]}`
+ * 가 그대로 오고, `detail` 이 **배열**이라 문자열 검사에서 미끄러져 raw 가 채택된다.
+ * 프록시가 HTML 에러 페이지를 주면 `<html><head><title>502 …` 가 채택된다.
+ *
+ * 거짓 신호를 지우자고 만든 줄이 **내부 구현 원문을 유출하는 줄**이 되면 안 된다. 그래서
+ *  · `<` `{` `[` 로 시작하면(HTML/JSON/배열) 버린다
+ *  · 마크업 문자(`<` `>` `{` `}`)가 섞여 있으면 버린다 — 잘린 태그 조각도 함께 걸러진다
+ *  · URL 이 들어 있으면 버린다 (pydantic 문서 링크·내부 엔드포인트 주소)
+ * 남는 것은 `Service Unavailable`, `OCR upstream failed (503)` 같은 **평문 한 줄**뿐이다.
+ */
+const MARKUP_HEAD_RE = /^[<{[]/;
+const MARKUP_CHAR_RE = /[<>{}]/;
+const URL_RE = /\bhttps?:\/\//i;
+
+function humanLine(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const line = value.replace(/\s+/g, ' ').trim();
+  if (!line) return '';
+  if (MARKUP_HEAD_RE.test(line) || MARKUP_CHAR_RE.test(line) || URL_RE.test(line)) return '';
+  return line;
+}
+
+/**
+ * FastAPI(pydantic) 검증 오류 배열을 한 줄로 접는다.
+ *
+ * 원문은 `type`/`input`/`url` 까지 달고 오는 JSON 배열이라 그대로 보여줄 수 없다.
+ * 진단에 실제로 쓸모 있는 것은 `loc`(어느 파트가) 과 `msg`(무엇이 틀렸나) 둘뿐이다:
+ *   `[{"loc":["body","file"],"msg":"Field required"}]` → `body.file: Field required`
+ * 이 한 줄이면 "앱이 보낸 파트명이 서버 시그니처와 다르다" 를 즉시 알 수 있다.
+ * 3건까지만 이어 붙인다(그 이상은 화면에서 의미가 없다).
+ */
+function summarizeValidationDetail(detail: unknown): string {
+  if (!Array.isArray(detail)) return '';
+  const parts: string[] = [];
+  for (const item of detail.slice(0, 3)) {
+    const record = asRecord(item);
+    const msg = typeof record.msg === 'string' ? record.msg : '';
+    const loc = Array.isArray(record.loc)
+      ? record.loc.filter((v) => typeof v === 'string' || typeof v === 'number').join('.')
+      : '';
+    if (!msg && !loc) continue;
+    parts.push(loc && msg ? `${loc}: ${msg}` : loc || msg);
+  }
+  return parts.join(' / ');
+}
+
+/**
+ * 실패 상세를 **한 줄**로 좁힌다 (2026-08-05 신설 · 같은 날 폴백 강화).
+ *
+ * 그동안 `ScanFailure.detail` 에는 응답 본문 원문이 통째로 들어갔고 화면에는 아무것도 뜨지 않아,
+ * 사용자에게 보이는 것이 `서버 에러 (503)` 뿐이었다 — OCR OOM 장애의 원인 추적이 불가능했던 주된 이유다.
+ * 이제 SCR-11(`analyzing.tsx`) 과 SCR-12(`review.tsx`) 의 실패 블록이 이 값을 작은 글씨 한 줄로
+ * 노출하므로, 스택트레이스가 아니라 **서버가 준 에러 문구 한 줄**만 남긴다.
+ *
+ * 우선순위:
+ *  ① Spring `ApiResponse.error`  ② Spring 기본 에러 `message`  ③ FastAPI 문자열 `detail`
+ *  ④ FastAPI 배열 `detail`(pydantic) 을 `loc: msg` 로 접은 것
+ *  ⑤ 응답 원문 — **평문일 때만.** Cloud Run 이 인스턴스 사망 시 내려주는 text/plain
+ *     `Service Unavailable` 이 여기로 살아남는다. 그 문자열 자체가 "앱이 아니라 인스턴스가
+ *     죽었다" 는 신호이므로 이 경로를 없애면 안 된다.
+ *  ⑥ 원문이 JSON/HTML 이면 **원문 대신** 그 사실만 알린다. 마크업을 화면에 내보내는 대신
+ *     "읽을 수 없는 형식으로 왔다 + 상태코드" 라는, 그 자체로 진단이 되는 문구를 쓴다.
+ *
+ * 길이 컷은 표시 계층(`useScan.describeFailure`)이 한다. 여기서는 개행·중복 공백만 정리한다.
+ */
+function summarizeDetail(body: unknown, raw: string, status: number | null): string {
+  const record = asRecord(body);
+
+  for (const candidate of [record.error, record.message, record.detail]) {
+    const line = humanLine(candidate); // FastAPI `detail` 은 배열/객체일 수 있다 → 아래 ④ 로 넘어간다.
+    if (line) return line;
+  }
+
+  const validation = humanLine(summarizeValidationDetail(record.detail));
+  if (validation) return validation;
+
+  const rawLine = humanLine(raw);
+  if (rawLine) return rawLine;
+
+  if (!raw.trim()) return '';
+  return `서버가 읽을 수 없는 형식으로 응답했습니다 (HTTP ${status ?? 0})`;
+}
+
+/**
+ * Spring 이 `/api/scan` 실패에 실어 보내는 **업스트림 실패 마커**를 해석한다.
+ *
+ * 배경(2026-08-05, 2차 개정). Spring 의 업스트림 실패 매핑이 **네 갈래**로 확정됐다
+ * (`CardController.scan()` 의 매핑표 · `OcrUpstreamException` 의 [실패 등급] 주석이 정본):
+ *
+ * | 업스트림에서 벌어진 일 | Spring 응답 | `error` 본문                        |
+ * |---|---|---|
+ * | OCR 이 5xx 응답        | **502** | `OCR upstream failed (nnn)`          |
+ * | OCR 이 4xx 응답        | **500** | `OCR upstream contract error (nnn)`  |
+ * | 연결 불가(DNS·거부)    | **503** | `OCR upstream unreachable`           |
+ * | read 타임아웃          | **504** | `OCR upstream timeout`               |
+ * | 그 외 Spring 자체 실패 | 500     | `OCR processing failed`              |
+ *
+ * **상태코드만으로는 못 가른다.** 503/504 는 Spring 앞단(Google Frontend)이 Spring 컨테이너
+ * 자체의 사망·지연으로 낼 수도 있는 숫자이고, 업스트림 4xx 는 Spring 자체 500 과 같은 숫자다.
+ * 그래서 판정의 1순위는 **본문 문구**로 두고, 마커가 없으면 상태코드 기반 폴백으로 떨어뜨린다
+ * (그 경우 "Spring 이 낸 것이 아니다" 가 오히려 정확한 정보가 된다 — `scanImage.mapFailure` 참조).
+ *
+ * `ScanFailureCode` 에 전용 코드를 새로 만드는 편이 정석이지만 그 union 은 `types.ts` 소유이고
+ * 이번 라운드의 담당 범위 밖이다. 그래서 **코드는 기존 SCF 를 재사용하고 문구·액션만** 갈라낸다
+ * (`useScan.failureCopy`). 파싱은 이 함수 하나만 하고 화면 계층은 이 결과만 본다.
+ *
+ * 마커 문구가 바뀌어 매칭이 실패하면 상태코드 폴백(SCF-08/09)으로 떨어진다 — 조용히 나빠질 뿐
+ * 깨지지는 않는다. 상세 한 줄에는 원문이 그대로 남으므로 진단은 여전히 가능하다.
+ *
+ * 커밋(`/api/commit`)은 Spring 을 우회해 FastAPI 를 직접 치므로 이 마커가 실릴 수 없다.
+ * 그래서 코드로 게이트하지 않아도 오탐이 나지 않는다.
+ */
+export type SpringUpstreamKind = 'server' | 'contract' | 'unreachable' | 'timeout';
+
+export type SpringUpstreamFailure = {
+  kind: SpringUpstreamKind;
+  /** 마커 괄호 안의 업스트림 상태코드. 응답 자체가 없던 `unreachable`/`timeout` 은 null. */
+  upstreamStatus: number | null;
+};
+
+const UPSTREAM_MARKERS: readonly { re: RegExp; kind: SpringUpstreamKind }[] = [
+  // `contract error` 를 먼저 본다 — 문자열이 겹치지는 않지만 의미가 가장 좁은 것부터 검사한다.
+  { re: /upstream\s+contract\s+error\s*\((\d{3})\)/i, kind: 'contract' },
+  { re: /upstream\s+failed\s*\((\d{3})\)/i, kind: 'server' },
+  { re: /upstream\s+unreachable/i, kind: 'unreachable' },
+  { re: /upstream\s+timeout/i, kind: 'timeout' },
+];
+
+/** 입력은 `ScanFailure.detail`(= `summarizeDetail` 이 접은 서버 문구 한 줄)이다. */
+export function springUpstreamFailure(detail: string | null | undefined): SpringUpstreamFailure | null {
+  if (!detail) return null;
+  for (const { re, kind } of UPSTREAM_MARKERS) {
+    const match = re.exec(detail);
+    if (!match) continue;
+    const captured = match[1] === undefined ? Number.NaN : Number(match[1]);
+    return { kind, upstreamStatus: Number.isFinite(captured) ? captured : null };
+  }
+  return null;
+}
+
 // ───────────────────────────────────────────────────────── API-41 스캔
 
 export type ScanImageOptions = {
@@ -293,15 +482,47 @@ export function scanImage(file: PreparedImage, options: ScanImageOptions = {}): 
     onProgress: options.onProgress,
     signal: options.signal,
     parse: unwrapScan,
-    mapFailure: (kind, status, body, raw) => {
+    mapFailure: (kind, status, body, rawOrParseError) => {
       if (kind === 'timeout') return { code: 'SCF-08', status: null };
       if (kind === 'network') return { code: 'SCF-06', status: null };
-      if (kind === 'parse') return { code: 'SCF-09', status, detail: raw };
+      /* 파싱 실패의 원인은 서버 문구가 아니라 파서 예외 메시지다 → 본문 대신 예외 메시지를 남긴다.
+         (`uploadMultipart` 는 kind==='parse' 일 때만 4번째 인자에 응답 원문 대신 **예외 메시지**를
+          넣는다 — UploadArgs.mapFailure 의 매개변수 주석 참조. 여기서 body 에 null 을 주는 것도
+          "본문이 아니라 예외 메시지를 쓴다" 를 강제하기 위한 것이다.) */
+      if (kind === 'parse') {
+        return { code: 'SCF-09', status, detail: summarizeDetail(null, rawOrParseError, status) };
+      }
+
+      const detail = summarizeDetail(body, rawOrParseError, status);
+
       // SCF-05: 10MB 초과가 서버까지 도달한 경우. ApiResponse 포맷이 아닌 에러가 온다.
       if (status === 413 || (status === 400 && isSpringDefaultError(body))) {
-        return { code: 'SCF-05', status };
+        return { code: 'SCF-05', status, detail };
       }
-      return { code: 'SCF-09', status, detail: raw };
+
+      /* ── 업스트림(OCR) 실패를 Spring 자체 실패와 **네 갈래**로 분리한다 (2026-08-05 2차) ──
+         갈래·응답 문구의 정본은 `springUpstreamFailure()` 주석의 표다. 여기서는 그 판정을
+         SCF 코드에 얹기만 한다. **판정 근거는 상태코드가 아니라 본문 마커**다 — 503/504 는
+         Spring 컨테이너 자체가 죽거나 느릴 때 Google Frontend 도 내는 숫자라, 숫자만 믿으면
+         "OCR 이 안 붙는다" 와 "백엔드가 죽었다" 를 같은 문구로 말하게 된다.
+
+           unreachable → SCF-07 : Spring 이 OCR 주소에 **닿지 못했다**. 배포/설정 오류이므로
+                                  재시도로 풀리지 않는다 → 문구·액션에서 `다시 시도` 를 뺀다.
+           timeout     → SCF-08 : 연결은 됐는데 응답이 상한을 넘겼다 → 재시도가 의미 있다.
+           server      → SCF-09 : 업스트림이 5xx 를 냈다(인스턴스 사망 또는 추론 실패).
+                                  **연결은 성공했다** → "연결할 수 없습니다" 라고 말하면 거짓이다.
+           contract    → SCF-09 : 업스트림 4xx = Spring↔OCR 계약 위반. 같은 요청은 항상 같은
+                                  4xx 로 돌아온다 → 여기서도 `다시 시도` 를 뺀다.
+         문구·액션 분기는 `useScan.failureCopy` 가 같은 판정 함수를 다시 불러 수행한다.
+
+         마커가 없으면(= Spring 이 낸 응답이 아니거나 문구가 바뀌었으면) 상태코드 폴백으로
+         떨어진다: 504 는 그래도 "오래 걸렸다" 가 맞으므로 SCF-08, 나머지 5xx 는 SCF-09
+         `서버 에러 (nnn)`. 이 경우 숫자를 그대로 보여 주는 편이 억지 해석보다 정확하다. */
+      const upstream = springUpstreamFailure(detail);
+      if (upstream?.kind === 'unreachable') return { code: 'SCF-07', status, detail };
+      if (upstream?.kind === 'timeout' || status === 504) return { code: 'SCF-08', status, detail };
+
+      return { code: 'SCF-09', status, detail };
     },
   });
 }
@@ -351,10 +572,13 @@ export function commitDocument(
       corrected_fields: JSON.stringify(correctedFields),
     },
     parse: unwrapCommit,
-    mapFailure: (kind, status, _body, raw) => {
+    mapFailure: (kind, status, body, raw) => {
       if (kind === 'timeout') return { code: 'SCF-08', status: null };
       if (kind === 'network') return { code: 'SCF-07', status: null };
-      return { code: 'SCF-11', status, detail: raw };
+      // 커밋은 Spring 을 우회하므로 502/504 는 오지 않는다. 대신 OCR 이 낸 500 + JSON `detail`,
+      // 파트명이 어긋났을 때의 **422 + pydantic 배열 detail**, 인스턴스 사망 시의 text/plain 503 이
+      // 그대로 온다 → `summarizeDetail` 이 셋 다 평문 한 줄로 접는다(배열은 `loc: msg` 로).
+      return { code: 'SCF-11', status, detail: summarizeDetail(body, raw, status) };
     },
   });
 }
@@ -616,6 +840,13 @@ export async function saveDocument(args: SaveDocumentArgs): Promise<ScanApiResul
  * 참고: Camera and Scan §13 SCF-13 은 "401 또는 400" 이라고 적혀 있으나, 실제 4개 컨트롤러
  * (Card/Poster/Receipt/Ticket) 의 `save()` 는 인증 누락에 **전부 401** 을 반환한다.
  * 400 은 세션 만료가 아니므로 SCF-12 로 둔다.
+ *
+ * **`detail` 을 설정하지 않는 것은 의도다** (2026-08-05 3차에 확인). 저장은 XHR 업로더가 아니라
+ * `request()`(`src/services/http.ts`)를 타는데, 그 계층의 `AppError` 는 서버 문구를 아예 버리고
+ * 상태코드로 만든 한국어(`messageForStatus`)만 들고 온다 — "에러 메시지 한글이 인코딩 깨져 오는
+ * 경우가 있어" 라는 그 파일의 명시적 결정이다. 그래서 여기서 채울 서버 원문이 존재하지 않는다.
+ * 그 사실에 맞춰 `useScan.DETAIL_VISIBLE_CODES` 에서 SCF-12 를 뺐다(항상 undefined 였다).
+ * 서버 원문을 저장 실패에도 노출하고 싶어지면 먼저 `AppError` 에 원문 필드를 추가해야 한다.
  */
 function mapSaveFailure(kind: string, status: number | null): ScanFailure {
   if (kind === 'unauthorized') return { code: 'SCF-13', status };

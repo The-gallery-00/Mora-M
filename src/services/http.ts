@@ -27,14 +27,30 @@ export type AppError = {
 export type ApiResult<T> = { ok: true; data: T; message?: string } | { ok: false; error: AppError };
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-/** 이미지 업로드는 OCR 추론 시간까지 기다려야 한다. */
 /**
- * 이미지 업로드는 OCR 추론 시간까지 기다려야 한다.
+ * ⚠️ **현재 도달 불가능한 값이다. 스캔 업로드 타임아웃의 정본이 아니다.**
  *
- * 120초인 이유 — 서버는 Cloud Run 에 배포되고 gunicorn 이 `--timeout 300` 으로 뜬다(`ocr/Dockerfile`).
- * 컨테이너 이미지에 PaddleOCR + NER 가중치 844MB 가 들어 있어 **콜드스타트에 수십 초**가 걸린다.
- * 60초로 두면 인스턴스가 잠들어 있던 뒤의 첫 스캔이 매번 타임아웃으로 보인다 — [[Risks]] RSK-43.
- * LAN 개발에서는 콜드스타트가 없어 이 문제가 절대 재현되지 않는다.
+ * 유일한 독자는 아래 `request()` 의 `timeoutMs = formData ? UPLOAD_TIMEOUT_MS : DEFAULT_TIMEOUT_MS`
+ * 인데, `src/`·`app/` 전체에서 `request()` 에 `formData` 를 넘기는 호출부가 **0건**이다
+ * (2026-08-05 확인: `formData` 문자열의 히트가 이 파일 안 8곳뿐).
+ * 이미지를 보내는 두 경로는 진행률 콜백과 취소를 위해 XHR 을 직접 구성하며 이 모듈을 거치지 않는다
+ * → `src/features/scan/api.ts` 의 `uploadMultipart` / `scanImage` / `commitImage`.
+ *
+ * **실제로 적용되는 스캔 타임아웃은 `src/features/scan/api.ts` 의 `SCAN_TIMEOUT_MS`(120초)** 이며,
+ * 그 근거도 그 파일 주석에 있다. 여기서 값을 고쳐도 스캔은 1ms 도 달라지지 않는다.
+ *
+ * 2026-08-05 정정 — 이 자리의 종전 주석은 두 번 틀렸다.
+ *  ① 원래는 "gunicorn 이 `--timeout 300` 으로 뜬다", "NER 가중치 844MB" 라고 적혀 있었다.
+ *     둘 다 이 레포에 없는 것이다(`grep -rni gunicorn server/ocr/` → 0건, 분류·필드추출은
+ *     `server/ocr/src/classifier/rule_based.py` 의 순수 정규식). → [[Risks]] RSK-41.
+ *  ② 그 거짓을 지우면서 **이 죽은 상수를 스캔 타임아웃의 정본인 것처럼** 다시 써 놓았고,
+ *     그 서술이 [[ADR-002 Backend Connectivity]] §0-1 과 [[Risks]] RSK-43 으로 전파됐다.
+ *     문서 두 곳은 `SCAN_TIMEOUT_MS` 인용으로 정정했다.
+ *
+ * 상수와 `formData` 옵션은 **일부러 남긴다.** 지우려면 옵션 타입과 목 경로(`mockRequest`)까지
+ * 함께 걷어내야 하는데, 그건 이 브랜치(서버 거짓 신호 제거)의 범위가 아니다.
+ * 다만 앞으로 `request()` 에 `formData` 를 쓰는 호출부가 생긴다면 **그때** 이 값의 근거를
+ * 실측으로 다시 세워라 — 지금 값 120초는 `SCAN_TIMEOUT_MS` 를 베껴 온 숫자일 뿐이다.
  */
 export const UPLOAD_TIMEOUT_MS = 120_000;
 
@@ -154,6 +170,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     method = 'GET',
     json,
     formData,
+    // `formData` 를 넘기는 호출부가 현재 0건이라 이 삼항의 왼쪽 가지는 실행되지 않는다.
+    // 스캔 업로드는 `features/scan/api.ts` 의 XHR 경로(`SCAN_TIMEOUT_MS`)로 나간다 — 위 주석 참조.
     timeoutMs = formData ? UPLOAD_TIMEOUT_MS : DEFAULT_TIMEOUT_MS,
     anonymous = false,
     signal,

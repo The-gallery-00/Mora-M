@@ -252,6 +252,15 @@ export default function SettingsScreen() {
   };
 
   const tapVersion = () => {
+    // production 에서는 이스터에그 자체를 없는 셈 친다 (2026-08-05).
+    // `(dev)` 그룹은 스토어 빌드에서 `app/(dev)/_layout.tsx` 가 막는데, 그 막음은 화면에
+    // 들어온 **뒤** 물러나는 방식이라 진입 자체가 헛걸음이다. 예전에는 5회 탭이 그대로
+    // `router.push('/(dev)/diagnostics')` 를 불러서, 스토어 사용자가 버전 라벨을 다섯 번 누르면
+    // 진단 화면 대신 홈으로 튕겨 나갔다 — "설정을 눌렀는데 홈으로 나가진다" 는 버그로 보인다.
+    // 카운트도 세지 않는다. 세어 봤자 도달할 곳이 없고, 햅틱만 울리면 그것도 거짓 신호다.
+    // (개발/preview 빌드에는 아래 `개발` 섹션의 [서버 연결 진단] 행이 정식 진입점으로 있다.)
+    if (!isDevBuild) return;
+
     const next = versionTaps + 1;
     if (next >= DIAGNOSTICS_TAP_COUNT) {
       setVersionTaps(0);

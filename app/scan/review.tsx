@@ -128,8 +128,32 @@ export default function ScanReviewScreen() {
   const softWarning = useMemo(() => softWarningFor(docType, watched), [docType, watched]);
   const formValid = useMemo(() => validateFields(fieldDefs, watched).ok, [fieldDefs, watched]);
 
-  /** CLS-03 저신뢰: 종류를 확정하기 전까지 폼·저장을 잠근다. */
+  /**
+   * CLS-03 게이트: 종류가 확정되기 전까지 폼·저장을 잠근다.
+   *
+   * ── 주석 정정 (2026-08-05 4차) ────────────────────────────────────────────
+   * 여기 있던 이전 주석은 두 가지를 사실처럼 적었는데 **둘 다 틀렸다**:
+   *  ① "지금은 모든 스캔에서 true 다 … 그래도 잠금을 유지한다" — 유지의 대가로 적어 둔
+   *     "맞는 종류를 다시 눌러도 된다(`handleTypeChange` 가 통과시킨다)" 가 **실행되지 않는다.**
+   *     `handleTypeChange` 는 통과시키지만 거기까지 **도달하지 못한다**:
+   *     `src/components/ui/SegmentedControl.tsx:99` 가 `option.value === value` 인 탭을
+   *     `onChange` 발화 전에 삼킨다. 이미 선택된 `명함` 칩을 아무리 눌러도 아무 일도 없었다.
+   *     → 정상 스캔의 저장 경로가 통째로 막혀 있었다(탈출은 틀린 종류를 눌렀다 되돌아오기뿐).
+   *  ② "잠금이 학습 데이터 오염을 막는 유일한 장치다" — 잠금은 잘못된 도구다. 잠금의 근거인
+   *     `confidence 0` 은 **측정값이 아니라 측정의 부재**이고, 미판정을 저신뢰처럼 다루면
+   *     사용자에게 "사진을 더 잘 찍으면 자동으로 될 것" 이라는 거짓 기대를 준다(영영 안 된다).
+   *
+   * 이제 스토어가 미판정을 `unclassified` 로 분리한다(`scanStore.classificationTier`):
+   * **확인 바는 뜨고 폼·저장은 열린다.** 종류 오배정 위험은 잠금이 아니라 "종류를 바꿀 수 있다"
+   * 를 눈에 보이게 말하는 확인 바 + 항상 노출되는 종류 칩이 담당한다.
+   *
+   * `locked`(= `pick`)는 **실제 분류기가 낸 저신뢰 전용**으로 남는다. 현재 서버 구성에서는
+   * 도달하지 않지만(같은 함수 주석 참조), 도달했을 때 막다른 길이 되지 않도록 아래 확인 바에
+   * `이 종류가 맞아요` 버튼을 둔다 — 칩 재탭이 삼켜지는 위 ①을 우회하는 유일한 경로다.
+   */
   const locked = tier === 'pick';
+  /** 서버가 분류를 하지 않았다 — 잠그지 않고 확인 바만 띄운다. */
+  const unclassified = tier === 'unclassified';
   /** CLS-04 ETC: 저장 경로가 없다. */
   const blocked = tier === 'blocked' || !isSavableDocumentType(docType);
   const canSaveNow = !locked && !blocked && !saving && formValid;
@@ -166,6 +190,10 @@ export default function ScanReviewScreen() {
 
   const handleTypeChange = useCallback(
     (next: DocumentType) => {
+      /* 같은 값 재선택은 보통 무의미하지만 `pick`(저신뢰 잠금)에서는 "이 종류가 맞다" 는
+         확정 행위라 통과시킨다. 단 **칩에서는 이 경로가 열리지 않는다** — SegmentedControl 이
+         이미 선택된 칩의 탭을 onChange 전에 삼킨다(위 `locked` 주석 ①). 그래서 이 분기의
+         유일한 호출자는 확인 바의 `이 종류가 맞아요` 버튼이다. */
       if (next === docType && tier !== 'pick') return;
       // ① 현재 입력값을 스토어로 올리고 ② 스토어가 COMMON_FIELD_MAP 승계를 수행한 뒤
       // ③ 그 결과를 폼으로 되돌린다.
@@ -315,6 +343,13 @@ export default function ScanReviewScreen() {
           <Banner title="인식된 정보가 없습니다." body="직접 입력하거나 다시 촬영해 주세요." />
         ) : null}
 
+        {/* 실패 배너. 세 번째 줄(`detail`)은 **서버가 준 사유 한 줄**이다.
+            이 줄이 없던 동안 SCF-11(커밋 실패)은 화면에 `이미지 저장 실패 (500)` 만 남겼고,
+            `useScan.DETAIL_VISIBLE_CODES` 에 SCF-11 이 들어 있어도 그리는 곳이 없어 **죽은
+            설정**이었다. 커밋은 Spring 을 우회해 FastAPI 를 직접 치므로, 파트명 불일치(422)와
+            인스턴스 사망(503)을 가르는 단서가 이 한 줄뿐이다 → 여기서 그린다.
+            원문 유출 방지(HTML/JSON/URL 버리기)와 길이 컷은 이미 `api.ts summarizeDetail` +
+            `useScan.visibleDetail` 이 끝냈다. 화면은 작은 글씨로 얹기만 한다. */}
         {failure && failure.code !== 'SCF-10' && failureMessage ? (
           <View
             className="mt-3 border border-danger-border bg-danger-container px-4 py-3"
@@ -325,6 +360,15 @@ export default function ScanReviewScreen() {
             {failureMessage.body ? (
               <Text className="mt-1 text-body-sm text-danger">{failureMessage.body}</Text>
             ) : null}
+            {failureMessage.detail ? (
+              <Text
+                className="mt-1.5 text-caption text-danger"
+                numberOfLines={3}
+                accessibilityLabel={`서버 응답: ${failureMessage.detail}`}
+              >
+                {failureMessage.detail}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -334,18 +378,48 @@ export default function ScanReviewScreen() {
           <Text className="text-caption text-text-disabled">{badge}</Text>
         </View>
 
-        {/* CLS-02 확인 바 / CLS-03 저신뢰 게이트 */}
-        {tier === 'confirm' || locked ? (
+        {/* CLS-02 확인 바 / CLS-03 종류 확정 게이트 — 세 갈래다.
+            ── 문구 정정 (2026-08-05 4차) ────────────────────────────────────────
+            3차 문구("표시된 종류가 맞아도 한 번 눌러 확인해 주세요")는 **불가능한 동작을
+            지시했다.** 그 칩은 이미 선택돼 있어 눌러도 `onChange` 가 발화하지 않는다
+            (`SegmentedControl.tsx:99`). 화면이 시킨 대로 해도 아무 일이 없으니 사용자는
+            자기가 잘못 눌렀다고 생각하며 계속 누르게 된다 — 라벨이 약속한 동작이 일어나지 않는,
+            이 라운드가 지우려는 바로 그 종류의 거짓 신호다.
+
+            갈래별로 **사실만** 적는다:
+             · `unclassified` — 서버가 판정하지 않았다. 종류는 기본값 제시이고, 폼·저장은 열려 있다.
+               "고르라" 고 요구하지 않는다(요구할 근거가 없다). "다르면 바꾸라" 고 알려 줄 뿐이다.
+             · `pick` — 실제 분류기가 낸 저신뢰. 여기서만 폼이 잠기고, 잠금을 푸는 버튼을 함께 준다.
+             · `confirm` — 0.55~0.80. 종전 그대로. */}
+        {unclassified || tier === 'confirm' || locked ? (
           <View
             className="mt-2 border border-warn-border bg-warn-container px-4 py-3"
             style={{ borderRadius: radius.card }}
           >
-            <Text className="text-body-sm font-w700 text-warn">이 문서가 맞나요?</Text>
+            <Text className="text-body-sm font-w700 text-warn">
+              {locked ? '문서 종류를 확정해 주세요' : unclassified ? '문서 종류를 확인해 주세요' : '이 문서가 맞나요?'}
+            </Text>
             <Text className="mt-1 text-body-sm text-warn">
               {locked
-                ? '분류 신뢰도가 낮습니다. 문서 종류를 골라야 편집할 수 있어요.'
-                : '분류가 확실하지 않습니다. 다르면 아래에서 종류를 바꿔 주세요.'}
+                ? '분류 신뢰도가 기준에 못 미칩니다. 종류를 확정해야 편집·저장이 열려요.'
+                : unclassified
+                  ? `서버는 문서 종류를 판정하지 않습니다. 아래 종류(${TYPE_LABELS[docType]})는 판정 결과가 아니라 기본값이에요. 다른 종류라면 아래에서 바꿔 주세요. 맞다면 그대로 저장하면 됩니다.`
+                  : '분류가 확실하지 않습니다. 다르면 아래에서 종류를 바꿔 주세요.'}
             </Text>
+            {/* `pick` 전용 탈출구. 아래 칩은 **이미 선택된 종류를 다시 누를 수 없으므로**
+                (SegmentedControl 이 삼킨다) 잠금을 푸는 경로가 이 버튼뿐이다.
+                다른 종류로 바꾸는 것은 칩이 그대로 처리한다. */}
+            {locked ? (
+              <Button
+                label={`이 종류가 맞아요 (${TYPE_LABELS[docType]})`}
+                onPress={() => handleTypeChange(docType)}
+                variant="secondary"
+                size="md"
+                haptic="selection"
+                fullWidth
+                style={{ marginTop: spacing.sm }}
+              />
+            ) : null}
           </View>
         ) : null}
 

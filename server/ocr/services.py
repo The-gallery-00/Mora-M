@@ -34,7 +34,7 @@
 # ───────────────────────────────────────────
 # src.pipeline.extract_pipeline.BusinessCardPipeline
 #   이미지 → OCR → 필드 분류 → 구조화된 결과를 생성하는 파이프라인.
-#   lang="korean"으로 한국어 명함 인식에 최적화됨.
+#   인식 언어는 인자가 아니라 엔진이 못박은 korean_PP-OCRv5_mobile_rec 이 결정한다.
 # ───────────────────────────────────────────
 # src.classifier.rule_based.classify_all_blocks(text_blocks)
 #   텍스트 블록 리스트를 정규식/휴리스틱으로 분류하여
@@ -79,10 +79,13 @@ class ParsingSkill:
             if field not in best or block["confidence"] > best[field]["confidence"]:
                 best[field] = block
 
-        # 내부 필드명 → 프론트엔드에서 사용하는 외부 필드명으로 매핑
+        # 내부 필드명 → 프론트엔드에서 사용하는 외부 필드명으로 매핑.
+        # 정본은 앱의 src/features/scan/fieldSchema.ts BUSINESS_CARD_FIELDS 키다.
+        # 예전에는 company/position/phone 을 내보냈는데 앱 키(company_name/job_title/
+        # mobile_phone)와 달라서 회사·직책·전화가 폼에 채워지지 않았다.
         field_map = {
-            "person_name": "name", "company_name": "company",
-            "job_title": "position", "phone_number": "phone",
+            "person_name": "name", "company_name": "company_name",
+            "job_title": "job_title", "phone_number": "mobile_phone",
             "fax_number": "fax", "email": "email",
         }
         parsed = {field_map.get(k, k): v["text"] for k, v in best.items()}
@@ -91,6 +94,12 @@ class ParsingSkill:
 
 
 # ── 싱글톤 인스턴스 ──
-# 모듈 로드 시 한 번만 생성되어 앱 전체에서 재사용됨
-pipeline = BusinessCardPipeline(lang="korean")
+# 모듈 로드 시 한 번만 생성되어 앱 전체에서 재사용됨.
+#
+# lang="korean" 을 넘기지 않는다. paddleocr 3.4.0 은 모델명을 명시하면 lang 을 무시하고
+# UserWarning 만 내므로, 넘겨봤자 아무 효과가 없는데 "언어가 여기서 정해진다"는
+# 잘못된 인상만 준다 (다음 사람이 "en" 으로 바꿔도 한국어 모델이 돈다).
+# 인식 언어의 정본은 src/ocr/paddle_ocr_engine.py 의
+# text_recognition_model_name="korean_PP-OCRv5_mobile_rec" 한 곳이다.
+pipeline = BusinessCardPipeline()
 parsing_skill = ParsingSkill()

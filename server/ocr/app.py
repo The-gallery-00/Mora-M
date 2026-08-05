@@ -13,12 +13,22 @@
 # 3) FastAPI 앱 인스턴스를 생성한다
 # 4) CORS 미들웨어를 추가하여 프론트엔드에서의 교차 출처 요청을 허용한다
 # 5) OCR 라우터를 /api 경로에 등록한다
-# 6) /uploads 경로에 정적 파일 서빙을 마운트한다
-# 7) 루트 경로(/)에 서비스 정보를 반환하는 엔드포인트를 정의한다
-# 8) 직접 실행 시 uvicorn으로 서버를 기동한다
+# 6) 헬스 라우터를 prefix 없이 등록한다 (최종 경로가 /health 여야 한다)
+# 7) /uploads/{image_name} 을 GET/DELETE 라우트로 정의한다 (storage 가 GCS 또는 로컬을 고른다)
+# 8) 루트 경로(/)에 서비스 정보를 반환하는 엔드포인트를 정의한다
+# 9) 직접 실행 시 uvicorn으로 서버를 기동한다
 #
 # [메서드 목록]
-# - root(): GET / 엔드포인트. 서비스명, 버전, docs URL을 JSON으로 반환
+# - root(): GET / 엔드포인트. 서비스명, 버전, docs URL을 JSON으로 반환.
+#     **살아있음의 증거가 아니다** — 추론이 죽어도 200을 낸다. 하위호환용으로만 남긴다.
+# - uploaded_image(name) / delete_uploaded_image(name):
+#     GET/DELETE /uploads/{image_name}. 운영에서는 GCS, 로컬 개발에서는 디스크를 읽는다.
+# - (routers/ocr.py) health(): GET /health 엔드포인트.
+#     **192x64** 합성 이미지에 글자(SELFTEST_TEXT = "MORA OCR")를 그려 실제 파이프라인에
+#     태워보고 200(ok)/503(degraded)을 낸다. 성공 조건은 "예외 없음" 이 아니라
+#     **blocks >= 1** 이다 — 글자 없는 흰 이미지는 det 가 0개를 찾고 rec 가 실행되지
+#     않은 채 성공 처리되어 거짓 초록불이 된다(그것이 예전 64x64 흰 이미지의 결함이었다).
+#     앱 진단 화면은 이 엔드포인트를 봐야 하며, / 를 보면 거짓 초록불이 뜬다.
 #
 # [사용된 라이브러리]
 # ───────────────────────────────────────────
@@ -50,10 +60,14 @@
 # app.include_router(router, prefix, tags)
 #   라우터 모듈에 정의된 엔드포인트들을 앱에 등록한다.
 #   prefix="/api"이면 라우터의 /scan이 /api/scan이 된다.
+#   prefix를 생략하면 라우터에 적힌 경로가 그대로 최종 경로가 된다 (/health).
 # ───────────────────────────────────────────
-# app.mount(path, StaticFiles(directory), name)
-#   지정 디렉토리의 파일을 특정 URL 경로에서 정적으로 서빙한다.
-#   업로드된 이미지를 /uploads/파일명 으로 접근 가능하게 함.
+# storage.get_upload_response(image_name) / storage.delete_image(image_name)
+#   업로드 원본을 읽어 응답으로 돌려주거나 삭제한다.
+#   운영(GCS 설정됨)에서는 버킷을, 로컬 개발에서는 디스크를 대상으로 한다.
+#   **StaticFiles 마운트를 쓰지 않는다** — 원본이 인스턴스 디스크가 아니라 GCS 에 있고,
+#   Cloud Run 의 쓰기 가능 파일시스템은 tmpfs(=메모리)라 정적 서빙 대상이 될 수 없다.
+#   (예전 주석은 app.mount(StaticFiles) 를 쓴다고 적었지만 그런 코드는 이 파일에 없다.)
 # ───────────────────────────────────────────
 # uvicorn.run(app, host, port)
 #   ASGI 서버인 uvicorn으로 FastAPI 앱을 실행한다.
@@ -62,8 +76,11 @@
 #
 # ═══════════════════════════════════════════════════════════════
 
-"""
-OCR Microservice — PaddleOCR + rule-based classification.
+"""OCR Microservice — PaddleOCR + rule-based **field** parsing.
+
+주의: "classification" 은 명함 *필드*(이름/회사/전화…) 분류를 말한다.
+**문서 종류 분류기는 이 서비스에 없다** — 파이프라인은 명함 전용이고, 그래서
+/api/scan 은 `"classified": false` 를 함께 내려보낸다 (routers/ocr.py 의 scan() 주석 참조).
 """
 import os
 import sys
@@ -92,8 +109,10 @@ from routers import ocr  # noqa: E402
 from storage import get_upload_response, delete_image  # noqa: E402
 
 # ── App Setup ──
-# FastAPI 인스턴스 생성 (Swagger UI에서 title/version 표시됨)
-app = FastAPI(title="MORA OCR Service", version="3.0")
+# FastAPI 인스턴스 생성 (Swagger UI에서 title/version 표시됨).
+# title/version 은 routers/ocr.py 의 상수를 그대로 쓴다 — /health 응답이 같은 값을
+# 실어 보내야 하는데 문자열을 양쪽에 따로 적어두면 언젠가 갈라진다.
+app = FastAPI(title=ocr.SERVICE_NAME, version=ocr.SERVICE_VERSION)
 
 # 모든 출처에서의 교차 출처 요청을 허용하는 CORS 미들웨어
 app.add_middleware(
@@ -107,6 +126,10 @@ app.add_middleware(
 # ── Router ──
 # OCR 관련 엔드포인트를 /api 경로 아래에 등록
 app.include_router(ocr.router, prefix="/api", tags=["OCR"])
+
+# 헬스 엔드포인트는 prefix 없이 등록해 최종 경로를 /health 로 맞춘다.
+# 앱 진단 화면·Cloud Run 헬스체크가 보는 경로가 이것이다 (예전에는 404였다).
+app.include_router(ocr.health_router, tags=["Health"])
 
 @app.get("/uploads/{image_name}")
 def uploaded_image(image_name: str):
@@ -123,8 +146,12 @@ def delete_uploaded_image(image_name: str):
 
 @app.get("/")
 def root():
-    """서비스 상태 확인용 루트 엔드포인트."""
-    return {"service": "MORA OCR Service", "version": "3.0", "docs": "/docs"}
+    """서비스 식별용 루트 엔드포인트 (하위호환).
+
+    이 응답은 프로세스가 떠 있다는 사실만 말해준다. 추론이 죽어 있어도 200이므로
+    **상태 판정에 쓰면 안 된다** — 실제 살아있음은 GET /health 로 확인한다.
+    """
+    return {"service": ocr.SERVICE_NAME, "version": ocr.SERVICE_VERSION, "docs": "/docs"}
 
 
 if __name__ == "__main__":
