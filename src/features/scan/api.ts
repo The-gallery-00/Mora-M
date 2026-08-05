@@ -586,7 +586,7 @@ export function commitDocument(
 // ───────────────────────────────────────────────────────── 저장 바디 조립
 
 const SAVE_PATHS: Record<SavableDocumentType, string> = {
-  BUSINESS_CARD: '/api/cards/save',
+  BUSINESS_CARD: '/api/save',
   POSTER: '/api/posters/save',
   RECEIPT: '/api/receipts/save',
   TICKET: '/api/tickets/save',
