@@ -123,16 +123,11 @@ function StatTileBase({
         </Text>
       </View>
     ) : (
-      /* 4줄 스택 — 각 줄의 높이가 **고정**이어야 `STAT_TILE_MIN_HEIGHT` 계산이 성립한다.
-         그래서 세 줄 모두 `numberOfLines={1}` 이다: 폭이 148dp 로 고정이라 긴 라벨·긴 값은
-         언제든 2줄로 넘어갈 수 있고, 그 한 줄(20~30dp)이 그대로 박스를 넘쳐 잘림으로 나타났다.
-         `adjustsFontSizeToFit` 은 쓰지 않는다 — 타일마다 글자 크기가 달라져 3개가 따로 놀고,
-         숫자를 작게 만들어 읽는 것이 이 타일의 목적과 정반대다. 잘린 전문은 `accessibilityLabel`
-         이 그대로 읽어 준다(위 `a11yLabel`). 넘치면 줄이는 게 아니라 말줄임으로 끝낸다. */
-      <View className="gap-1">
+      /* dev 디자인의 치수와 색을 유지하고 타일 콘텐츠만 중앙 정렬한다. */
+      <View className="items-center gap-1">
         <StatIcon icon={icon} tone={tone} />
         <Text
-          className="text-body-sm text-text-secondary"
+          className="text-center text-body-sm text-text-secondary"
           numberOfLines={1}
           ellipsizeMode="tail"
           maxFontSizeMultiplier={1.2}
@@ -140,9 +135,7 @@ function StatTileBase({
           {label}
         </Text>
         <Text
-          className="text-stat font-w800 text-brand"
-          numberOfLines={1}
-          ellipsizeMode="tail"
+          className="text-center text-stat font-w800 text-brand"
           maxFontSizeMultiplier={1.2}
         >
           {shown}
@@ -150,7 +143,7 @@ function StatTileBase({
         </Text>
         {hint ? (
           <Text
-            className="text-micro text-text-muted"
+            className="text-center text-micro text-text-muted"
             numberOfLines={1}
             ellipsizeMode="tail"
             maxFontSizeMultiplier={1.2}
@@ -161,8 +154,10 @@ function StatTileBase({
       </View>
     );
 
-  const shell = `justify-between rounded-card border border-border-subtle bg-bg-elevated ${
-    variant === 'row' ? 'flex-row items-center px-4 py-3' : 'p-3'
+  const shell = `rounded-card border border-border-subtle bg-bg-elevated ${
+    variant === 'row'
+      ? 'flex-row items-center justify-between px-4 py-3'
+      : 'items-center justify-center p-3'
   }`;
 
   const sizing: StyleProp<ViewStyle> =

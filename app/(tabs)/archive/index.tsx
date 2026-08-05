@@ -219,29 +219,30 @@ export default function ArchiveHubScreen() {
         errorMessage="보관함을 불러오지 못했습니다."
         bottomPadding={tabScrollBottomPadding(insets.bottom)}
         onDataChange={handleData}
-        {...(selected === 'ALL'
-          ? {}
-          : {
-              // 유형 필터 상태에서만 `전체 >` 링크를 띄운다 (SCR-14 구성 요소 표).
-              header: (
-                <Pressable
-                  accessibilityRole="link"
-                  accessibilityLabel={`${active.label} 전체 보기`}
-                  onPress={() => {
-                    haptics.selection();
-                    goTypeScreen(active);
-                  }}
-                  // py-2 = 34dp 라 44dp 하한에 못 미친다 (A11Y §11-1)
-                  className="min-h-11 flex-row items-center justify-between px-4 py-2"
-                  style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
-                >
-                  <Text className="text-body-sm font-w700 text-text-secondary">
-                    {active.label}
-                  </Text>
-                  <Text className="text-body-sm font-w600 text-action">전체 ›</Text>
-                </Pressable>
-              ),
-            })}
+        header={
+          selected === 'ALL' ? (
+            // 유형 탭의 링크 행과 같은 높이·라벨 구조로 첫 항목의 시작 위치를 통일한다.
+            <View className="h-11 justify-center px-4">
+              <Text className="text-body-sm font-w700 text-text-secondary">전체</Text>
+            </View>
+          ) : (
+            // 유형 필터 상태에서만 `전체 >` 링크를 띄운다 (SCR-14 구성 요소 표).
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`${active.label} 전체 보기`}
+              onPress={() => {
+                haptics.selection();
+                goTypeScreen(active);
+              }}
+              // py-2 = 34dp 라 44dp 하한에 못 미친다 (A11Y §11-1)
+              className="min-h-11 flex-row items-center justify-between px-4 py-2"
+              style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
+            >
+              <Text className="text-body-sm font-w700 text-text-secondary">{active.label}</Text>
+              <Text className="text-body-sm font-w600 text-action">전체 ›</Text>
+            </Pressable>
+          )
+        }
         testID="archive-hub-list"
       />
 

@@ -14,6 +14,7 @@ import Svg, { Path } from 'react-native-svg';
 import { resolveImageUrl } from '@/config/env';
 import { TYPE_LABELS, type DocumentType } from '@/features/scan/types';
 import { useTheme } from '@/theme/ThemeProvider';
+import { fontScale } from '@/theme/scale';
 
 import {
   DocPlaceholderIcon,
@@ -140,7 +141,11 @@ function DocumentGridCardBase({
       </View>
 
       <View className="gap-1 px-3 py-3">
-        <View className="flex-row items-start gap-1.5">
+        {/* 제목이 한 줄이어도 두 줄 분량을 확보해 같은 행의 카드 높이를 맞춘다. */}
+        <View
+          className="flex-row items-start gap-1.5"
+          style={{ minHeight: fontScale.base.line * 2 }}
+        >
           <Text
             className="shrink text-base font-w700 text-text-primary"
             numberOfLines={2}
