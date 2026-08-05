@@ -1,6 +1,8 @@
 # ── OCR Engine ──
-paddlepaddle
-paddleocr
+# 버전을 고정한다. 미고정이면 재빌드마다 기본 검출 모델과 메모리 특성이 조용히 바뀐다
+# (paddle_ocr_engine.py 의 모델명/clamp 설정은 이 조합에서 검증했다).
+paddlepaddle==3.2.2
+paddleocr==3.4.0
 opencv-python
 Pillow
 numpy

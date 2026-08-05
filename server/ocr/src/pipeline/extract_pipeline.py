@@ -22,8 +22,9 @@
 # 5) CLI 직접 실행 시 커맨드라인 인자로 이미지 경로를 받아 처리
 #
 # [메서드 목록]
-# - __init__(lang):
-#     PaddleOCREngine을 초기화. lang으로 인식 언어 지정.
+# - __init__():
+#     PaddleOCREngine을 초기화. 인식 언어는 인자가 아니라 엔진이 못박은
+#     text_recognition_model_name 이 결정한다 (paddleocr 3.4.0 은 lang 을 무시한다).
 # - run(image_path):
 #     이미지 → OCR → 분류 → 구조화된 결과 딕셔너리 반환.
 #     텍스트가 없으면 error 키를 포함한 빈 결과 반환.
@@ -83,9 +84,14 @@ UNKNOWN_LABEL = "unknown"
 
 
 class BusinessCardPipeline:
-    def __init__(self, lang="korean"):
+    def __init__(self):
         # OCR 엔진 초기화 (한 번만 생성하여 재사용)
-        self.ocr_engine = PaddleOCREngine(lang=lang)
+        #
+        # lang 인자는 받지 않는다. paddleocr 3.4.0 은 모델명을 명시하면 lang 을
+        # 무시하므로(UserWarning), 여기서 lang 을 받아 넘기면 "바꿔도 아무 일도
+        # 일어나지 않는" 죽은 파라미터를 한 겹 더 만드는 것에 불과했다.
+        # 인식 언어의 정본은 PaddleOCREngine 의 text_recognition_model_name 이다.
+        self.ocr_engine = PaddleOCREngine()
 
     def run(self, image_path: str) -> dict:
         """
