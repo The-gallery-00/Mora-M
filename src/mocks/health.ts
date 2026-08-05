@@ -1,4 +1,4 @@
-import type { ProbeResult } from '@/services/health';
+import type { ProbeResult, UrlSource } from '@/services/health';
 
 /**
  * 헬스 프로브 목 (SCR-31 진단 화면 · FR-121/FR-122).
@@ -24,18 +24,36 @@ const MOCK_LATENCY_MS = 3;
 /**
  * 목 프로브 1건. 실제 소켓을 열지 않는다.
  *
- * `url` 은 호출부(`services/health.ts`)가 계산한 **실제 대상 주소**를 그대로 받는다 —
- * 목 모드라도 사용자가 어떤 주소를 보고 있는지는 화면에 남아야 진단에 쓸모가 있다.
+ * `url` 과 `source` 는 호출부(`services/health.ts`)가 계산한 **실제 대상 주소와 그 출처**를
+ * 그대로 받는다 — 목 모드라도 사용자가 어떤 주소를 보고 있는지는 화면에 남아야 진단에 쓸모가 있다.
+ *
+ * `serverLatencyMs` 는 항상 null 이다. 그 값은 실서버 `/health` 가 잰 추론 시간이라
+ * 목이 흉내 내면 "추론이 돌았다"는 거짓 신호가 된다.
+ * 짝이 되는 `serverLatencyCached` 도 항상 false 다 — 애초에 표시할 지연시간이 없으므로
+ * "캐시됨" 배지가 뜰 여지를 남기지 않는다.
+ *
+ * `auth` 도 항상 null 이다. 목 프로브는 소켓을 열지 않으므로 Authorization 헤더가 나갈 일이
+ * 없고, `withheld-no-token`(= 로그인 전) 같은 값을 흉내 내면 "토큰이 없어서 안 보냈다" 는
+ * 있지도 않은 사정을 화면에 만들어 낸다. null 이면 진단 카드가 인증 줄 자체를 그리지 않고,
+ * 대신 위 `MOCK_PROBE_DETAIL` 이 "서버에 연결하지 않았다" 를 말한다.
  */
-export function mockProbe(target: ProbeResult['target'], url: string): Promise<ProbeResult> {
+export function mockProbe(
+  target: ProbeResult['target'],
+  url: string,
+  source: UrlSource,
+): Promise<ProbeResult> {
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve({
         target,
         url,
+        source,
         status: 'ok',
         httpStatus: 200,
         latencyMs: MOCK_LATENCY_MS,
+        serverLatencyMs: null,
+        serverLatencyCached: false,
+        auth: null,
         detail: MOCK_PROBE_DETAIL,
       });
     }, MOCK_PROBE_DELAY_MS);

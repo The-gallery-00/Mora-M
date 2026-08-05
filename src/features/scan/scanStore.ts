@@ -263,8 +263,17 @@ export const useScanStore = create<ScanStore>((set, get) => ({
       uploadPhase: null,
       uploadProgress: 1,
       docType: scan.type,
-      // CLS-05 — 티켓 confidence 1.0 은 키워드 하드코딩이라 실측이 아니다.
-      typeSource: scan.type === 'TICKET' && scan.confidence === 1 ? 'keyword' : 'auto',
+      /* 종류의 **출처**를 그대로 기록한다. 셋을 섞지 않는 것이 이 줄의 전부다.
+         · classified === false → `default`: 서버가 판정을 하지 않았다. `type` 은 명함 전용
+           파이프라인의 기본값이고 confidence 0 은 측정값 없음이다. "저신뢰" 와 다르다
+           (→ tier `unclassified`: 확인 바는 띄우되 폼·저장은 잠그지 않는다).
+         · CLS-05 — 티켓 confidence 1.0 은 키워드 하드코딩이라 실측이 아니다.
+         · 그 외 → `auto`: 서버가 실제로 판정했고 confidence 가 실측값이다. */
+      typeSource: !scan.classified
+        ? 'default'
+        : scan.type === 'TICKET' && scan.confidence === 1
+          ? 'keyword'
+          : 'auto',
       confidence: scan.confidence,
       values: initialFieldValues(defs, scan.parsed),
       receiptItems: [],
@@ -417,17 +426,53 @@ export const useScanStore = create<ScanStore>((set, get) => ({
 /**
  * CLS-01 ~ CLS-06 등급 판정. 화면은 이 값으로 배지/확인 바/선택 시트를 결정한다.
  * 임계값은 Camera and Scan §9-2 의 확정값(0.80 / 0.55)을 쓴다.
+ *
+ * ── `unclassified` 를 나눈 이유 (2026-08-05 4차) ─────────────────────────────
+ * "서버가 분류를 **안 했다**" 와 "서버가 분류했는데 **확신이 낮다**" 는 다른 사건인데,
+ * 종전에는 둘 다 confidence 0 → `pick` 으로 접혔다. `pick` 은 폼·저장을 잠그는 등급이라
+ * (`canSave` 아래 · `review.tsx locked`) **모든 스캔이 잠긴 채 도착**했고, 그 잠금을 푸는 유일한
+ * 경로가 `setDocType` 인데 그 트리거인 `SegmentedControl` 은 이미 선택된 칩의 재탭을 삼킨다
+ * (`src/components/ui/SegmentedControl.tsx:99` — `option.value === value` 면 onChange 미발화).
+ * 즉 명함을 정상 스캔하면 저장까지 갈 방법이 사실상 없었다.
+ *
+ * 미판정은 "위험 신호" 가 아니라 **정보 없음**이다. 명함 전용 파이프라인이 명함 필드를 뽑아낸
+ * 이상 BUSINESS_CARD 를 기본값으로 제시하고 사용자가 바꾸게 하는 것이 정직하며 막다른 길도 없다.
+ * → 확인 바는 띄우되(종류를 바꿀 수 있다는 사실을 알려야 하므로) 폼·저장은 열어 둔다.
+ *
+ * 임계 로직(0.80 / 0.55)은 **손대지 않았다.** 실제 분류기가 붙어 진짜 confidence 가 오면
+ * `confident`/`confirm`/`pick` 이 그대로 다시 살아난다.
  */
 export function classificationTier(state: ScanState): ClassificationTier {
-  if (!state.scan) return 'pick';
+  /* 스캔 결과가 아예 없는 상태. 단 **수기 입력(`enterManualEntry`)은 예외**다.
+     ── 2026-08-05 4차에 발견한 같은 계열의 막다른 길 ──────────────────────────
+     SCR-11 의 `직접 입력`(SCF-03/06/07/08/09 → `analyzing.tsx handleManualEntry`)은 스캔이
+     한 번도 성공하지 않은 상태로 SCR-12 에 들어간다 → `state.scan` 이 null 이라 이 줄이
+     `pick` 을 돌려주고, `review.tsx` 가 폼을 통째로 잠갔다. **`직접 입력` 이라는 라벨이 약속한
+     동작(빈 폼에 직접 입력)이 실제로는 일어나지 않았다.** 게다가 그 잠금의 유일한 해제 경로인
+     종류 칩은 이미 선택된 값을 재탭해도 반응하지 않는다(SegmentedControl:99).
+     `enterManualEntry` 는 `typeSource: 'manual'` 을 세우므로, 그 사실을 먼저 존중한다.
+     (SCF-10 의 `그래도 직접 입력` 은 스캔이 성공한 뒤라 `scan` 이 있어 종전에도 통과했다.) */
+  if (!state.scan) return state.typeSource === 'manual' ? 'manual' : 'pick';
   if (state.scan.rawBlocks.length === 0) return 'empty';
   if (state.docType === 'ETC') return 'blocked';
   if (state.typeSource === 'manual') return 'manual';
+  // 서버가 판정하지 않았다 → 임계 비교 자체가 성립하지 않는다. 임계 분기보다 먼저 걸러낸다.
+  if (state.typeSource === 'default') return 'unclassified';
   // CLS-05 — 티켓은 이미지 분류 모델에 클래스가 없고 키워드 2개 매칭 시 1.0 을 하드코딩한다.
   // 실제 신뢰도가 아니므로 수치를 표시하지 않는다.
   if (state.docType === 'TICKET' && state.confidence === 1) return 'keyword';
   if (state.confidence >= CONFIDENCE_CONFIRM_THRESHOLD) return 'confident';
   if (state.confidence >= CONFIDENCE_PICK_THRESHOLD) return 'confirm';
+  /* `pick` 은 **실서버 구성에서는 도달하지 않는다** (2026-08-05 4차 확인).
+     `/api/scan` 이 `classified:false` 를 내려주는 한 위의 `unclassified` 에서 끝나고,
+     맨 위 `!scan` 갈래도 SCR-12 에 도달하는 두 경로가 모두 빠져나간다:
+     스캔 성공(→ `scan` 세팅) · 수기 입력(→ `typeSource:'manual'`).
+     남는 도달 경로는 **목 모드**뿐이다 — `src/mocks/scan.ts` 가 3회에 1회 confidence 0.48 을
+     내려주므로(`LOW_CONFIDENCE_EVERY`) 목 빌드에서는 이 등급과 그 탈출구를 실제로 밟아 볼 수 있다.
+     그래도 **로직은 남긴다.** 실제 분류기가 붙어 0 < confidence < 0.55 가 오는 순간 이 등급이
+     다시 살아나고, 그때는 "쟀는데 애매하다" 가 사실이므로 잠그는 것이 옳다.
+     (그 경우의 탈출구는 `review.tsx` 의 `이 종류가 맞아요` 확인 버튼이 담당한다 — 같은 칩
+      재탭이 SegmentedControl 에서 삼켜지는 문제 때문에 칩만으로는 잠금을 풀 수 없다.) */
   return 'pick';
 }
 
@@ -442,11 +487,30 @@ export function hasNoExtractedValues(state: ScanState): boolean {
   return Object.values(state.scan.parsed).every((v) => v.trim() === '');
 }
 
-/** 신뢰도 배지 문구. `keyword`/`manual` 은 수치를 노출하지 않는다. */
+/**
+ * 신뢰도 배지 문구.
+ *
+ * `keyword`(티켓 하드코딩 1.0) / `manual`(사용자 지정) 은 **잰 적이 없는 수치**라 숫자를 감추고
+ * 출처를 말한다. 2026-08-05 에 같은 이유로 한 갈래를 더 추가했다.
+ *
+ * ── `신뢰도 0.0%` 를 없앤 이유 ────────────────────────────────────────────────
+ * 서버 파이프라인에는 **문서 분류기가 없다.** 그동안 응답의 `confidence` 자리에는 OCR 인식
+ * 신뢰도가 들어가 있었고, 그래서 영수증을 찍어도 `confident` 티어로 확인 없이 명함으로 확정되며
+ * `신뢰도 97%` 까지 붙었다 — 측정하지 않은 것을 측정한 척한 거짓 신호다.
+ * 그런데 서버가 값을 0 으로 내린 뒤에도 배지는 `신뢰도 0.0%` 를 렌더했다. "0% 확신" 은
+ * **잰 결과가 0** 이라는 뜻으로 읽히므로 이 역시 또 다른 거짓 신호다. 잰 적이 없으면 숫자를
+ * 쓰지 않는다는 위의 관례를 그대로 적용해 수치 대신 상태를 말한다.
+ *
+ * 판정 근거는 이제 tier `unclassified`(= 서버가 `classified:false` 를 명시)다.
+ * 아래 `typeSource === 'auto' && confidence === 0` 줄은 **그 플래그를 보내지 않는 구버전 배포**
+ * 를 위한 하위호환 갈래로 남긴다 — 그 배포에서는 tier 가 `pick` 이지만 배지 문구는 같아야 한다.
+ */
 export function confidenceBadge(state: ScanState): string {
   const tier = classificationTier(state);
   if (tier === 'keyword') return '키워드로 추정됨';
   if (tier === 'manual') return '직접 지정함';
+  if (tier === 'unclassified') return '종류 미확정';
+  if (state.typeSource === 'auto' && state.confidence === 0) return '종류 미확정';
   return `신뢰도 ${(state.confidence * 100).toFixed(1)}%`;
 }
 
@@ -470,6 +534,8 @@ export function currentSoftWarning(state: ScanState): string | null {
  * - ETC 는 저장 경로가 없다 (CLS-04).
  * - A등급 정규화 게이트를 통과해야 한다 (FLD-06).
  * - 저신뢰(`pick`)는 종류를 확정하기 전까지 폼이 비활성이다 (CLS-03).
+ *   **미판정(`unclassified`)은 여기에 걸리지 않는다** — 잠글 근거가 되는 측정값이 없기 때문이다
+ *   (`classificationTier` 주석 참조). 확인 바만 뜨고 저장은 열린다.
  */
 export function canSave(state: ScanState): boolean {
   if (state.step === 'saving') return false;

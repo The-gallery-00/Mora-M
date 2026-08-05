@@ -57,7 +57,24 @@ export type ParsedFields = Record<string, string>;
  */
 export type ScanResult = {
   type: DocumentType;
-  /** 0~1. TICKET 은 키워드 2개 매칭 시 서버가 1.0 을 하드코딩한다 (실측 아님 — CLS-05). */
+  /**
+   * 서버가 문서 **종류를 실제로 판정했는가**.
+   *
+   * `server/ocr` 파이프라인에는 문서 종류 분류기가 없다 — 명함 전용이다
+   * (`server/ocr/src/classifier/rule_based.py` 는 명함 *필드* 분류용 정규식이지 종류 분류기가 아니다).
+   * 그래서 `/api/scan` 응답의 `type` 은 판정 결과가 아니라 **파이프라인이 명함 전용이라는 사실에서
+   * 온 기본값**이고 `confidence` 0 은 "낮다" 가 아니라 **"측정값이 없다"** 는 뜻이다.
+   * 서버는 이 사실을 `"classified": false` 로 명시한다.
+   *
+   * **하위호환**: 이 키가 없는 구버전 배포 응답은 `true` 로 읽는다(= 종전 동작 = confidence 임계
+   * 로직이 그대로 판단한다). 값이 없다고 "판정하지 않았다" 로 단정하면, 실제 분류기가 붙은
+   * 서버까지 미판정으로 취급하게 된다.
+   */
+  classified: boolean;
+  /**
+   * 0~1. TICKET 은 키워드 2개 매칭 시 서버가 1.0 을 하드코딩한다 (실측 아님 — CLS-05).
+   * `classified === false` 면 이 값은 **측정된 적이 없다** — 숫자로 표시해선 안 된다.
+   */
   confidence: number;
   /** 값이 실제로 추출된 필드만 들어온다. 빈 값은 키 자체가 없다. */
   parsed: ParsedFields;
@@ -92,22 +109,34 @@ export type ScanStep =
  */
 export type UploadPhase = 'sending' | 'reading' | 'organizing';
 
-/** 사용자가 문서 종류를 어떻게 얻었는지 — 배지 문구가 갈린다 (CLS-01/05, §9-3). */
-export type TypeSource = 'auto' | 'keyword' | 'manual';
+/**
+ * 사용자가 문서 종류를 어떻게 얻었는지 — 배지 문구가 갈린다 (CLS-01/05, §9-3).
+ *
+ * - `auto`    : 서버가 판정한 결과 (`confidence` 가 실측값)
+ * - `keyword` : TICKET 키워드 매칭 하드코딩 1.0 (CLS-05 — 실측 아님)
+ * - `manual`  : 사용자가 직접 지정
+ * - `default` : **서버가 판정을 하지 않았다**(`ScanResult.classified === false`). `type` 은
+ *               명함 전용 파이프라인의 기본값일 뿐이므로 `auto` 와 섞으면 안 된다 —
+ *               `auto` 는 "쟀다", `default` 는 "잰 적이 없다" 다.
+ */
+export type TypeSource = 'auto' | 'keyword' | 'manual' | 'default';
 
 /**
  * 분류 결과 처리 등급 (CLS-01~06).
- * - `empty`    : rawBlocks 0건 → SCF-10 (분류 결과와 무관)
- * - `blocked`  : ETC → 저장 불가, 4종 선택 강제
- * - `keyword`  : TICKET + confidence 1.0 → 수치 숨기고 `키워드로 추정됨`
- * - `manual`   : 사용자가 직접 지정
- * - `confident`: ≥ 0.80
- * - `confirm`  : 0.55 ~ 0.80 → 확인 바
- * - `pick`     : < 0.55 → 폼 진입 전 종류 선택 시트
+ * - `empty`        : rawBlocks 0건 → SCF-10 (분류 결과와 무관)
+ * - `blocked`      : ETC → 저장 불가, 4종 선택 강제
+ * - `unclassified` : **서버가 분류를 수행하지 않았다.** 종류는 기본값 제시일 뿐이므로 확인 바를
+ *                    띄우되 폼·저장은 **잠그지 않는다**(잠글 근거가 되는 측정값이 애초에 없다).
+ * - `keyword`      : TICKET + confidence 1.0 → 수치 숨기고 `키워드로 추정됨`
+ * - `manual`       : 사용자가 직접 지정
+ * - `confident`    : ≥ 0.80
+ * - `confirm`      : 0.55 ~ 0.80 → 확인 바
+ * - `pick`         : < 0.55 → 폼 진입 전 종류 확정 강제 (실제 분류기가 낸 저신뢰 전용)
  */
 export type ClassificationTier =
   | 'empty'
   | 'blocked'
+  | 'unclassified'
   | 'keyword'
   | 'manual'
   | 'confident'
