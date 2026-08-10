@@ -21,8 +21,8 @@
  * → Kotlin 은 `File(context.filesDir, "widget-data.json")` 으로 읽으면 된다. 경로 상수 불필요.
  *
  * 변형별 실제 경로 (applicationId 를 따라간다 — 위젯도 같은 앱 프로세스라 자동으로 맞는다):
- *   development : /data/user/0/com.mora.app.dev/files/widget-data.json
- *   preview·prod: /data/user/0/com.mora.app/files/widget-data.json
+ *   development : /data/user/0/com.thegallery.mora.dev/files/widget-data.json
+ *   preview·prod: /data/user/0/com.thegallery.mora/files/widget-data.json
  *
  * ⚠ `AndroidManifest.xml` 의 `android:allowBackup="true"` 때문에 이 파일은 구글 백업 대상이다.
  *   일정 제목·장소가 백업에 실려 나간다. 민감하다고 판단되면 `dataExtractionRules` 에

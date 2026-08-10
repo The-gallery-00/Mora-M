@@ -49,18 +49,18 @@
  *
  * `expo prebuild` 는 `android/app/build.gradle` 의 `namespace` 를 app.config.js 의
  * `android.package` 로 덮어쓴다. 그래서 변형마다 namespace 가 갈린다:
- *   development  → namespace `com.mora.app.dev`
- *   preview/prod → namespace `com.mora.app`
+ *   development  → namespace `com.thegallery.mora.dev`
+ *   preview/prod → namespace `com.thegallery.mora`
  * 매니페스트의 상대 클래스명은 **namespace 기준**으로 풀리므로 `.widget.UpcomingWidgetProvider` 는
- * dev 에서 `com.mora.app.dev.widget.UpcomingWidgetProvider` 가 된다 — 그런 클래스는 없다
- * (Kotlin 의 package 는 변형과 무관하게 `com.mora.app.widget` 로 고정이다).
+ * dev 에서 `com.thegallery.mora.dev.widget.UpcomingWidgetProvider` 가 된다 — 그런 클래스는 없다
+ * (Kotlin 의 package 는 변형과 무관하게 `com.thegallery.mora.widget` 로 고정이다).
  *
  * 이게 고약한 이유: **컴파일과 리소스 링크는 그대로 통과한다.** 매니페스트의 클래스명은
  * 빌드 시점에 검증되지 않아서, preview/prod 는 우연히 맞고 dev 만 조용히 깨진다. 증상은
  * 위젯을 홈에 놓는 순간 런처에 "위젯을 로드할 수 없음"(ClassNotFoundException) 이 뜨는 것이다.
  * → 아래 [WIDGET_PACKAGE] 로 풀네임을 만들어 namespace 에서 완전히 분리한다.
  *
- * 월 이동 브로드캐스트 액션은 `com.mora.app.widget.ACTION_MONTH_SHIFT` 로 **고정**이다.
+ * 월 이동 브로드캐스트 액션은 `com.thegallery.mora.widget.ACTION_MONTH_SHIFT` 로 **고정**이다.
  * 위젯 Kotlin 쪽 상수와 문자 단위로 같아야 한다. receiver 가 `exported="false"` 라
  * 우리 앱만 보낼 수 있고, dev/preview 는 서로 다른 앱이라 액션 문자열이 같아도 충돌하지 않는다.
  */
@@ -79,9 +79,9 @@ const SOURCE_REL = path.join('widgets', 'android', 'src', 'main');
  * 위 "네임스페이스" 주석 참조. 소스 경로와 매니페스트 클래스명을 둘 다 여기서 유도해
  * 한쪽만 바뀌는 사고를 막는다.
  */
-const WIDGET_PACKAGE = 'com.mora.app.widget';
+const WIDGET_PACKAGE = 'com.thegallery.mora.widget';
 
-/** `com.mora.app.widget` → `['com','mora','app','widget']` (소스 트리 경로 세그먼트). */
+/** `com.thegallery.mora.widget` → `['com','thegallery','mora','widget']` (소스 트리 경로 세그먼트). */
 const WIDGET_PACKAGE_SEGMENTS = WIDGET_PACKAGE.split('.');
 
 /**
@@ -111,9 +111,9 @@ const APPWIDGET_UPDATE = 'android.appwidget.action.APPWIDGET_UPDATE';
  *   (2) 나중에 누군가 암시적 전송으로 바꿔도 조용히 깨지지 않는다.
  *   receiver 가 `exported="false"` 라 등재해도 외부 앱은 이 액션으로 우리를 깨울 수 없다.
  */
-const ACTION_MONTH_SHIFT = 'com.mora.app.widget.ACTION_MONTH_SHIFT';
-const ACTION_REFRESH_CALENDAR = 'com.mora.app.widget.ACTION_REFRESH_CALENDAR';
-const ACTION_REFRESH_UPCOMING = 'com.mora.app.widget.ACTION_REFRESH_UPCOMING';
+const ACTION_MONTH_SHIFT = 'com.thegallery.mora.widget.ACTION_MONTH_SHIFT';
+const ACTION_REFRESH_CALENDAR = 'com.thegallery.mora.widget.ACTION_REFRESH_CALENDAR';
+const ACTION_REFRESH_UPCOMING = 'com.thegallery.mora.widget.ACTION_REFRESH_UPCOMING';
 
 /**
  * 추가할 receiver 3개.
@@ -269,7 +269,7 @@ function withWidgetReceivers(config) {
  *
  * 두 파일을 함께 본다:
  *  - `res/xml/<info>.xml`        → 없으면 **빌드 실패**(리소스 미해결)
- *  - `java/com/mora/app/widget/<Class>.kt` → 없으면 런처가 위젯을 붙일 때 ClassNotFound
+ *  - `java/com/thegallery/mora/widget/<Class>.kt` → 없으면 런처가 위젯을 붙일 때 ClassNotFound
  * 경로는 receiver 정의에서 기계적으로 유도하므로 규약(파일 상단)을 지키면 자동으로 맞는다.
  */
 function availableReceivers(projectRoot) {

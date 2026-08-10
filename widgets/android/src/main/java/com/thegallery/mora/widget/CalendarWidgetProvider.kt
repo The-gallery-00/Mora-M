@@ -1,4 +1,4 @@
-package com.mora.app.widget
+package com.thegallery.mora.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -268,10 +268,10 @@ class CalendarWidgetProvider : AppWidgetProvider() {
      * 월 이동. **명시적 브로드캐스트 전용**(매니페스트 intent-filter 에 넣지 않는다).
      * extras: [EXTRA_DELTA] = -1 / +1, `AppWidgetManager.EXTRA_APPWIDGET_ID`(= "appWidgetId").
      */
-    const val ACTION_MONTH_SHIFT: String = "com.mora.app.widget.ACTION_MONTH_SHIFT"
+    const val ACTION_MONTH_SHIFT: String = "com.thegallery.mora.widget.ACTION_MONTH_SHIFT"
 
     /** 파일 다시 읽기. [EXTRA_RESET_MONTH] 가 true 면 표시 월을 이번 달로 되돌린다. */
-    const val ACTION_REFRESH: String = "com.mora.app.widget.ACTION_REFRESH_CALENDAR"
+    const val ACTION_REFRESH: String = "com.thegallery.mora.widget.ACTION_REFRESH_CALENDAR"
 
     const val EXTRA_DELTA: String = "delta"
     const val EXTRA_RESET_MONTH: String = "resetMonth"

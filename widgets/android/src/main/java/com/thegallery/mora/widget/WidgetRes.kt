@@ -1,4 +1,4 @@
-package com.mora.app.widget
+package com.thegallery.mora.widget
 
 import android.content.Context
 import android.widget.RemoteViews
@@ -6,15 +6,15 @@ import android.widget.RemoteViews
 /**
  * 위젯 리소스 id 를 **런타임에 이름으로** 찾는다.
  *
- * ── 왜 `import com.mora.app.R` 을 하지 않는가 ─────────────────────────────
+ * ── 왜 `import com.thegallery.mora.R` 을 하지 않는가 ─────────────────────────────
  * `expo prebuild` 가 `android/app/build.gradle` 의 `namespace` 를 app.config.js 의
  * `android.package` 값으로 덮어쓴다(@expo/config-plugins 57.0.6 —
  * `build/android/Package.js` 의 `setPackageInBuildGradle`: `(applicationId|namespace) '...'` 를
  * 한 정규식으로 같이 치환한다). 그래서 변형별 R 클래스 위치가 갈린다.
- *   - preview/production : namespace `com.mora.app`      → `com.mora.app.R`
- *   - development        : namespace `com.mora.app.dev`  → `com.mora.app.dev.R`
+ *   - preview/production : namespace `com.thegallery.mora`      → `com.thegallery.mora.R`
+ *   - development        : namespace `com.thegallery.mora.dev`  → `com.thegallery.mora.dev.R`
  * 소스에 어느 한쪽을 하드코딩하면 **다른 변형의 빌드가 컴파일 단계에서 깨진다**.
- * 이 파일의 클래스는 `com.mora.app.widget` 에 있고 Kotlin 은 부모 패키지를 암시적으로
+ * 이 파일의 클래스는 `com.thegallery.mora.widget` 에 있고 Kotlin 은 부모 패키지를 암시적으로
  * 보지 않으므로 import 없이 `R` 을 쓸 수도 없다.
  * → `Resources.getIdentifier` 로 우회한다. 조회 결과는 캐시하므로 갱신 1회당 비용은 사실상 0 이다.
  *

@@ -1,4 +1,4 @@
-package com.mora.app.widget
+package com.thegallery.mora.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -244,7 +244,7 @@ class UpcomingWidgetProvider : AppWidgetProvider() {
      * `adb shell am broadcast` (shell uid) 로는 전달되지 않는다 — 손으로 시험할 때는
      * ↻ 를 누르거나, 위젯을 지우고 다시 놓아 APPWIDGET_UPDATE 를 유발한다.
      */
-    const val ACTION_REFRESH: String = "com.mora.app.widget.ACTION_REFRESH_UPCOMING"
+    const val ACTION_REFRESH: String = "com.thegallery.mora.widget.ACTION_REFRESH_UPCOMING"
 
     private const val SLOT_HEADER: Int = 90
     private const val SLOT_REFRESH: Int = 91
