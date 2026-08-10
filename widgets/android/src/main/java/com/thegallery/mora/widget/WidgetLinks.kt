@@ -8,7 +8,7 @@
 // requestCode 와 data 를 위젯 id·용도별로 다르게 주는 이유: `Intent.filterEquals` 는 **extras 를 보지 않는다**.
 // action 이 같고 delta 만 다른 인텐트는 requestCode·data 까지 같으면 하나로 접혀
 // 이전/다음 버튼이 같은 방향으로 동작한다.
-package com.mora.app.widget
+package com.thegallery.mora.widget
 
 import android.app.PendingIntent
 import android.content.ComponentName
@@ -27,7 +27,7 @@ internal fun deepLinkPendingIntent(
 ): PendingIntent? {
   return try {
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
-      // dev 변형에서는 이 값이 com.mora.app.dev 라 자기 자신으로 정확히 향한다.
+      // dev 변형에서는 이 값이 com.thegallery.mora.dev 라 자기 자신으로 정확히 향한다.
       setPackage(context.packageName)
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }

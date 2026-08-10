@@ -1,4 +1,4 @@
-package com.mora.app.widget
+package com.thegallery.mora.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager

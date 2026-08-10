@@ -1,4 +1,4 @@
-package com.mora.app.widget
+package com.thegallery.mora.widget
 
 import java.time.DayOfWeek
 import java.time.LocalDate

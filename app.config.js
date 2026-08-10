@@ -55,7 +55,7 @@ module.exports = ({ config }) => ({
   },
 
   android: {
-    package: IS_DEV ? 'com.mora.app.dev' : 'com.mora.app',
+    package: IS_DEV ? 'com.thegallery.mora.dev' : 'com.thegallery.mora',
     // 전경·모노크롬은 108dp 캔버스의 **중앙 66dp 원**(원형/스퀘어클/사각 마스크 3종의 교집합)
     // 안에 로고를 넣어 생성돼 있다. 마스크 종류와 무관하게 잘리지 않는다 — FR-110 완료 조건.
     adaptiveIcon: {
