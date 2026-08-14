@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,6 +21,7 @@ import java.util.UUID;
 @Service
 public class DashboardService {
     private static final int DEADLINE_LIMIT = 20;
+    private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
     private final BusinessCardRepository cards;
     private final PosterRepository posters;
     private final TicketRepository tickets;
@@ -35,7 +37,7 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardResponse get(UUID userId, LocalDate date, int requestedDays) {
-        LocalDate base = date == null ? LocalDate.now() : date;
+        LocalDate base = date == null ? LocalDate.now(SEOUL_ZONE) : date;
         int days = Math.max(0, requestedDays);
         LocalDate end = base.plusDays(days);
         List<DashboardResponse.DeadlineItem> deadlines = new ArrayList<>();

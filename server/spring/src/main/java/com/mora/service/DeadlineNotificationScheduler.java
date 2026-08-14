@@ -7,11 +7,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 @Service
 public class DeadlineNotificationScheduler {
+    private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
     private final UserRepository users;
     private final TicketRepository tickets;
     private final PosterRepository posters;
@@ -28,8 +30,17 @@ public class DeadlineNotificationScheduler {
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
     @Transactional
     public void createDailyNotifications() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
         users.findAll().forEach(user -> createForUser(user.getId(), today));
+    }
+
+    /**
+     * Cloud Run이 예약 시각에 내려가 있었거나 사용자가 예약 실행 뒤 문서를 추가한 경우를
+     * 보정한다. 생성 쿼리는 source/target 조합으로 중복을 막으므로 안전하게 반복 호출할 수 있다.
+     */
+    @Transactional
+    public void createForUserNow(UUID userId) {
+        createForUser(userId, LocalDate.now(SEOUL_ZONE));
     }
 
     void createForUser(UUID userId, LocalDate today) {

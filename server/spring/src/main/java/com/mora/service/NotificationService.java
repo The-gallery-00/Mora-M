@@ -16,18 +16,26 @@ import java.util.UUID;
 public class NotificationService {
     private static final int MAX_PAGE_SIZE = 50;
     private final NotificationRepository repository;
-    public NotificationService(NotificationRepository repository) { this.repository = repository; }
+    private final DeadlineNotificationScheduler notificationScheduler;
 
-    @Transactional(readOnly = true)
+    public NotificationService(NotificationRepository repository,
+                               DeadlineNotificationScheduler notificationScheduler) {
+        this.repository = repository;
+        this.notificationScheduler = notificationScheduler;
+    }
+
+    @Transactional
     public Page<NotificationResponse> list(UUID userId, int page, int size) {
+        notificationScheduler.createForUserNow(userId);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         return repository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(safePage, safeSize))
                 .map(NotificationResponse::from);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public Map<String, Long> unreadCount(UUID userId) {
+        notificationScheduler.createForUserNow(userId);
         return Map.of("count", repository.countByUserIdAndReadAtIsNull(userId));
     }
 
