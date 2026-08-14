@@ -26,6 +26,9 @@ public interface PosterRepository extends JpaRepository<Poster, Integer> {
 
     Optional<Poster> findByIdAndUserId(Integer id, UUID userId);
 
+    // API-62 전체 삭제에서 씀
+    long deleteByUserId(UUID userId);
+
     @Query(value = """
             SELECT p.*,
                 GREATEST(

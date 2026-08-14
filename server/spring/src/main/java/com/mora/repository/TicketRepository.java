@@ -26,6 +26,9 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
 
     Optional<Ticket> findByIdAndUserId(Integer id, UUID userId);
 
+    // API-62 전체 삭제에서 씀
+    long deleteByUserId(UUID userId);
+
     @Query(value = """
             SELECT t.*,
                 GREATEST(
