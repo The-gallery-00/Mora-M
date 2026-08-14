@@ -61,9 +61,9 @@ class DeadlineNotificationFlowTest {
                 userId, today, today.plusDays(3))).thenReturn(List.of());
         when(posters.findByUserIdAndEventStartDateBetweenOrderByEventStartDateAsc(
                 userId, today, today.plusDays(3))).thenReturn(List.of());
-        when(tickets.findByUserIdAndDepartureDateOrderByDepartureTimeAsc(userId, today))
+        when(tickets.findOngoingEndingBetween(userId, today, today.plusDays(3)))
                 .thenReturn(List.of());
-        when(posters.findByUserIdAndEventStartDateOrderByCreatedAtAsc(userId, today))
+        when(posters.findOngoingEndingBetween(userId, today, today.plusDays(3)))
                 .thenReturn(List.of());
 
         scheduler.createForUserNow(userId);
@@ -72,7 +72,7 @@ class DeadlineNotificationFlowTest {
                 userId, today, today.plusDays(3));
         verify(posters).findByUserIdAndEventStartDateBetweenOrderByEventStartDateAsc(
                 userId, today, today.plusDays(3));
-        verify(tickets).findByUserIdAndDepartureDateOrderByDepartureTimeAsc(userId, today);
-        verify(posters).findByUserIdAndEventStartDateOrderByCreatedAtAsc(userId, today);
+        verify(tickets).findOngoingEndingBetween(userId, today, today.plusDays(3));
+        verify(posters).findOngoingEndingBetween(userId, today, today.plusDays(3));
     }
 }

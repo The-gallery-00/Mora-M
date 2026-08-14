@@ -181,23 +181,23 @@ export const NOTIFICATION_SETTINGS_COPY = {
   screenTitle: '알림 설정',
   notice: '알림은 앱 안에서 확인할 수 있습니다. 기기 푸시 알림은 준비 중입니다.',
   typeSection: '알림 종류',
-  deadlineTitle: '마감 임박 알림',
-  deadlineCaption: '포스터 행사 마감이 다가오면 알려드립니다.',
-  scheduleTitle: '일정 임박 알림',
-  scheduleCaption: '티켓 출발일이 다가오면 알려드립니다.',
+  deadlineTitle: '마감예정 일정 알림',
+  deadlineCaption: '티켓 출발일과 포스터 시작일이 다가오면 알려드립니다.',
+  scheduleTitle: '진행 중 종료 알림',
+  scheduleCaption: '진행 중인 티켓과 포스터의 종료가 다가오면 알려드립니다.',
   timingSection: '알림 시점',
   daysTitle: '며칠 전부터 알림 받기',
-  footer: '알림은 매일 오전 9시에 확인합니다.',
+  footer: '앱에서 확인하며, 매일 오전 9시에도 알림을 생성합니다.',
   loadFailed: '알림 설정을 불러오지 못했습니다.',
   saveFailed: '알림 설정을 저장하지 못했습니다.',
   retry: '다시 시도',
   /** SCR-25 진입 행 설명. */
-  entryCaption: '마감·일정 알림 수신 방식을 설정합니다.',
+  entryCaption: '예정 일정·진행 중 종료 알림 수신 방식을 설정합니다.',
 } as const;
 
 /** SCR-29 세그먼트 하단 설명. 선택값에 따라 갱신된다. */
 export function deadlineDaysCaption(days: number): string {
-  return `마감 ${days}일 전부터 알림을 받습니다.`;
+  return `시작일 또는 종료일 ${days}일 전부터 알림을 받습니다.`;
 }
 
 /**

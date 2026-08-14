@@ -326,8 +326,8 @@ export const NOTIFICATION_COPY = {
   deleteFailed: '삭제에 실패했습니다.',
   refreshFailed: '새로고침에 실패했습니다.',
   typeLabel: {
-    DEADLINE: '마감 임박',
-    SCHEDULE: '일정 임박',
+    DEADLINE: '마감예정 일정',
+    SCHEDULE: '진행 중 종료',
     GENERAL: '알림',
   } satisfies Record<NotificationType, string>,
 } as const;

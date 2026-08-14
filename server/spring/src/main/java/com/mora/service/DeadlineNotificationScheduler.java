@@ -50,20 +50,22 @@ public class DeadlineNotificationScheduler {
         if (setting.getDeadlineReminderEnabled()) {
             tickets.findByUserIdAndDepartureDateBetweenOrderByDepartureDateAscDepartureTimeAsc(userId, today, end)
                     .forEach(t -> create(userId, "DEADLINE", "TICKET", String.valueOf(t.getId()),
-                            t.getDepartureDate(), "일정 임박", ticketTitle(t) + " 일정이 " + dDay(today, t.getDepartureDate()),
+                            t.getDepartureDate(), "마감예정 일정", ticketTitle(t) + " 일정이 " + dDay(today, t.getDepartureDate()),
                             "/dashboard/storage/tickets"));
             posters.findByUserIdAndEventStartDateBetweenOrderByEventStartDateAsc(userId, today, end)
                     .forEach(p -> create(userId, "DEADLINE", "POSTER", String.valueOf(p.getId()),
-                            p.getEventStartDate(), "마감 임박", value(p.getTitle()) + " 마감이 " + dDay(today, p.getEventStartDate()),
+                            p.getEventStartDate(), "마감예정 일정", value(p.getTitle()) + " 일정이 " + dDay(today, p.getEventStartDate()),
                             "/dashboard/storage/posters"));
         }
         if (setting.getScheduleReminderEnabled()) {
-            tickets.findByUserIdAndDepartureDateOrderByDepartureTimeAsc(userId, today)
-                    .forEach(t -> create(userId, "SCHEDULE", "TICKET", String.valueOf(t.getId()), today,
-                            "오늘 일정", ticketTitle(t) + " 일정이 오늘입니다.", "/dashboard/storage/tickets"));
-            posters.findByUserIdAndEventStartDateOrderByCreatedAtAsc(userId, today)
-                    .forEach(p -> create(userId, "SCHEDULE", "POSTER", String.valueOf(p.getId()), today,
-                            "오늘 일정", value(p.getTitle()) + " 일정이 오늘입니다.", "/dashboard/storage/posters"));
+            tickets.findOngoingEndingBetween(userId, today, end)
+                    .forEach(t -> create(userId, "SCHEDULE", "TICKET", String.valueOf(t.getId()),
+                            t.getArrivalDate(), "진행 중 종료", ticketTitle(t) + " 일정 종료가 " + dDay(today, t.getArrivalDate()),
+                            "/dashboard/storage/tickets"));
+            posters.findOngoingEndingBetween(userId, today, end)
+                    .forEach(p -> create(userId, "SCHEDULE", "POSTER", String.valueOf(p.getId()),
+                            p.getEventEndDate(), "진행 중 종료", value(p.getTitle()) + " 일정 종료가 " + dDay(today, p.getEventEndDate()),
+                            "/dashboard/storage/posters"));
         }
     }
 
