@@ -200,8 +200,8 @@ export default function ScanCameraScreen() {
   const [guideMode, setGuideMode] = useState<GuideMode>('auto');
   const [offline, setOffline] = useState(false);
   const [guideBox, setGuideBox] = useState({ width: 0, height: 0 });
+  const [helpSheetOpen, setHelpSheetOpen] = useState(false);
 
-  const helpSheetRef = useRef<BottomSheet>(null);
   const shutterFlash = useSharedValue(0);
 
   /* ── 권한 재조회: 설정에서 허용하고 돌아온 경우를 잡는다 (UX 가이드 §10 세부 4) ── */
@@ -487,7 +487,7 @@ export default function ScanCameraScreen() {
             />
             <IconButton
               icon={<HelpIcon color={OVERLAY_FG} />}
-              onPress={() => helpSheetRef.current?.expand()}
+              onPress={() => setHelpSheetOpen(true)}
               variant="overlay"
               size="md"
               accessibilityLabel="촬영 가이드 도움말"
@@ -665,19 +665,26 @@ export default function ScanCameraScreen() {
       </View>
 
       {/* ── 도움말 바텀시트 (CMP-17) — 여기만 테마를 따른다 ─────────────────── */}
-      <BottomSheet
-        ref={helpSheetRef}
-        index={-1}
-        snapPoints={['52%']}
-        enablePanDownToClose
-        backgroundStyle={{ backgroundColor: t.bg.elevated, borderRadius: radius.sheet }}
-        handleIndicatorStyle={{ backgroundColor: t.border.subtle }}
-        backdropComponent={(props) => (
-          <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} />
-        )}
-      >
-        <BottomSheetView style={{ paddingHorizontal: spacing.xl, paddingBottom: insets.bottom + spacing.xl }}>
-          <Text className="text-h3 font-w700 text-text-primary">촬영 가이드</Text>
+      {helpSheetOpen ? (
+        <BottomSheet
+          index={0}
+          snapPoints={['52%']}
+          enablePanDownToClose
+          onClose={() => setHelpSheetOpen(false)}
+          backgroundStyle={{ backgroundColor: t.bg.elevated, borderRadius: radius.sheet }}
+          handleIndicatorStyle={{ backgroundColor: t.border.subtle }}
+          backdropComponent={(props) => (
+            <BottomSheetBackdrop
+              {...props}
+              appearsOnIndex={0}
+              disappearsOnIndex={-1}
+              opacity={0.5}
+              pressBehavior="close"
+            />
+          )}
+        >
+          <BottomSheetView style={{ paddingHorizontal: spacing.xl, paddingBottom: insets.bottom + spacing.xl }}>
+            <Text className="text-h3 font-w700 text-text-primary">촬영 가이드</Text>
 
           <View className="mt-4 gap-2">
             <HelpLine text="선명하고 깨끗한 이미지 사용을 권장합니다." />
@@ -691,8 +698,9 @@ export default function ScanCameraScreen() {
             {/* 원본 웹의 `최대 20MB` 는 서버 한도(10MB)와 불일치한 오표기다 (부록 B #11). */}
             <HelpLine text="최대 10MB" />
           </View>
-        </BottomSheetView>
-      </BottomSheet>
+          </BottomSheetView>
+        </BottomSheet>
+      ) : null}
     </View>
   );
 }
