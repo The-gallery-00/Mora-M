@@ -152,6 +152,15 @@ KOREAN_NAME_PATTERN = re.compile(r"^[가-힣]{2,4}$")
 # 라벨 단독 블록이 드물고 (b) 포스터/안내문에서 실제로 관측되는 어휘가 이 집합에
 # 몰려 있어, 목록만으로도 오탐의 대부분이 사라진다. 근본 해결은 bbox 위치/폰트 크기를
 # 보는 것이고 그것은 이 규칙 계층의 범위 밖이다.
+# 단독 대문자 영문 단어가 이름이 아닌 경우 (로고·약어·라벨).
+# 12번 분기가 단어 1개를 받게 되면서 필요해진 최소 방어선이다.
+_NON_NAME_TOKENS = frozenset({
+    "TEL", "FAX", "MOBILE", "PHONE", "EMAIL", "MAIL", "WEB", "HOMEPAGE", "HTTP", "HTTPS",
+    "ADDRESS", "OFFICE", "COMPANY", "INSTA", "INSTAGRAM", "KAKAO", "FACEBOOK", "TWITTER",
+    "CEO", "CTO", "CFO", "COO", "MANAGER", "DIRECTOR", "TEAM", "LAB", "INC", "LTD", "CORP",
+    "OFF", "ON", "OPEN", "CLOSE", "NEW", "SALE", "EVENT", "VIP", "QR", "NO", "PM", "AM",
+})
+
 NON_NAME_WORDS = frozenset({
     # 안내/라벨
     "안내", "문의", "장소", "위치", "주소", "신청", "방법", "정보", "성명", "이름",
@@ -223,6 +232,36 @@ ZIP_CODE_PATTERN = re.compile(r"^\d{5}$")
 
 # 주최/주관 키워드
 ORGANIZER_KEYWORDS = ["주최", "주관", "후원", "협찬", "organizer", "hosted by"]
+
+# 라벨 없이 **기관명만** 적힌 블록을 주최자로 잡기 위한 접미사.
+#
+# ORGANIZER_KEYWORDS 는 "주최:"/"주관:" 같은 라벨이 붙은 경우만 잡는다. 실제
+# 포스터는 하단에 기관명만 나열하는 쪽이 훨씬 흔하고, 그 블록들이 전부
+# LOCATION_KEYWORDS 의 "센터"에 걸려 장소로 흘러갔다.
+# 실측(대구 동구 청년창업 경진대회):
+#     location = "청년센터 창업지원사업 연계 동구청년센터the꿈 동구청년센터the끔"
+#     organizer_name = (없음)
+# "센터"는 한국 기관명에 압도적으로 흔하다(청년센터/문화센터/진흥센터) —
+# 장소 키워드로 두는 한 주최자는 영원히 안 잡힌다.
+#
+# **접미사는 반드시 블록 끝(또는 끝 근처)에 있어야 한다.** 부분문자열로 검사하면
+# 일반 명사에 걸린다 — 첫 시도에서 "대구지역 거주 대학생"의 '대학', "(훈격) 동구청장상"의
+# '구청' 이 주최자로 잡혔다(LOCATION_KEYWORDS 의 "at "/"SAT" 와 같은 종류의 실수다).
+# 기관명 블록은 기관 접미사로 **끝나는** 것이 정상이고, 뒤에 조사/구두점 정도만 붙는다.
+_ORG_SUFFIX = re.compile(
+    r"(?:대학교|대학원|재단|협회|학회|진흥회|진흥원|연구원|연구소|공사|공단|위원회|중앙회|"
+    r"연합회|문화원|사업단|장학회|봉사단|복지관|청년센터|지원센터|진흥센터|"
+    r"주식회사|교육청|시청|군청|도청|구청|YMCA|YWCA)"
+    r"\s*(?:the\s*\S+)?\s*[.,)\]]?\s*$"
+    r"|^\s*(?:\(주\)|㈜)"          # 선두 회사 표기는 그 자체가 기관 신호다
+)
+
+# 주소 토큰. 기관명이 들어 있어도 이것이 함께 있으면 **장소**다
+# ("○○센터 3층 대강당", "△△회관 2F"). 주최자와 장소를 가르는 유일한 신호다.
+_ADDRESS_HINT = re.compile(
+    r"\d+\s*(?:층|F\b|호|호실|번지)|[가-힣]+(?:로|길)\s*\d|대강당|강당|회의실|세미나실|"
+    r"컨벤션|홀\b|아트홀|체육관|운동장|광장"
+)
 
 # 주최자 값 정제용 패턴 — 선두/인라인 라벨 + 구분자. entity 타입(시/재단/회사/사람)
 # 가정 없이 라벨 앵커로만 메인(주최) 식별. 접미 라벨명사(자/측/처/사)는 라벨로 함께 소비
@@ -323,6 +362,27 @@ ARRIVAL_KEYWORDS = ["도착", "하차", "arrival", "to", "종착"]
 # 명함 분류기
 # ════════════════════════════════════════════
 
+def _has_korean_name_block(all_blocks: list[dict] | None, skip_index: int) -> bool:
+    """다른 블록에 한글 이름 모양(성씨 + 2~4자, 라벨 아님)이 있는지 본다.
+
+    _classified 를 보지 않는 이유: 분류는 2-pass 이고 블록 순서에 따라 아직
+    person_name 이 붙지 않았을 수 있다. 텍스트 모양만 보면 순서와 무관해진다.
+    """
+    if not all_blocks:
+        return False
+    for b in all_blocks:
+        if b.get("block_index") == skip_index:
+            continue
+        t = re.sub(r"\s+", "", (b.get("text") or "").strip())
+        if not (2 <= len(t) <= 4) or not re.fullmatch(r"[가-힣]+", t):
+            continue
+        if t in NON_NAME_WORDS:
+            continue
+        if KOREAN_SURNAME_SINGLE.match(t) or KOREAN_SURNAME_DOUBLE.match(t):
+            return True
+    return False
+
+
 def classify_text_block(text: str, all_blocks: list[dict] = None, block_index: int = 0) -> str:
     """
     단일 텍스트 블록을 명함 스키마 필드로 분류.
@@ -415,12 +475,40 @@ def classify_text_block(text: str, all_blocks: list[dict] = None, block_index: i
         ):
             return "person_name"
 
-    # 12) 영문 이름 추정 — 2~3 단어, 각 단어 첫 글자 대문자.
+    # 12) 영문 이름 추정 — 1~3 단어, 각 단어 첫 글자 대문자.
     #     로마자 한국이름은 하이픈/마침표 포함 가능("Yong-Yeon","J.H.") → 제거 후 알파벳 검사.
+    #
+    #     **단어 1개도 받는다.** 종전 하한이 2였고, 그래서 로마자 이름을 한 덩어리로
+    #     인쇄한 명함("MINJUNG")에서 english_name 이 통째로 누락됐다 — 실측 사례다.
+    #     대신 단어가 1개일 때는 조건을 좁힌다: 3~12자, 전부 알파벳(하이픈 허용),
+    #     그리고 **아래 _NON_NAME_TOKENS 에 없는 것**. 회사/직책 키워드는 이 함수의
+    #     앞 단계(9·10번)에서 이미 걸러졌으므로 여기 도달하는 단독 대문자 단어는
+    #     대부분 이름이지만, 로고/약어가 남을 수 있어 최소한의 방어선을 둔다.
     words = text_stripped.split()
-    if 2 <= len(words) <= 3 and all(
-        w[:1].isupper() and w.replace("-", "").replace(".", "").isalpha() for w in words
-    ):
+    looks_name = False
+    if 2 <= len(words) <= 3:
+        looks_name = all(
+            w[:1].isupper() and w.replace("-", "").replace(".", "").isalpha() for w in words
+        )
+    elif len(words) == 1:
+        w = words[0]
+        stripped = w.replace("-", "")
+        looks_name = (
+            3 <= len(stripped) <= 12
+            and stripped.isalpha()
+            and stripped.isascii()
+            and w[:1].isupper()
+            and stripped.upper() not in _NON_NAME_TOKENS
+            # **한글 이름이 이미 있는 명함에서는 받지 않는다.**
+            # 단독 로마자 단어는 이름만큼이나 로고/브랜드일 확률이 높다 — 첫 시도에서
+            # 파트너사 로고 "COGNEX" 가 english_name 으로 들어왔다. 이름을 로마자
+            # 한 덩어리로만 인쇄한 명함("MINJUNG")을 살리는 것이 이 분기의 목적이므로,
+            # 한글 이름이 따로 있으면 그 목적이 이미 달성된 것이고 여기서 얻을 것은 없다.
+            # 2-pass 분류 순서에 의존하지 않도록 _classified 가 아니라 **텍스트 모양**으로 본다.
+            and not _has_korean_name_block(all_blocks, block_index)
+        )
+
+    if looks_name:
         # 이미 한국어 이름이 분류된 블록이 있으면 english_name으로
         if all_blocks:
             has_korean_name = any(
@@ -927,10 +1015,36 @@ def _segment_core(text: str) -> list[str]:
     if not text:
         return []
 
-    # Step 1: 전화번호 매치를 먼저 확정(겹침 제거)
+    # Step 1: **이메일/URL 을 먼저 확정한다.**
+    #
+    # 순서가 반대였고, 그것이 이메일을 통째로 잃는 원인이었다. 이메일 로컬파트에
+    # 숫자가 길게 들어가면 그 안에서 휴대폰 패턴이 매치된다:
+    #     a01077441010@gmail.com
+    #      ^^^^^^^^^^^  MOBILE_PATTERN 매치
+    # 전화를 먼저 확정하면 세그멘터가 여기서 잘라 'E-mail:a' / '01077441010' /
+    # '@gmail.com/…' 세 조각이 되고, 이메일 필드가 통째로 사라진다.
+    # (실측: 선거 홍보 명함 "E-mail:a01077441010@gmail.com/H.P : 010-7744-1010")
+    # 이메일/URL 은 경계가 명확한 강한 패턴이라 먼저 잡고 마스킹하는 것이 옳다.
+    other_matches = []
+    for pattern in _OTHER_PATTERNS:
+        for m in pattern.finditer(text):
+            other_matches.append((m.start(), m.end()))
+    other_matches.sort(key=lambda x: x[0])
+    other_filtered = []
+    for start, end in other_matches:
+        if not other_filtered or start >= other_filtered[-1][1]:
+            other_filtered.append((start, end))
+
+    # Step 2: 이메일/URL 영역 마스킹 후 전화번호 매칭
+    masked = list(text)
+    for os_, oe in other_filtered:
+        for i in range(os_, oe):
+            masked[i] = "\x00"
+    masked_text = "".join(masked)
+
     phone_matches = []
     for pattern in _PHONE_PATTERNS:
-        for m in pattern.finditer(text):
+        for m in pattern.finditer(masked_text):
             phone_matches.append((m.start(), m.end()))
     phone_matches.sort(key=lambda x: x[0])
     phone_filtered = []
@@ -938,20 +1052,8 @@ def _segment_core(text: str) -> list[str]:
         if not phone_filtered or start >= phone_filtered[-1][1]:
             phone_filtered.append((start, end))
 
-    # Step 2: 전화 영역 마스킹 후 이메일/URL 매칭
-    masked = list(text)
-    for ps, pe in phone_filtered:
-        for i in range(ps, pe):
-            masked[i] = "\x00"
-    masked_text = "".join(masked)
-
-    other_matches = []
-    for pattern in _OTHER_PATTERNS:
-        for m in pattern.finditer(masked_text):
-            other_matches.append((m.start(), m.end()))
-
     # Step 3: 전체 매치 합치기(start 정렬 + 비겹침)
-    all_matches = phone_filtered + other_matches
+    all_matches = phone_filtered + other_filtered
     all_matches.sort(key=lambda x: x[0])
     filtered = []
     for start, end in all_matches:
@@ -1133,6 +1235,14 @@ def classify_text_block_for_poster(text: str) -> str:
     for kw in ORGANIZER_KEYWORDS:
         if kw in lower:
             return "organizer_name"
+
+    # 4-b) 라벨 없는 기관명 → 주최자.
+    #      **장소 검사보다 먼저 와야 한다.** 한국 기관명에는 "센터"가 흔한데 그것이
+    #      LOCATION_KEYWORDS 에 있어서, 이 검사가 뒤에 오면 주최자가 전부 장소로
+    #      흘러간다(_ORG_SUFFIX 주석의 실측 참조).
+    #      단 주소 토큰이 함께 있으면 장소다 — "○○센터 3층 대강당" 은 주최자가 아니다.
+    if _ORG_SUFFIX.search(text_stripped) and not _ADDRESS_HINT.search(text_stripped):
+        return "organizer_name"
 
     # 5) 장소 키워드 확인
     #    날짜/시각이 이미 들어 있는 라인은 장소로 보지 않는다 — '3층 스텔라홀 14:00'
@@ -1474,6 +1584,28 @@ def classify_all_blocks_for_type(text_blocks: list[dict], document_type: str = "
         entry = {"text": clean_text, "confidence": block.get("confidence", 0.0),
                  "bbox": block.get("bbox"), "block_index": block["block_index"], "field": field}
         results.append(entry)
+
+        # 포스터 기간 표기는 **한 블록에 시작·종료가 같이 온다.**
+        #   "접수기간2026.05.15.(금) ~06.12.(금)"
+        # 이 블록은 event_end_date 하나로만 라벨되므로 _clean_event_date 가 role="end"
+        # 로만 돌고, 시작일(05.15)은 볼 기회조차 없다. 실측에서 접수 시작일이 통째로
+        # 누락됐다. 날짜 토큰이 2개 이상이면 반대쪽 역할의 항목을 하나 더 만든다.
+        # _clean_event_date 가 이미 role 로 앞/뒤를 골라주고, 종료일 연도 상속까지 한다.
+        #
+        # 잘못 뽑힌 값은 스스로 사라진다: _clean_event_date 는 날짜가 아니면 ""를
+        # 돌려주고 services._aggregate 가 빈 값을 드롭한다. 그래서 "(19-39세)" 같은
+        # 오탐이 이 분기를 타도 필드가 생기지 않는다.
+        if document_type == "POSTER" and field in ("event_start_date", "event_end_date"):
+            if len(DATE_PATTERN.findall(text)) >= 2:
+                other = "event_end_date" if field == "event_start_date" else "event_start_date"
+                results.append({
+                    "text": text,          # 원문을 넘긴다 — 정제는 _aggregate 가 role 로 한다
+                    "confidence": block.get("confidence", 0.0),
+                    "bbox": block.get("bbox"),
+                    "block_index": block["block_index"],
+                    "field": other,
+                })
+
         if document_type == "POSTER" and field == "unknown":
             title_candidates.append(entry)
 
