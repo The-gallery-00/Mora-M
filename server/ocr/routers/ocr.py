@@ -107,6 +107,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 # services.py에서 싱글톤으로 생성된 파이프라인과 파싱 스킬을 가져옴
 from services import pipeline, parsing_skill
+from src.classifier.field_schema import DOCUMENT_FIELDS, FIELD_LABELS_KO
 from storage import is_gcs_enabled, persist_image, save_upload_file
 
 router = APIRouter()
@@ -179,6 +180,28 @@ _health_cache_at: float = 0.0
 _health_cache_status: int = 200
 
 
+# 허용되는 문서 종류. 정본은 field_schema.DOCUMENT_FIELDS 의 키다 —
+# 여기에 목록을 복제하면 둘이 갈라지고, 그때 파서는 도는데 필드 맵이 비는
+# (또는 그 반대인) 조용한 어긋남이 생긴다.
+#
+# UNKNOWN 을 별도로 허용한다: commit() 의 Form 기본값이 그 값이고, 앱이
+# 종류를 정하지 못한 채 확정 저장하는 경로가 실재한다. ETC 와 같은 취급이다.
+ALLOWED_DOC_TYPES = set(DOCUMENT_FIELDS.keys()) | {"UNKNOWN"}
+
+
+def _safe_doc_type(document_type: str) -> str:
+    """허용된 문서 종류만 통과시키고 나머지는 ETC 로 접는다.
+
+    두 가지를 동시에 막는다.
+      · 파싱 분기: 모르는 종류가 classify_all_blocks_for_type 에 들어가면
+        전부 unknown 이 되는데, 그 사실이 응답에 드러나지 않으면 앱이
+        "인식 실패" 와 "종류를 잘못 보냄" 을 구별하지 못한다.
+      · 경로 인젝션: commit() 이 이 값을 파일명 접두사로 쓴다. 화이트리스트를
+        거치지 않으면 `../` 가 섞인 값이 경로 조합에 들어간다.
+    """
+    return document_type if document_type in ALLOWED_DOC_TYPES else "ETC"
+
+
 def _cleanup(img_path: Path) -> None:
     """업로드 임시본을 지운다.
 
@@ -196,8 +219,25 @@ def _cleanup(img_path: Path) -> None:
 
 
 @router.post("/scan")
-async def scan(file: UploadFile = File(...)):
-    """이미지를 받아 OCR + 규칙 기반 파싱 결과를 반환."""
+async def scan(file: UploadFile = File(...), document_type: str = Form("BUSINESS_CARD")):
+    """이미지를 받아 OCR + 문서 종류별 규칙 파싱 결과를 반환.
+
+    [document_type 을 클라이언트에게서 받는 이유]
+    **이 서비스에는 문서 종류 분류기가 없다.** 원본 웹은 ResNet18 이미지 분류기
+    (ocr/models/image_classifier.pt)로 종류를 판정하지만 이 서비스에는 그 모델도
+    torch 도 없다. 그렇다고 판정을 포기하면 종류별 파서가 아예 돌지 못한다 —
+    실제로 그것이 청첩장·포스터를 찍으면 "12개 중 0개 인식" 이 나오던 원인이었다.
+    그래서 **앱의 문서 유형 선택을 정본으로 삼는다.** 앱은 촬영 화면과 결과 화면
+    양쪽에 종류 선택 UI 를 이미 갖고 있다.
+
+    기본값이 BUSINESS_CARD 인 것은 하위호환 때문이다 — 이 파라미터를 보내지 않는
+    구버전 앱은 종전과 똑같이 명함으로 파싱된다.
+
+    허용되지 않은 값은 ETC 로 접는다(_safe_doc_type). ETC 는 DOCUMENT_FIELDS 가
+    빈 dict 라 parsed 도 fields 도 비어 나가며, 그것이 정직한 결과다.
+    """
+
+    document_type = _safe_doc_type(document_type)
 
     # 원본 확장자를 유지하면서 UUID 기반 고유 파일명 생성
     suffix = Path(file.filename).suffix
@@ -209,50 +249,50 @@ async def scan(file: UploadFile = File(...)):
         ocr_result = pipeline.run(str(img_path))
         text_blocks = ocr_result.get("raw_blocks", [])
 
-        # 텍스트 블록을 명함 필드(이름, 회사, 전화 등)로 분류/파싱
-        parsed_result = parsing_skill.execute(text_blocks)
+        # 텍스트 블록을 문서 종류에 맞는 필드로 분류/파싱
+        parsed_result = parsing_skill.execute(text_blocks, document_type=document_type)
         parsed = parsed_result["parsed"]
 
-        # ── 성공 응답: 파싱 결과 + 원본 블록 + 이미지 URL + 문서 종류 3종 키 ──────────
+        # 앱이 폼 라벨을 그릴 때 1순위로 쓰는 맵 (src/features/scan/fieldSchema.ts
+        # buildFieldDefs). 종전에는 이 키를 아예 내보내지 않아 앱이 항상 내장
+        # 스키마로 폴백했고, 서버가 새 필드를 뽑아도 화면에 나타날 길이 없었다.
+        fields = {
+            ext: FIELD_LABELS_KO.get(ext, ext)
+            for ext in DOCUMENT_FIELDS.get(document_type, {}).values()
+        }
+
+        # ── 성공 응답: 파싱 결과 + 원본 블록 + 라벨 맵 + 이미지 URL ────────────────
         #
-        # 대전제: **이 서비스에는 문서 종류 분류기가 없다.** 명함 전용 파이프라인이다.
-        # (src/classifier/rule_based.py 는 명함 *필드* 분류용 정규식이지 문서 종류
-        #  분류기가 아니다.) type/confidence/classified 세 키는 그 사실을 왜곡 없이
-        # 표현하기 위한 것이지, 판정 결과가 아니다.
+        # 대전제는 그대로다: **이 서비스에는 문서 종류 분류기가 없다.**
+        # 달라진 것은 그 공백을 메우는 방법이다 — 예전에는 종류를 BUSINESS_CARD 로
+        # 고정하고 "판정이 아니라 기본값" 이라고 앱에 알렸는데, 그러면 명함이 아닌
+        # 문서는 명함 파서를 거쳐 parsed 가 반드시 비었다. 이제는 **클라이언트가 고른
+        # 종류를 받아** 그 종류의 파서를 돌린다.
         #
-        # [type = "BUSINESS_CARD"] 클라이언트 계약상 필수다 — 없으면 앱 unwrapScan
-        # (src/features/scan/api.ts) 이 'ETC' 로 떨어뜨리고, ETC 는 저장 화이트리스트에
-        # 없어 tier 가 'blocked' 이 되면서 저장 경로가 아예 사라진다.
-        # 파이프라인이 명함 전용인 것은 사실이므로 **판정이 아니라 기본값 제시**로 보낸다.
+        # [type] 요청받은 document_type 을 그대로 되돌려준다. 판정 결과가 아니라
+        # "이 종류로 파싱했다" 는 사실의 보고다. 앱 unwrapScan 이 이 값으로 폼을
+        # 그리므로 요청과 응답이 어긋나면 폼과 값이 따로 논다.
         #
         # [confidence = 0.0] 0 은 "신뢰도가 낮다" 가 아니라 **"측정값이 없다"** 는 뜻이다.
-        # 여기에 OCR **인식(rec)** 신뢰도 평균을 넣었던 것이 1차 수정이 만든 회귀였다:
+        # 여기에 OCR **인식(rec)** 신뢰도 평균을 넣었던 것이 예전 회귀였다:
         # 영수증을 찍어도 BUSINESS_CARD + 0.97 이 내려가 확인 절차 없이 명함 폼으로
         # 직행하면서 있지도 않은 "신뢰도 97%" 까지 표시했다. 전형적인 거짓 신호다.
-        # **가짜 숫자를 만들지 마라.** 분류를 한 적이 없으므로 0 이 유일하게 정직한 값이다.
-        # 인식 신뢰도는 이미 raw_blocks[].confidence 로 블록 단위로 나가고 있으니
-        # 별도 키(ocr_confidence 등)로 중복 노출하지 않는다 — 앱이 읽지도 않는 값을
-        # 최상위에 두면 다음 사람이 또 분류 신뢰도로 오해한다.
+        # **가짜 숫자를 만들지 마라.** 종류를 판정한 적이 없으므로 0 이 유일하게 정직하다.
+        # 인식 신뢰도는 이미 raw_blocks[].confidence 로 블록 단위로 나간다.
         #
-        # [classified = False] **2026-08-05 4차 신설.** 위 두 값만으로는 앱이
-        # "분류했는데 신뢰도가 0" 과 "애초에 분류를 안 했다" 를 구별할 수 없었다.
-        # 그 간극이 세 라운드 내내 문제를 만들었다:
-        #   · 2차에서 confidence 를 0 으로 정정했더니 앱이 그것을 "신뢰도 바닥" 으로 읽어
-        #     tier 를 'pick' 으로 떨어뜨렸고, 폼 전체가 잠겨 저장이 불가능해졌다 —
-        #     정직해졌지만 막다른 길이었다.
-        #   · 3차에서 배너 문구만 "한 번 눌러 확인해 주세요" 로 고친 것도, 그 잠금 때문에
-        #     사용자가 실제로 수행할 수 없는 안내였다.
-        # 이 플래그의 의미는 **"이 서비스는 문서 종류를 판정하지 않았다"** 이다.
-        # 앱은 이것을 분류 미수행 전용 상태로 다뤄 확인 바만 띄우고 폼 편집·저장은
-        # 열어둔다 (src/features/scan/types.ts 의 'unclassified' tier).
-        # 서버가 분류를 **안 한** 것은 "신뢰도가 낮다" 와 다르다 — 명함 전용 파이프라인이
-        # 명함 필드를 뽑아냈으니 BUSINESS_CARD 를 기본값으로 제시하고 사용자가 바꿀 수
-        # 있게 하는 것이 정직하면서 막다른 길도 아닌 유일한 조합이다.
+        # [classified = False] 의미는 **"이 서비스는 문서 종류를 판정하지 않았다"** 이다.
+        # 종류를 클라이언트에게서 받게 된 지금도 이 값은 여전히 False 다 — 판정한 주체가
+        # 서버가 아니기 때문이다. 앱은 이것을 분류 미수행 전용 상태로 다뤄 확인 바만
+        # 띄우고 폼 편집·저장은 열어둔다 (src/features/scan/types.ts 의 'unclassified' tier).
+        # 실제 분류기(ResNet18)를 붙이는 날에는 여기를 True 로 바꾸고 confidence 에
+        # 진짜 측정값을 넣으면 되며, 앱 코드는 손대지 않아도 된다.
         #
-        # **하위호환**: 이 키가 없는 구버전 응답을 앱은 classified=true 로 읽어 종전
-        # 동작을 유지한다 (src/features/scan/api.ts unwrapScan). 그러므로 실제 분류기를
-        # 붙이는 날에는 여기를 True 로 바꾸고 confidence 에 진짜 측정값을 넣으면 되며,
-        # 앱 코드는 손대지 않아도 된다.
+        # [fields] 문서 종류별 {외부 필드키: 한국어 라벨} 맵. 앱이 폼 라벨의 1순위로
+        # 쓴다. 종전에는 이 키가 없어 앱이 늘 내장 스키마로 폴백했고, 그래서 서버가
+        # 새 필드를 뽑아도 화면에 나타날 길이 없었다.
+        #
+        # **하위호환**: classified 키가 없는 구버전 응답을 앱은 classified=true 로 읽어
+        # 종전 동작을 유지한다 (src/features/scan/api.ts unwrapScan).
         #
         # 앱 쪽은 파일명·심볼명만 적고 줄번호는 적지 않는다 — 줄번호는 앱이 한 번 바뀔
         # 때마다 거짓이 되고, 이 주석이 계속 틀린 곳을 가리켜 온 것이 지난 라운드들의
@@ -260,9 +300,10 @@ async def scan(file: UploadFile = File(...)):
         return JSONResponse(content={
             "success": True,
             "data": {
-                "type": "BUSINESS_CARD",
+                "type": document_type,
                 "confidence": 0.0,
                 "classified": False,
+                "fields": fields,
                 "parsed": parsed,
                 "raw_blocks": text_blocks,
                 "image_url": persist_image(img_path, img_name, file.content_type),
@@ -288,7 +329,7 @@ async def commit(
 ):
     """Persist an original image after the user confirms extracted fields."""
     suffix = Path(file.filename).suffix
-    safe_type = document_type if document_type in {"BUSINESS_CARD", "POSTER", "TICKET", "RECEIPT"} else "ETC"
+    safe_type = _safe_doc_type(document_type)
     img_name = f"{safe_type.lower()}_{uuid.uuid4().hex}{suffix}"
     img_path = save_upload_file(file, img_name)
 

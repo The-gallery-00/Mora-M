@@ -7,6 +7,13 @@ opencv-python
 Pillow
 numpy
 
+# ── 필드 정규화 ──
+# 전화번호 산업표준(libphonenumber) 검증/포맷 → 국내표기 010-1234-5678.
+# 순수 파이썬이라 네이티브 의존성도 메모리 영향도 없다.
+# rule_based._normalize_phone 이 lazy import + 예외 폴백으로 감싸므로
+# 이 패키지가 없어도 정규식 폴백으로 동작한다 — 있으면 정확해질 뿐이다.
+phonenumbers
+
 # ── API Server ──
 fastapi
 uvicorn
