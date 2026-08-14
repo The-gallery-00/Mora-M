@@ -21,6 +21,16 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
     List<Ticket> findByUserIdAndDepartureDateBetweenOrderByDepartureDateAscDepartureTimeAsc(
             UUID userId, LocalDate start, LocalDate end);
     List<Ticket> findByUserIdAndDepartureDateOrderByDepartureTimeAsc(UUID userId, LocalDate date);
+    @Query("""
+            SELECT t FROM Ticket t
+            WHERE t.userId = :userId
+              AND t.departureDate < :today
+              AND t.arrivalDate BETWEEN :today AND :end
+            ORDER BY t.arrivalDate ASC, t.arrivalTime ASC
+            """)
+    List<Ticket> findOngoingEndingBetween(@Param("userId") UUID userId,
+                                         @Param("today") LocalDate today,
+                                         @Param("end") LocalDate end);
 
     Page<Ticket> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 

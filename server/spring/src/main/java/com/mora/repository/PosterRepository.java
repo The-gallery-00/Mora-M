@@ -21,6 +21,16 @@ public interface PosterRepository extends JpaRepository<Poster, Integer> {
     List<Poster> findByUserIdAndEventStartDateBetweenOrderByEventStartDateAsc(
             UUID userId, LocalDate start, LocalDate end);
     List<Poster> findByUserIdAndEventStartDateOrderByCreatedAtAsc(UUID userId, LocalDate date);
+    @Query("""
+            SELECT p FROM Poster p
+            WHERE p.userId = :userId
+              AND p.eventStartDate < :today
+              AND p.eventEndDate BETWEEN :today AND :end
+            ORDER BY p.eventEndDate ASC, p.createdAt ASC
+            """)
+    List<Poster> findOngoingEndingBetween(@Param("userId") UUID userId,
+                                         @Param("today") LocalDate today,
+                                         @Param("end") LocalDate end);
 
     Page<Poster> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
