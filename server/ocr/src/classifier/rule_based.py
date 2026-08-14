@@ -727,16 +727,25 @@ def extract_clean_value(text: str, field: str) -> str:
         m2 = re.search(r"(?:오전|오후)?\s*\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?", text)
         return m2.group().strip() if m2 else ""
     # 티켓 날짜: 실제 날짜만 채택. 표번호 "NO. 19-672030"(월19 비현실)은 드롭.
+    #
+    # **반드시 ISO(YYYY-MM-DD)로 내보낸다.** 원문을 그대로 돌려주면 앱이 저장을 막는다:
+    # departure_date/arrival_date 는 앱 fieldSchema 에서 inputType 'date' 이고,
+    # 그 zod 스키마가 isIsoDate(^\d{4}-\d{2}-\d{2}$)를 강제한다 → validateFields 가
+    # 오류를 내고 canSave 가 false 가 된다.
+    # 실측(KTX 승차권): 파싱은 7/7 완벽한데 departure_date 가 "2026.06.15" 로 나가
+    # **저장 버튼이 동작하지 않았다.** 포스터 쪽(event_*_date)은 _clean_event_date →
+    # _to_iso_datetime 을 타서 ISO 로 나오는데 티켓만 이 경로를 건너뛰고 있었다.
     if field in ("departure_date", "arrival_date"):
         # 1) 4자리 연도 포함 형식 우선(YYYY.MM.DD / YYYY년 MM월 DD일)
         m = re.search(r"\d{4}\s*[년.\-/]\s*\d{1,2}\s*[월.\-/]\s*\d{1,2}\s*일?", text)
         if m:
-            return re.sub(r"\s+", "", m.group())
+            return _to_iso_datetime(m.group())[:10]
         # 2) MM.DD / MM월 DD일 — 단 월≤12, 일≤31 인 현실 범위만(일련번호 배제)
+        #    연도가 없으면 _to_iso_datetime 이 올해로 보정한다(포스터와 같은 휴리스틱).
         for mm in re.finditer(r"(\d{1,2})\s*[월/.\-]\s*(\d{1,2})\s*일?", text):
             mo, da = int(mm.group(1)), int(mm.group(2))
             if 1 <= mo <= 12 and 1 <= da <= 31:
-                return re.sub(r"\s+", "", mm.group())
+                return _to_iso_datetime(mm.group())[:10]
         return ""
     # 티켓 위치: "라벨 : 값" 패턴에서 값만 추출
     if field in ("departure_location", "arrival_location"):
@@ -1451,7 +1460,7 @@ def classify_all_blocks_for_type(text_blocks: list[dict], document_type: str = "
 
     # 각 블록을 분류하고 결과 리스트 생성
     results = []
-    title_candidate = None
+    title_candidates: list[dict] = []
     for block in text_blocks:
         text = block["text"].strip()
         field = classify_fn(text)
@@ -1465,18 +1474,92 @@ def classify_all_blocks_for_type(text_blocks: list[dict], document_type: str = "
         entry = {"text": clean_text, "confidence": block.get("confidence", 0.0),
                  "bbox": block.get("bbox"), "block_index": block["block_index"], "field": field}
         results.append(entry)
-        # 포스터: unknown 중 가장 긴 텍스트를 title 후보로 추적
         if document_type == "POSTER" and field == "unknown":
-            if title_candidate is None or len(text) > len(title_candidate["text"]):
-                title_candidate = entry
+            title_candidates.append(entry)
 
     # 포스터에서 title이 명시적으로 분류된 블록이 없으면 후보를 title로 승격
-    if document_type == "POSTER" and title_candidate:
+    if document_type == "POSTER" and title_candidates:
         has_title = any(r["field"] == "title" for r in results)
         if not has_title:
-            title_candidate["field"] = "title"
+            for entry in _pick_poster_title(title_candidates):
+                entry["field"] = "title"
 
     return results
+
+
+# 포스터 제목 후보에서 제외할 문구.
+#
+# 각주·안내·조건문은 본문에서 가장 길기 쉬워서 "가장 긴 unknown" 규칙의 단골 오답이다.
+# 실측(대구 동구 청년창업 경진대회 포스터): 제목이
+# "※동구생활권자 신청가능(직장및 학교,교육기관수강자등증빙자료 제출)" 로 뽑혔다.
+_TITLE_EXCLUDE = re.compile(
+    r"^\s*[※*·•]"                       # 각주 기호로 시작
+    r"|신청\s*가능|제출|증빙|참조|문의|바로가기"
+    r"|^\s*\(?\s*주\s*\)?\s*[:：]"       # "주:" 단서
+    r"|^\s*\d+\s*[.)]"                   # "1." "2)" 항목 번호
+)
+
+
+def _bbox_height(bbox) -> float:
+    """폴리곤 bbox 의 세로 높이. 폰트 크기의 프록시다. 형식이 이상하면 0."""
+    if not bbox:
+        return 0.0
+    try:
+        ys = [float(p[1]) for p in bbox]
+    except (TypeError, IndexError, ValueError):
+        return 0.0
+    return (max(ys) - min(ys)) if ys else 0.0
+
+
+def _pick_poster_title(candidates: list[dict]) -> list[dict]:
+    """unknown 후보 중 포스터 제목 블록들을 고른다 (여러 개일 수 있다).
+
+    **왜 '가장 긴 텍스트' 가 아닌가.** 종전 규칙은 길이만 봤고, 실측 2건이 모두
+    틀렸다 — 영문 부제("Advance Data Analytics Semi-Professional")와 각주
+    ("※동구생활권자 신청가능…")가 각각 본문 제목을 이겼다. 포스터 제목의 진짜
+    신호는 길이가 아니라 **글자 크기와 위치**다.
+
+    **왜 여러 블록을 돌려주는가.** 포스터 제목은 큰 글자라 OCR 이 줄 단위로 쪼갠다
+    ("제1회 대구 동구 2026" / "청년 창업" / "아이디어 경진대회"). 한 블록만 고르면
+    제목의 일부만 남는다 — 실측에서 "청년창업" 만 잡혔다. 같은 크기 대역 + 세로로
+    인접한 블록을 함께 제목으로 묶고, _JOIN_FIELDS(services._aggregate)가
+    block_index 순으로 이어 붙인다.
+
+    판정 순서:
+      1) 각주/안내 문구를 후보에서 뺀다(_TITLE_EXCLUDE).
+      2) 한국 포스터의 제목은 한글이다 — 한글이 섞인 후보가 있으면 영문 전용
+         블록(슬로건/로고/영문 부제)은 후보에서 뺀다.
+      3) bbox 가 있으면 **글자 높이(폰트 크기 프록시)** 최대의 80% 이상인 블록을
+         모으고, 그중 가장 위(anchor)에서 세로로 2.5 글자높이 안에 있는 것만 남긴다.
+         멀리 떨어진 같은 크기 블록(하단 주최기관명 등)이 딸려오는 것을 막는다.
+      4) bbox 가 하나도 없으면(비-OCR 경로/합성 테스트) 종전대로 길이 폴백 1개.
+         그 경로에서는 회귀가 없다.
+    """
+    pool = [c for c in candidates if not _TITLE_EXCLUDE.search(c["text"])]
+    if not pool:
+        pool = candidates
+    if not pool:
+        return []
+
+    korean = [c for c in pool if re.search(r"[가-힣]", c["text"])]
+    if korean:
+        pool = korean
+
+    sized = [(c, _bbox_height(c.get("bbox"))) for c in pool]
+    sized = [(c, h) for c, h in sized if h > 0]
+    if not sized:
+        return [max(pool, key=lambda c: len(c["text"]))]
+
+    max_h = max(h for _, h in sized)
+    big = [(c, h) for c, h in sized if h >= max_h * 0.8]
+
+    def top(entry) -> float:
+        return min(float(p[1]) for p in entry["bbox"])
+
+    anchor_top = min(top(c) for c, _ in big)
+    band = [c for c, _ in big if top(c) - anchor_top <= 2.5 * max_h]
+    band.sort(key=lambda c: c.get("block_index", 0))
+    return band
 
 
 def classify_all_blocks(text_blocks: list[dict]) -> list[dict]:
