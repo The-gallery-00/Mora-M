@@ -17,8 +17,8 @@
  *
  * 백엔드에 FCM/APNs 토큰 저장 컬럼이 없고 WebSocket/SSE 도 없다. 알림은 DB row +
  * 클라이언트 폴링이 유일한 경로다 (SCR-06 데이터 표 각주). 실시간 푸시는 Risks 의 후속 과제다.
- * 서버 `DeadlineNotificationScheduler` 는 **매일 09:00 KST 한 번** 도는 배치라
- * 60초 폴링도 사실 과하다 — 그래도 위키가 정한 값이라 그대로 따른다.
+ * 서버 `DeadlineNotificationScheduler` 는 **매일 09:00 KST** 배치를 돌리고, 목록/배지 조회
+ * 직전에도 현재 사용자의 알림을 보정한다. 60초 폴링은 앱을 연 상태의 배지 갱신에 사용한다.
  */
 
 import {

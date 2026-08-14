@@ -7,7 +7,7 @@
 //
 // ⚠ `deadlineReminderDays` 의 의미를 오해하기 쉽다. "며칠 전에 알린다"가 아니라
 //   **"며칠 앞까지 훑을지"의 윈도우**이고, 윈도우 안에서 **1회만** 생성된다(5-튜플 유니크).
-//   반복 알림이 아니다 — 그래서 하단 문구가 `마감 N일 전부터 알림을 받습니다.` 다.
+//   반복 알림이 아니다. 같은 기간 값을 시작 예정 알림과 진행 중 종료 알림에 함께 적용한다.
 //
 // ⚠ **OS 푸시 권한을 요청하지 않는다.** 백엔드에 FCM/APNs 토큰 저장소가 없어 실제 푸시가
 //   불가능하다(SCR-29 신설 근거 4). 권한만 받아 두고 알림이 오지 않으면 그게 더 나쁘다.
@@ -159,19 +159,19 @@ export default function NotificationSettingsScreen() {
               title={NOTIFICATION_SETTINGS_COPY.timingSection}
               footer={NOTIFICATION_SETTINGS_COPY.footer}
             >
-              {/* 마감 알림이 꺼져 있으면 일수는 의미가 없다 → 비활성 (SCR-29 인터랙션 표 3행).
+              {/* 두 알림이 모두 꺼져 있으면 일수는 의미가 없다 → 비활성 (SCR-29 인터랙션 표 3행).
                   행 자체를 숨기지 않는 이유: 토글을 켰을 때 없던 컨트롤이 튀어나오면
                   레이아웃이 점프한다. */}
               <SettingsRow
                 label={NOTIFICATION_SETTINGS_COPY.daysTitle}
                 description={deadlineDaysCaption(settings.deadlineReminderDays)}
-                disabled={!settings.deadlineReminderEnabled}
+                disabled={!settings.deadlineReminderEnabled && !settings.scheduleReminderEnabled}
                 segmented={
-                  <View style={{ opacity: settings.deadlineReminderEnabled ? 1 : 0.4 }}>
+                  <View style={{ opacity: settings.deadlineReminderEnabled || settings.scheduleReminderEnabled ? 1 : 0.4 }}>
                     <SegmentedControl
                       options={DAY_OPTIONS.map((option) => ({
                         ...option,
-                        disabled: !settings.deadlineReminderEnabled,
+                        disabled: !settings.deadlineReminderEnabled && !settings.scheduleReminderEnabled,
                       }))}
                       value={settings.deadlineReminderDays}
                       onChange={(days) => save({ deadlineReminderDays: days })}
