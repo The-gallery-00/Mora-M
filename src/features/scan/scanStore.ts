@@ -43,6 +43,17 @@ export const CONFIDENCE_CONFIRM_THRESHOLD = 0.8;
 /** CLS-03 — 3클래스 소프트맥스에서 "무작위(0.33)보다는 확실하지만 사람이 확인해야 하는" 구간의 하한. */
 export const CONFIDENCE_PICK_THRESHOLD = 0.55;
 
+export type RunScanOptions = {
+  /** 서버로 보낼 문서 종류. 생략하면 `requestedDocType`, 그것도 없으면 서버 기본값. */
+  documentType?: DocumentType;
+  /**
+   * 사용자가 종류를 직접 골라 다시 파싱하는 경우.
+   * 두 가지를 함께 바꾼다 — `typeSource` 를 'manual' 로 두고(확인했다는 사실),
+   * 이미 입력된 값을 새 파싱 결과보다 우선한다(타이핑한 것을 지우지 않는다).
+   */
+  userChosen?: boolean;
+};
+
 export type ScanState = {
   step: ScanStep;
 
@@ -57,6 +68,15 @@ export type ScanState = {
   /** 0~1 업로드 바이트 실측 진행률. 서버 추론 구간에는 갱신되지 않는다. */
   uploadProgress: number;
   uploadPhase: UploadPhase | null;
+
+  /**
+   * 촬영 화면 힌트 칩이 고른 종류. 첫 스캔의 `document_type` 이 된다.
+   *
+   * `docType` 과 다른 값이다: 이쪽은 **요청**(스캔하기 전의 의도)이고 `docType` 은
+   * **현재 확정된 종류**(스캔 응답 또는 사용자 선택의 결과)다. 칩을 누르지 않으면
+   * null 이고, 그러면 파트를 보내지 않아 서버 기본값 BUSINESS_CARD 로 파싱된다.
+   */
+  requestedDocType: DocumentType | null;
 
   scan: ScanResult | null;
   /** 확정 문서 종류. 사용자가 바꿨을 수 있다. */
@@ -98,10 +118,30 @@ export type ScanActions = {
 
   /** SCAN-04. 실패 시 SCF-03 / SCF-04 로 failure 를 세운다. */
   prepare: (options?: PrepareOptions) => Promise<boolean>;
+  /**
+   * 촬영 화면에서 고른 문서 유형 힌트. 첫 스캔의 `document_type` 이 된다.
+   * null 이면 파트를 보내지 않고 서버 기본값(BUSINESS_CARD)에 맡긴다.
+   */
+  setRequestedDocType: (next: DocumentType | null) => void;
 
   /** SCAN-05 ~ SCAN-07. prepared 가 없으면 아무것도 하지 않는다. */
-  runScan: () => Promise<boolean>;
+  runScan: (options?: RunScanOptions) => Promise<boolean>;
   cancelScan: () => void;
+  /**
+   * 문서 종류를 바꾸고 **같은 이미지를 그 종류로 다시 파싱한다.**
+   *
+   * 서버 파서는 종류마다 다른 규칙을 돌린다. 종류만 바꾸고 재파싱을 하지 않으면
+   * 포스터 탭을 눌러도 명함 파싱 결과(또는 빈 값)가 그대로 남는다 — 사용자에게는
+   * "종류를 바꿔도 아무것도 안 채워진다" 로 보인다.
+   *
+   * 재스캔이 불가능하거나 불필요한 경우에는 `setDocType` 과 동일하게 상태만 바꾼다:
+   *  · 커밋 이후(R3) — 저장 경로가 확정됐으므로 종류 변경 자체가 금지다
+   *  · 압축 결과가 없음 — 보낼 파일이 없다 (수기 입력 진입 등)
+   *  · 이미 그 종류로 스캔했음 — 같은 요청을 반복할 이유가 없다
+   * 재스캔이 실패하면 종류 변경은 유지하고 실패만 노출한다. 사용자 입력값은
+   * 어느 경로에서도 보존된다(inheritFieldValues 의 ① 현재 입력값 우선).
+   */
+  rescanAs: (next: DocumentType) => Promise<boolean>;
 
   /** 종류 선택 시트/칩. 커밋 이후에는 무시한다 (R3). */
   setDocType: (next: DocumentType) => void;
@@ -135,6 +175,7 @@ const initialState: ScanState = {
   prepared: null,
   uploadProgress: 0,
   uploadPhase: null,
+  requestedDocType: null,
   scan: null,
   docType: 'ETC',
   typeSource: 'auto',
@@ -205,7 +246,9 @@ export const useScanStore = create<ScanStore>((set, get) => ({
     }
   },
 
-  runScan: async () => {
+  setRequestedDocType: (next) => set({ requestedDocType: next }),
+
+  runScan: async (options = {}) => {
     const { prepared } = get();
     if (!prepared) {
       // 압축 결과가 없으면 업로드할 것이 없다. 크롭 화면으로 되돌린다.
@@ -223,7 +266,16 @@ export const useScanStore = create<ScanStore>((set, get) => ({
       scanAttempts: get().scanAttempts + 1,
     });
 
+    /* 서버로 보낼 문서 종류.
+       ① 호출자가 명시한 값(재파싱) → ② 촬영 화면 힌트 칩 → ③ 미지정(서버 기본값).
+       ETC 는 보내지 않는다 — 서버 DOCUMENT_FIELDS["ETC"] 가 빈 dict 라 파싱이 반드시
+       비고, 그것은 "종류를 안 골랐다" 와 구별되지 않는 결과다. 초기 docType 이 'ETC'
+       이므로 이 가드가 없으면 힌트 칩을 누르지 않은 첫 스캔이 ETC 로 나간다. */
+    const requested = options.documentType ?? get().requestedDocType ?? null;
+    const documentType = requested && requested !== 'ETC' ? requested : undefined;
+
     const handle = scanImage(prepared, {
+      ...(documentType ? { documentType } : {}),
       onProgress: (ratio) => {
         // 실측 진행률. 100% 도달 후 서버 추론 구간은 인디터미네이트로 전환한다 (§8).
         set({
@@ -269,13 +321,21 @@ export const useScanStore = create<ScanStore>((set, get) => ({
            (→ tier `unclassified`: 확인 바는 띄우되 폼·저장은 잠그지 않는다).
          · CLS-05 — 티켓 confidence 1.0 은 키워드 하드코딩이라 실측이 아니다.
          · 그 외 → `auto`: 서버가 실제로 판정했고 confidence 가 실측값이다. */
-      typeSource: !scan.classified
-        ? 'default'
-        : scan.type === 'TICKET' && scan.confidence === 1
-          ? 'keyword'
-          : 'auto',
+      typeSource: options.userChosen
+        ? 'manual'
+        : !scan.classified
+          ? 'default'
+          : scan.type === 'TICKET' && scan.confidence === 1
+            ? 'keyword'
+            : 'auto',
       confidence: scan.confidence,
-      values: initialFieldValues(defs, scan.parsed),
+      /* 재파싱(rescanAs)에서는 사용자가 이미 손댄 값을 새 파싱 결과로 덮지 않는다.
+         inheritFieldValues 의 우선순위가 ① 현재 입력값 ② 별칭 승계 ③ parsed 라
+         "종류를 바꿨더니 방금 타이핑한 것이 사라졌다" 가 생기지 않는다.
+         첫 스캔은 보존할 입력이 없으므로 initialFieldValues 를 그대로 쓴다. */
+      values: options.userChosen
+        ? inheritFieldValues(defs, get().values, scan.parsed)
+        : initialFieldValues(defs, scan.parsed),
       receiptItems: [],
       committedImageUrl: null,
       imageMissing: false,
@@ -289,6 +349,26 @@ export const useScanStore = create<ScanStore>((set, get) => ({
   cancelScan: () => {
     get().cancelUpload?.();
     set({ cancelUpload: null, uploadProgress: 0, uploadPhase: null });
+  },
+
+  rescanAs: async (next) => {
+    const state = get();
+
+    // 상태만 바꾸고 끝내는 세 경우. 어느 쪽도 오류가 아니므로 true 를 돌려준다.
+    //  · 커밋 이후(R3): setDocType 이 이미 막는다. 여기서도 같은 판정을 먼저 한다.
+    //  · 보낼 파일이 없음: 수기 입력 진입 등. 재스캔할 대상이 없다.
+    //  · 이미 그 종류로 스캔했음: 같은 요청을 반복할 이유가 없다.
+    //    (`scan.type` 은 서버가 우리가 보낸 값을 되돌려준 것이라 요청 종류와 같다.)
+    if (state.committedImageUrl || !state.prepared || state.scan?.type === next) {
+      state.setDocType(next);
+      return true;
+    }
+
+    // 먼저 종류를 반영한다. 재스캔이 실패해도 사용자가 고른 종류는 유지되어야 하고,
+    // 그 사이 화면이 그리는 폼도 새 종류의 것이어야 한다(빈 폼이 옛 종류로 보이면 안 된다).
+    state.setDocType(next);
+
+    return get().runScan({ documentType: next, userChosen: true });
   },
 
   setDocType: (next) => {

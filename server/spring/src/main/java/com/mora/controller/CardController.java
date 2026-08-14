@@ -87,10 +87,16 @@ public class CardController {
     // 본문에는 업스트림 상태코드 **숫자만** 넣는다. 예외 원문·URL·파일명은 넣지 않는다
     // (application.yml 의 server.error.include-*: never 와 같은 정보 은닉 선 — 3efa5b7).
     // 스택트레이스는 OcrService 가 이미 서버 로그에 남겼다.
+    //
+    // document_type 은 **선택 파라미터**다. 이 값을 보내지 않는 구버전 앱은 종전과 똑같이
+    // 동작해야 하므로 required=false 이고, 기본값도 여기서 채우지 않는다 — 기본값의 정본은
+    // OCR 의 Form("BUSINESS_CARD") 한 곳이다. 여기에 defaultValue 를 적으면 두 곳이 갈라진다.
     @PostMapping("/scan")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> scan(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> scan(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "document_type", required = false) String documentType) {
         try {
-            Map<String, Object> result = ocrService.scan(file);
+            Map<String, Object> result = ocrService.scan(file, documentType);
             return ResponseEntity.ok(ApiResponse.ok(result));
         } catch (OcrUpstreamException e) {
             // if 사슬 대신 **switch 식**을 쓴다. 갈래를 하나 빠뜨리면 조용히 마지막 else 로

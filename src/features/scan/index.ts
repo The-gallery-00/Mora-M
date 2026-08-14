@@ -90,7 +90,7 @@ export {
   unwrapScan,
 } from './api';
 
-export type { ScanActions, ScanState, ScanStore } from './scanStore';
+export type { RunScanOptions, ScanActions, ScanState, ScanStore } from './scanStore';
 export {
   CONFIDENCE_CONFIRM_THRESHOLD,
   CONFIDENCE_PICK_THRESHOLD,

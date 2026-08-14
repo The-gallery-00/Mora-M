@@ -460,13 +460,25 @@ export function springUpstreamFailure(detail: string | null | undefined): Spring
 export type ScanImageOptions = {
   onProgress?: (ratio: number) => void;
   signal?: AbortSignal;
+  /**
+   * 사용자가 고른 문서 종류. 서버로 `document_type` 파트로 나간다.
+   *
+   * **서버는 문서 종류를 판정하지 않는다.** OCR 서비스에는 분류기(ResNet18)가 없고,
+   * 종류를 모르면 명함 파서만 돌아 포스터·영수증·티켓·청첩장이 전부 0필드가 된다.
+   * 그래서 앱의 선택이 정본이다 — 촬영 화면 칩과 결과 화면 탭이 이 값을 정한다.
+   *
+   * 생략하면 파트를 붙이지 않고 서버 기본값(BUSINESS_CARD)에 맡긴다.
+   */
+  documentType?: DocumentType;
 };
 
 /**
- * API-41 `POST {API_BASE}/api/scan` — multipart 파트명 `file` 1개.
+ * API-41 `POST {API_BASE}/api/scan` — multipart 파트 `file` + 선택적 `document_type`.
  *
  * 인증은 서버가 검사하지 않지만 웹과 동일하게 헤더를 붙인다(무해).
  * **부작용 없음**: 서버가 임시파일로 처리하고 `finally` 에서 삭제한다 → 취소·재시도가 안전하다.
+ * 종류를 바꿔 다시 부르는 것도 같은 이유로 안전하다(고아 이미지가 생기지 않는다 —
+ * 부작용이 있는 것은 `/api/commit` 쪽이다).
  */
 export function scanImage(file: PreparedImage, options: ScanImageOptions = {}): UploadHandle<ScanResult> {
   /* 목 모드 주입점. 스캔·커밋은 `request()` 가 아니라 XHR 업로더를 쓰므로 http 계층에서
@@ -477,6 +489,7 @@ export function scanImage(file: PreparedImage, options: ScanImageOptions = {}): 
   return uploadMultipart<ScanResult>({
     url: `${getApiBaseUrl()}/api/scan`,
     file,
+    ...(options.documentType ? { fields: { document_type: options.documentType } } : {}),
     authorize: true,
     timeoutMs: SCAN_TIMEOUT_MS,
     onProgress: options.onProgress,
