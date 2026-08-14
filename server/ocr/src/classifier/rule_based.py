@@ -496,7 +496,11 @@ def classify_text_block(text: str, all_blocks: list[dict] = None, block_index: i
     words = text_stripped.split()
     looks_name = False
     if 2 <= len(words) <= 3:
-        looks_name = all(
+        # 길이 상한을 둔다. 로마자 한국 이름은 길어야 "Yong-Yeon Choi" 정도(20자 안팎)인데,
+        # 상한이 없어 상호/슬로건이 통과했다 — 실측:
+        #     name = "Korean Resaurant MYUNJANGSUYEONPO"  (식당 상호)
+        # 각 단어가 대문자로 시작하는 영문 상호는 흔하므로 형태만으로는 갈라지지 않는다.
+        looks_name = len(text_stripped) <= 24 and all(
             w[:1].isupper() and w.replace("-", "").replace(".", "").isalpha() for w in words
         )
     elif len(words) == 1:
@@ -650,9 +654,18 @@ def _clean_event_date(text: str, role: str) -> str:
     iso = _to_iso_datetime(s)
     if iso:
         return iso.split("T")[0]
-    # 폴백: ISO 파싱 불가 → 꼬리 노이즈만 제거한 원문
-    s = re.sub(r"\d+\s*일간|까지|부터", "", s)
-    return re.sub(r"\s+", " ", s).strip(" .~-")
+
+    # **ISO 로 못 만들면 버린다. 원문을 돌려주지 않는다.**
+    #
+    # 종전에는 "꼬리 노이즈만 제거한 원문"을 폴백으로 내보냈는데, 그 값은 앱에서
+    # 쓸 수가 없다 — event_*_date 는 inputType 'date' 라 zod 가 isIsoDate 를 강제하고,
+    # 형식이 어긋나면 validateFields 가 오류를 내 저장이 막힌다. 즉 이 폴백이 만드는 것은
+    # "덜 정확한 값"이 아니라 **저장 불가 상태**다.
+    # 실측(포스터 27장)에서 이 경로로 나간 값들:
+    #     "CC브랜드260303-0017"(사업자번호)  "입학상담|810-4966~8"(전화)
+    #     "10:00-17:00/130"(시간대)          "7942-28-59944"  "12.81.7"
+    # 하나도 날짜가 아니다. 빈 칸이 이것들보다 낫다 — 사용자가 직접 넣을 수 있다.
+    return ""
 
 
 def _clean_purchase_date(text: str) -> str:
