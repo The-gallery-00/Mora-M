@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -150,6 +151,40 @@ public class AuthService {
         }
 
         userRepository.delete(user);
+    }
+
+    private static final Pattern NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9가-힣_.\\-]+$");
+
+    // API-04. 프론트 nicknameSchema와 동일 규칙으로 서버도 재검증함
+    public User changeName(UUID userId, String name) {
+        User user = getUserById(userId);
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.length() < 2 || trimmed.length() > 20 || !NAME_PATTERN.matcher(trimmed).matches()) {
+            throw new RuntimeException("Invalid nickname");
+        }
+        user.setName(trimmed);
+        return userRepository.save(user);
+    }
+
+    // API-05. 소셜 계정은 비밀번호가 없어서 차단함
+    @Transactional
+    public void changePassword(UUID userId, String currentPassword, String newPassword) {
+        User user = getUserById(userId);
+        if (!"local".equals(user.getProvider())) {
+            throw new RuntimeException("Social account cannot change password");
+        }
+        if (currentPassword == null || currentPassword.isBlank()
+                || !passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new RuntimeException("Current password mismatch");
+        }
+        if (newPassword == null || newPassword.length() < 8) {
+            throw new RuntimeException("New password too short");
+        }
+        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+            throw new RuntimeException("New password must differ from current");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
     }
 
     private String normalizeEmail(String email) {
