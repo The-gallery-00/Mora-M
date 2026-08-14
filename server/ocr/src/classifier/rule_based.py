@@ -72,7 +72,12 @@ EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z]{2,})+")
 MOBILE_PATTERN = re.compile(r"01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}")
 
 # 일반 전화 / 팩스: 02-xxx-xxxx, 0xx-xxx-xxxx
-LANDLINE_PATTERN = re.compile(r"0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}")
+# 지역번호 부분이 `0\d{1,2}` 이면 **안심번호(0505/0504/0507/0506)가 잘린다.**
+# 실측: "0505-123-4567" → "05-123-4567", "0507-1234-5678" → "07-1234-5678".
+# 미매치가 아니라 **앞 두 자리를 잃은 값이 그대로 저장**되는 것이 문제다 —
+# 걸려온 번호를 다시 걸 수 없는 값이 DB 에 들어간다.
+# 050X 국번을 먼저 시도하고(교대는 왼쪽 우선), 실패하면 종전 2~3자리 지역번호로 떨어진다.
+LANDLINE_PATTERN = re.compile(r"(?:050\d|0\d{1,2})[-.\s]?\d{3,4}[-.\s]?\d{4}")
 
 # 값 추출 전용(분류 아님): 괄호 지역번호 "(055)366-0762" 도 잡는 느슨한 전화 패턴.
 # extract_clean_value 에서 라벨/괄호가 섞인 원문에서 번호만 뽑을 때 사용.
@@ -130,6 +135,34 @@ PRICE_PATTERN = re.compile(r"[\d,]+\s*원|₩\s*[\d,]+")
 
 # 한국어 이름 패턴 (2~4글자 한글)
 KOREAN_NAME_PATTERN = re.compile(r"^[가-힣]{2,4}$")
+
+# 이름 후보에서 제외할 라벨/안내 어휘.
+#
+# **왜 필요한가.** 이름 판정은 "2~4자 한글이고 첫 글자가 성씨 목록에 있다" 가 전부인데,
+# 한국어 성씨는 흔한 글자라 일반 어휘의 첫 글자와 대량으로 겹친다. 실측(28개 표본):
+# 안내·문의·장소·주소·신청·방법·오전·오후·전화·이메일·정보·성명·연락처·서명·기간·공지·
+# 심사·선발·주제 = **19개(68%)가 person_name 으로 오분류**됐다.
+# (재현율은 멀쩡하다 — 김민수·이영희·남궁민수·박지원은 모두 정상 판정된다. 정밀도만 무너져 있다.)
+#
+# **왜 이것이 단순 오분류보다 나쁜가.** 이름 칸이 "안내" 같은 값으로 채워지면 앱의
+# hasNoExtractedValues(src/features/scan/scanStore.ts)가 false 가 되어
+# "인식된 정보가 없습니다" 배너가 뜨지 않는다. 즉 **실패를 성공처럼 보이게 만든다.**
+#
+# 목록 방식의 한계는 인정한다 — 여기 없는 라벨은 여전히 통과한다. 다만 (a) 명함에는
+# 라벨 단독 블록이 드물고 (b) 포스터/안내문에서 실제로 관측되는 어휘가 이 집합에
+# 몰려 있어, 목록만으로도 오탐의 대부분이 사라진다. 근본 해결은 bbox 위치/폰트 크기를
+# 보는 것이고 그것은 이 규칙 계층의 범위 밖이다.
+NON_NAME_WORDS = frozenset({
+    # 안내/라벨
+    "안내", "문의", "장소", "위치", "주소", "신청", "방법", "정보", "성명", "이름",
+    "연락처", "서명", "기간", "공지", "대상", "자격", "접수", "시상", "심사", "선발",
+    "참가", "상금", "주제", "분야", "내용", "혜택", "일시", "일정", "시간", "구분",
+    "비고", "기타", "제목", "목적", "개요", "요강", "모집", "마감", "제출", "서류",
+    # 연락 수단
+    "전화", "휴대폰", "핸드폰", "팩스", "이메일", "메일", "홈페이지", "주최", "주관", "후원",
+    # 시각 표현
+    "오전", "오후", "당일", "금일", "익일", "매일", "매주", "매월",
+})
 
 # 한국어 성 (외자)
 KOREAN_SURNAME_SINGLE = re.compile(
@@ -376,7 +409,10 @@ def classify_text_block(text: str, all_blocks: list[dict] = None, block_index: i
     #     공백이 포함된 경우("이 응 환")도 공백 제거 후 판별
     name_no_space = re.sub(r"\s+", "", text_stripped)
     if 2 <= len(name_no_space) <= 4 and re.match(r"^[가-힣]+$", name_no_space):
-        if KOREAN_SURNAME_SINGLE.match(name_no_space) or KOREAN_SURNAME_DOUBLE.match(name_no_space):
+        # 라벨/안내 어휘는 성씨로 시작해도 이름이 아니다 (NON_NAME_WORDS 주석의 실측 참조).
+        if name_no_space not in NON_NAME_WORDS and (
+            KOREAN_SURNAME_SINGLE.match(name_no_space) or KOREAN_SURNAME_DOUBLE.match(name_no_space)
+        ):
             return "person_name"
 
     # 12) 영문 이름 추정 — 2~3 단어, 각 단어 첫 글자 대문자.
@@ -403,6 +439,17 @@ def _normalize_phone(number: str) -> str:
     국가표준 형식(010-1234-5678)으로 통일. 라이브러리 부재/파싱 실패/무효번호는
     기존 regex 정규화로 폴백(절대 깨지지 않음)."""
     raw = number
+
+    # 050X 안심번호는 libphonenumber 에 맡기지 않는다.
+    #
+    # 실측: "0505-123-4567" → "050-5123-4567", "0507-1234-5678" → "050-71234-5678".
+    # 숫자는 보존되지만 국번을 050 으로 잘라 하이픈 위치가 틀어진다 — 사람이 읽는
+    # 표기로도, 다시 거는 값으로도 어색하다. 050X 는 4자리 전체가 국번이므로
+    # 여기서 직접 나눈다. (libphonenumber 는 050X 대역을 지역번호로 모델링하지 않는다.)
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) in (11, 12) and digits.startswith("050"):
+        return f"{digits[:4]}-{digits[4:-4]}-{digits[-4:]}"
+
     try:
         import phonenumbers
         pn = phonenumbers.parse(number, "KR")
