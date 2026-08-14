@@ -322,6 +322,15 @@ TOTAL_KEYWORDS = ["합계", "총액", "total", "합산", "결제", "총"]
 # 업장 키워드
 STORE_KEYWORDS = ["상호", "매장", "가맹점"]
 
+# 영수증 구매일자로 인정할 **엄격한** 날짜 형태.
+# 연도 4자리(2026.02.27 / 2018/01/30 / 2026-02-28) 또는 한국어 표기(6월 15일)만 받는다.
+# DATE_PATTERN 의 "MM.DD" 교대는 영수증에서 오탐이 압도적이라 쓰지 않는다
+# (사업자번호·POS번호·승인번호·금액 소수점이 전부 그 형태다).
+_RECEIPT_DATE_STRICT = re.compile(
+    r"(?:19|20)\d{2}\s*[년.\-/]\s*\d{1,2}\s*[월.\-/]\s*\d{1,2}\s*일?"
+    r"|\d{1,2}\s*월\s*\d{1,2}\s*일"
+)
+
 # ========== 티켓 전용 패턴 ==========
 
 # 교통수단 키워드 → 정규화된 교통수단명 매핑
@@ -554,11 +563,21 @@ def _normalize_phone(number: str) -> str:
 
 
 def _clean_amount(text: str) -> str:
-    """금액 칸 정제: 라벨/무관항목 제거 후 가장 큰 숫자를 'N원'으로. 숫자 없으면 ''."""
-    nums = re.findall(r"\d{1,3}(?:,\d{3})+|\d{4,}", text)
+    """금액 칸 정제: 라벨/무관항목 제거 후 가장 큰 숫자를 'N원'으로. 숫자 없으면 ''.
+
+    **천단위 구분자로 마침표를 쓰는 영수증을 받는다.** 한국 영수증 인쇄에서 "7.500"
+    (=7,500원)은 흔한 표기이고, OCR 이 쉼표를 마침표로 흘리는 경우도 잦다.
+    종전 정규식은 쉼표 구분자와 4자리 이상 연속 숫자만 봐서 "7.500" 을 통째로
+    버렸다 — 실측 19장에서 total_amount 가 **0장**이었던 원인 중 하나다.
+
+    소수점과 구분되지 않는 것은 사실이지만, 이 필드는 원화 결제 금액이라 소수점이
+    쓰이지 않는다. 그래서 **뒤 3자리** 형태(`\\d{1,3}(\\.\\d{3})+`)만 천단위로 읽는다 —
+    "8.50"(2자리)이나 "4.5001"(4자리)은 매치되지 않아 종전대로 버려진다.
+    """
+    nums = re.findall(r"\d{1,3}(?:[.,]\d{3})+|\d{4,}", text)
     if not nums:
         return ""   # 유효 금액 없음 → 드롭(예 라벨만/깨진 값)
-    n = max(int(s.replace(",", "")) for s in nums)
+    n = max(int(re.sub(r"[.,]", "", s)) for s in nums)
     return f"{n:,}원"
 
 
@@ -1331,7 +1350,13 @@ def classify_text_block_for_receipt(text: str) -> str:
     if MOBILE_PATTERN.search(_ptext) or LANDLINE_PATTERN.search(_ptext):
         return "unknown"
 
-    if DATE_PATTERN.search(text_stripped):
+    #    **날짜로 인정하는 조건을 좁힌다.** 영수증에는 날짜처럼 생긴 숫자가 지천이다 —
+    #    사업자번호(536-37-00183), POS/전표번호(P0S:1021-5338), 승인번호, 금액의
+    #    소수점(4.5001, 8.50), 카드번호 조각. 실측 19장에서 purchase_date 로 잡힌 값
+    #    16건이 **전부 이런 쓰레기**였고 진짜 날짜는 한 건도 못 건졌다.
+    #    연도 4자리가 있거나(2026.02.27, 2018/01/30) 한국어 날짜 표기(6월 15일)일 때만
+    #    받는다. "MM.DD" 만 있는 형태는 영수증에서 오탐이 압도적이라 버린다.
+    if _RECEIPT_DATE_STRICT.search(text_stripped):
         return "purchase_date"
 
     # 3) 업장명 키워드 확인
@@ -1340,6 +1365,89 @@ def classify_text_block_for_receipt(text: str) -> str:
             return "store_name"
 
     return "unknown"
+
+
+# ── 영수증 전용 후처리 ────────────────────────────────────────────────────────
+#
+# 영수증 OCR 은 **라벨과 값이 다른 블록으로 쪼개져 온다.** 실측(IC신용승인 영수증):
+#     5 "가맹점"          6 "김태준의 탕탕집"
+#    20 "계"             21 "7.500"
+#    13 "사업자"         11 "536-37-00183"
+# 블록 하나만 보는 classify_text_block_for_receipt 는 이 구조에서 무력하다 —
+# 라벨 블록은 값이 없어 라벨 자체가 값이 되고, 값 블록은 라벨이 없어 unknown 이 된다.
+# 실제로 19장 기준 total_amount 는 **0장**, store_name 은 라벨("가맹점")만 잡혔다.
+#
+# 그래서 블록 리스트 전체를 보고 (라벨 블록 → 다음 블록) 관계를 먼저 해소한다.
+
+# 합계 라벨. OCR 이 "합계"의 앞 글자를 흘려 "계"만 남기는 일이 잦아 단독 "계"도 받는다.
+# 단 "설계"/"통계" 같은 단어에 걸리지 않도록 **블록 전체가 라벨일 때만** 인정한다.
+_RECEIPT_TOTAL_LABEL = re.compile(r"^\s*(?:합\s*계|총\s*액|총\s*합|합\s*산|계|total)\s*[:：]?\s*$", re.I)
+_RECEIPT_STORE_LABEL = re.compile(r"^\s*(?:가\s*맹\s*점|상\s*호|매\s*장)\s*(?:명)?\s*[:：]?\s*$")
+_RECEIPT_DATE_LABEL = re.compile(r"^\s*(?:거래\s*일시|거래\s*일자|구매\s*일시|구매\s*일자|일\s*시|승인\s*일시)\s*[:：]?\s*$")
+
+# 값 후보: 금액처럼 보이는 숫자(구분자 . 또는 ,). "7.500" 처럼 천단위를 마침표로 쓰는
+# 영수증이 많아 소수점과 구분이 안 된다 — 그래서 **뒤 3자리** 형태만 금액으로 본다.
+_RECEIPT_MONEY = re.compile(r"^\s*[₩\\]?\s*\d{1,3}(?:[.,]\d{3})+\s*원?\s*$|^\s*\d{4,}\s*원\s*$")
+
+
+def _classify_receipt_blocks(text_blocks: list[dict]) -> list[dict]:
+    """영수증 블록을 분류한다. 라벨 블록과 그 다음 값 블록을 짝지어 해소한다.
+
+    단일 블록 규칙(classify_text_block_for_receipt)을 기본으로 쓰되,
+    라벨-값이 쪼개진 경우를 먼저 처리해 그 결과를 우선한다.
+    """
+    n = len(text_blocks)
+    fields: list[str] = ["unknown"] * n
+
+    def next_nonempty(i: int) -> int:
+        for j in range(i + 1, min(i + 4, n)):   # 라벨 바로 뒤 3블록까지만 본다
+            if (text_blocks[j].get("text") or "").strip():
+                return j
+        return -1
+
+    # 1) 라벨 블록 → 다음 값 블록에 필드를 부여한다. 라벨 블록 자체는 unknown 으로 남긴다.
+    for i, b in enumerate(text_blocks):
+        t = (b.get("text") or "").strip()
+        if not t:
+            continue
+        j = -1
+        target = None
+        if _RECEIPT_TOTAL_LABEL.match(t):
+            j, target = next_nonempty(i), "total_amount"
+        elif _RECEIPT_STORE_LABEL.match(t):
+            j, target = next_nonempty(i), "store_name"
+        elif _RECEIPT_DATE_LABEL.match(t):
+            j, target = next_nonempty(i), "purchase_date"
+        if j < 0 or target is None:
+            continue
+        vt = (text_blocks[j].get("text") or "").strip()
+        # 값 자리에 또 라벨이 오면(연속 라벨) 짝짓지 않는다.
+        if (_RECEIPT_TOTAL_LABEL.match(vt) or _RECEIPT_STORE_LABEL.match(vt)
+                or _RECEIPT_DATE_LABEL.match(vt)):
+            continue
+        if target == "total_amount" and not _RECEIPT_MONEY.match(vt):
+            continue     # 합계 라벨 뒤가 금액이 아니면 버린다(레이아웃이 어긋난 것)
+        if fields[j] == "unknown":
+            fields[j] = target
+
+    # 2) 남은 블록은 단일 블록 규칙으로 채운다.
+    for i, b in enumerate(text_blocks):
+        if fields[i] != "unknown":
+            continue
+        fields[i] = classify_text_block_for_receipt((b.get("text") or "").strip())
+
+    results = []
+    for b, f in zip(text_blocks, fields):
+        text = (b.get("text") or "").strip()
+        clean = extract_clean_value(text, f) if f != "unknown" else text
+        results.append({
+            "text": clean,
+            "confidence": b.get("confidence", 0.0),
+            "bbox": b.get("bbox"),
+            "block_index": b["block_index"],
+            "field": f,
+        })
+    return results
 
 
 # ════════════════════════════════════════════
@@ -1591,7 +1699,8 @@ def classify_all_blocks_for_type(text_blocks: list[dict], document_type: str = "
     if document_type == "POSTER":
         classify_fn = classify_text_block_for_poster
     elif document_type == "RECEIPT":
-        classify_fn = classify_text_block_for_receipt
+        # 영수증은 라벨과 값이 **다른 블록**으로 쪼개져 오는 것이 기본이라 전용 후처리를 쓴다.
+        return _classify_receipt_blocks(text_blocks)
     elif document_type == "TICKET":
         classify_fn = classify_text_block_for_ticket
         # 티켓은 분류 후 복합 필드 분리 후처리 필요
