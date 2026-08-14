@@ -637,11 +637,22 @@ def _clean_event_date(text: str, role: str) -> str:
 
 
 def _clean_purchase_date(text: str) -> str:
-    """영수증 구매일시 정제: 라벨 제거 + 날짜/시각 사이 구분자 복원."""
+    """영수증 구매일시 → ISO 날짜(YYYY-MM-DD). 날짜가 없으면 빈 문자열.
+
+    **ISO 로 내보내야 한다.** purchase_date 는 앱 fieldSchema 에서 inputType 'date' 라
+    zod 가 isIsoDate 를 강제한다 — 원문을 그대로 주면 저장이 막힌다(티켓 날짜에서
+    같은 문제를 이미 겪었다). 종전 구현은 라벨·괄호만 떼고 원문을 돌려줬다:
+        "2026.06.15 14:30" → "2026.06.15 14:30"   (검증 실패)
+        "Tel 053-759-3560" → "Tel 053-759-3560"   (애초에 날짜가 아니다)
+
+    시각은 버린다. 영수증의 구매시각은 별도 필드(purchase_time)이고, 그쪽은 OCR
+    추출 대상이 아니라 수기 입력이다(앱 fieldSchema 의 ocrExtracted:false).
+    """
     s = _strip_date_label(text)
     s = re.sub(r"\([^)]*\)", "", s)                  # 요일 괄호 제거
     s = re.sub(r"(\d)(\d{2}:\d{2})", r"\1 \2", s)    # '06-0221:13' → '06-02 21:13'
-    return re.sub(r"\s+", " ", s).strip(" .~-")
+    iso = _to_iso_datetime(s)
+    return iso.split("T")[0] if iso else ""
 
 
 def _clean_location(text: str) -> str:
@@ -762,7 +773,18 @@ def extract_clean_value(text: str, field: str) -> str:
         return _clean_organizer(text)
     if field == "store_name":
         # 어긋난 괄호 '[주)' → '(주)' 정도만 정돈(상호명 자체는 보존).
-        return text.strip().replace("[주)", "(주)").replace("(주]", "(주)")
+        t = text.strip().replace("[주)", "(주)").replace("(주]", "(주)")
+
+        # **라벨을 떼고, 라벨만 남으면 드롭한다.**
+        # STORE_KEYWORDS 는 상호를 가리키는 *라벨*("상호"/"매장"/"가맹점")인데
+        # 종전에는 그 라벨이 붙은 블록을 store_name 으로 분류만 하고 값을 그대로 뒀다.
+        # 실측(IC신용승인 영수증): 가게 이름 칸에 **"가맹점"** 이 들어갔다 — 라벨이
+        # 값 자리를 차지하면 사용자는 그것이 인식된 상호인 줄 알고 그대로 저장한다.
+        # 영수증은 "가맹점 : 김밥천국" 처럼 한 줄에 오기도, 라벨만 한 블록이기도 하다.
+        t = re.sub(r"^\s*(?:상\s*호|매\s*장|가\s*맹\s*점)\s*(?:명)?\s*[:：)\]]?\s*", "", t)
+        if not t or t in ("상호", "매장", "가맹점", "상호명"):
+            return ""
+        return t
     if field == "job_title":
         t = text.strip()
         # 짧은 비한글 노이즈("FP" 등) 드롭: 한/영 직책키워드 어디에도 없으면 의심.
@@ -1297,6 +1319,18 @@ def classify_text_block_for_receipt(text: str) -> str:
                 return "total_amount"
 
     # 2) 날짜 패턴 확인 → 구매일자
+    #
+    #    **전화번호를 먼저 배제한다.** DATE_PATTERN 의 두 번째 교대(`\d{1,2}[.\-/]\d{1,2}`)가
+    #    전화번호 안의 숫자쌍에 그대로 매치된다 — "+82 53-759-3560" 의 "53-759",
+    #    "010-1234-5678" 의 "10-1234" 가 날짜로 보인다. 실측(앱 화면)에서
+    #    구매일자 칸에 "+82 53-759-3560" 이 들어갔고, 앱의 date 검증(YYYY-MM-DD)에
+    #    걸려 저장 버튼이 비활성이 됐다. 영수증에는 가게 전화번호가 거의 항상 있으므로
+    #    실사용에서 반드시 재현된다.
+    #    _intl_to_domestic 을 먼저 태워 "+82 53-…" 형태도 국내표기로 보고 판정한다.
+    _ptext = _intl_to_domestic(text_stripped)
+    if MOBILE_PATTERN.search(_ptext) or LANDLINE_PATTERN.search(_ptext):
+        return "unknown"
+
     if DATE_PATTERN.search(text_stripped):
         return "purchase_date"
 
