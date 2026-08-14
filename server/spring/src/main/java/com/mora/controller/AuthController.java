@@ -3,6 +3,7 @@ package com.mora.controller;
 import com.mora.dto.*;
 import com.mora.entity.User;
 import com.mora.security.JwtUtil;
+import com.mora.security.PasswordChangeRateLimiter;
 import com.mora.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -71,10 +72,12 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtUtil jwtUtil;
+    private final PasswordChangeRateLimiter passwordChangeRateLimiter;
 
-    public AuthController(AuthService authService, JwtUtil jwtUtil) {
+    public AuthController(AuthService authService, JwtUtil jwtUtil, PasswordChangeRateLimiter passwordChangeRateLimiter) {
         this.authService = authService;
         this.jwtUtil = jwtUtil;
+        this.passwordChangeRateLimiter = passwordChangeRateLimiter;
     }
 
     /**
@@ -125,6 +128,47 @@ public class AuthController {
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.fail("Invalid token"));
+        }
+    }
+
+    // API-04. 닉네임 변경
+    @PatchMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> changeName(
+            HttpServletRequest request, @RequestBody ChangeNameRequest body) {
+        try {
+            String header = request.getHeader("Authorization");
+            if (header == null || !header.startsWith("Bearer "))
+                return ResponseEntity.status(401).body(ApiResponse.fail("Token required"));
+
+            UUID userId = jwtUtil.getUserId(header.substring(7));
+            User user = authService.changeName(userId, body.getName());
+            UserResponse response = new UserResponse(user.getId(), user.getEmail(), user.getName(), user.getPicture());
+            return ResponseEntity.ok(ApiResponse.ok(response));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Name change failed"));
+        }
+    }
+
+    // API-05. 비밀번호 변경. rate limit이 인증보다 먼저 돈다
+    @PatchMapping("/me/password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            HttpServletRequest request, @RequestBody ChangePasswordRequest body) {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer "))
+            return ResponseEntity.status(401).body(ApiResponse.fail("Token required"));
+
+        String token = header.substring(7);
+        String key = PasswordChangeRateLimiter.resolveKey(request.getRemoteAddr(), token);
+        if (!passwordChangeRateLimiter.tryConsume(key)) {
+            return ResponseEntity.status(429).body(ApiResponse.fail("Too many requests"));
+        }
+
+        try {
+            UUID userId = jwtUtil.getUserId(token);
+            authService.changePassword(userId, body.getCurrentPassword(), body.getNewPassword());
+            return ResponseEntity.ok(ApiResponse.ok(null));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.fail("Password change failed"));
         }
     }
 
