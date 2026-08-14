@@ -29,6 +29,9 @@ public interface BusinessCardRepository extends JpaRepository<BusinessCard, UUID
 
     Page<BusinessCard> findByUserIdAndGroupIdIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
+    // API-62 전체 삭제에서 씀
+    long deleteByUserId(UUID userId);
+
     // 필드별 pg_trgm 유사도 검색, GREATEST로 최고 점수만 채택
     @Query(value = """
             SELECT bc.*,

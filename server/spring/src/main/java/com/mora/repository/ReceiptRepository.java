@@ -25,6 +25,9 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Integer> {
     @EntityGraph(attributePaths = "items")
     Optional<Receipt> findByIdAndUserId(Integer id, UUID userId);
 
+    // API-62 전체 삭제에서 씀 (items는 cascade+orphanRemoval로 같이 지워짐)
+    long deleteByUserId(UUID userId);
+
     @Query(value = """
             SELECT r.*,
                 GREATEST(
