@@ -71,3 +71,4 @@ server/uploads/
 server/ocr/work_full/
 server/ocr/bench_full.json
 server/ocr/work_cls/
+server/ocr/work_gt/

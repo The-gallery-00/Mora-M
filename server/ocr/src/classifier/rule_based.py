@@ -314,6 +314,32 @@ EVENT_START_KEYWORDS = ["일시", "시작", "개최", "행사일", "기간"]
 # 행사 종료/마감 키워드
 EVENT_END_KEYWORDS = ["마감", "접수", "신청기한", "deadline", "모집기간", "종료", "까지"]
 
+# 선행 물결표/화살표 = "그날까지". 라벨 접두어가 붙어 있어도 인정한다
+# ("접수 ~7.31.", "· ~ 7.31.", "▶~7.31."). 물결표 종류는 OCR 이 흔히 바꿔 쓴다
+# (~ 물결, ∼ U+223C, 〜 U+301C, - 하이픈은 범위로도 쓰여 제외).
+_LEADING_RANGE_MARK = re.compile(r"^[^\d]{0,12}?[~∼〜–—]\s*(?=\d)")
+
+# ── 포스터 섹션 라벨 ────────────────────────────────────────────────────────
+#
+# 포스터는 "라벨 + 그 아래 값" 이라는 구획 구조로 인쇄된다. 실측(성별균형 국민제안
+# 공모전 포스터)에서 같은 화면에 날짜가 두 벌 있었다:
+#     [공모기간]  2026.  6.10.(수)  ~7.31.(금)
+#     [결과발표]  2026. 9월
+# 텍스트만 보면 둘 다 날짜라 구별할 수 없다. 실제로 "2026.9월" 이 confidence 로
+# 이겨 행사 시작일 자리를 차지하고 "6.10.(수)" 를 밀어냈다.
+#
+# 구별의 근거는 텍스트가 아니라 **어느 라벨 밑에 있는가**다. bbox 로 가장 가까운
+# 섹션 라벨을 찾아 그 라벨이 기간 라벨이면 행사일로, 아니면 버린다.
+_PERIOD_LABELS = re.compile(
+    r"공모\s*기간|접수\s*기간|모집\s*기간|신청\s*기간|응모\s*기간|행사\s*기간|"
+    r"교육\s*기간|기\s*간|일\s*시|행사\s*일|공모\s*일정|접수"
+)
+# 날짜가 있어도 **행사일이 아닌** 섹션. 결과발표·심사·시상 일정이 여기 걸린다.
+_NON_PERIOD_LABELS = re.compile(
+    r"결과\s*발표|발\s*표|심\s*사|시\s*상|수\s*상|당첨|공지|문\s*의|"
+    r"오리엔테이션|교육\s*일|설명\s*회"
+)
+
 # ========== 영수증 전용 패턴 ==========
 
 # 합계 키워드
@@ -1347,6 +1373,14 @@ def classify_text_block_for_poster(text: str) -> str:
     # 6) 날짜 패턴이 있으면 키워드로 event_end_date vs event_start_date 구분
     has_date = DATE_PATTERN.search(text_stripped)
     if has_date:
+        # **선행 물결표는 "그날까지" 다.** "~7.31.(금)" 은 종료일이지 시작일이 아니다.
+        # 포스터에서 "접수 ~7.31." 처럼 시작일을 생략하는 표기가 매우 흔한데,
+        # 종전에는 "까지" 만 종료 키워드로 봐서 이 형태가 전부 시작일로 잡혔다.
+        # 날짜가 **하나뿐일 때만** 본다 — "6.10 ~ 7.31" 처럼 둘이면 범위라
+        # 아래 분기와 _clean_event_date 의 role 처리가 앞/뒤를 갈라 준다.
+        if _LEADING_RANGE_MARK.match(text_stripped) and len(DATE_PATTERN.findall(text_stripped)) == 1:
+            return "event_end_date"
+
         for kw in EVENT_END_KEYWORDS:
             if kw in lower:
                 return "event_end_date"
@@ -1868,6 +1902,10 @@ def classify_all_blocks_for_type(text_blocks: list[dict], document_type: str = "
         if document_type == "POSTER" and field == "unknown":
             title_candidates.append(entry)
 
+    # 포스터: 날짜를 **가장 가까운 섹션 라벨**에 귀속시킨다.
+    if document_type == "POSTER":
+        _reassign_poster_dates(results)
+
     # 포스터에서 title이 명시적으로 분류된 블록이 없으면 후보를 title로 승격
     if document_type == "POSTER" and title_candidates:
         has_title = any(r["field"] == "title" for r in results)
@@ -1876,6 +1914,84 @@ def classify_all_blocks_for_type(text_blocks: list[dict], document_type: str = "
                 entry["field"] = "title"
 
     return results
+
+
+def _bbox_center(bbox):
+    """폴리곤 bbox 의 중심 (cx, cy). 형식이 이상하면 None."""
+    if not bbox:
+        return None
+    try:
+        xs = [float(p[0]) for p in bbox]
+        ys = [float(p[1]) for p in bbox]
+    except (TypeError, IndexError, ValueError):
+        return None
+    if not xs or not ys:
+        return None
+    return (sum(xs) / len(xs), sum(ys) / len(ys))
+
+
+def _reassign_poster_dates(results: list[dict]) -> None:
+    """날짜 블록을 가장 가까운 섹션 라벨에 귀속시킨다 (results 를 제자리 수정).
+
+    **왜 텍스트만으로는 안 되는가.** 포스터 한 장에 날짜가 여러 벌 있고, 텍스트만
+    보면 전부 똑같은 날짜다. 실측(성별균형 국민제안 공모전):
+        [공모기간]  2026.  6.10.(수)  ~7.31.(금)
+        [결과발표]  2026. 9월
+    "2026.9월" 이 confidence 로 이겨 행사 시작일 자리를 차지하고 "6.10.(수)" 를
+    밀어냈다. 구별의 근거는 텍스트가 아니라 **어느 라벨 밑에 있는가**다.
+
+    판정:
+      · 가장 가까운 라벨이 기간 라벨(_PERIOD_LABELS)   → 행사일로 유지
+      · 가장 가까운 라벨이 비기간 라벨(_NON_PERIOD_LABELS) → unknown 으로 내린다
+        (결과발표·시상 일정은 행사일이 아니다)
+      · 라벨이 하나도 없거나 bbox 가 없으면 **아무것도 하지 않는다** —
+        비-OCR 경로(합성 테스트)와 라벨 없는 포스터에서 회귀가 없다.
+
+    **거리는 유클리드가 아니다.** 포스터 섹션은 세로 열(column)로 나뉘고 라벨이
+    값보다 **위**에 온다. 그래서
+      · 가로 차이(x)를 훨씬 무겁게 본다 — 같은 열이 같은 섹션이다
+      · 라벨보다 위에 있는 값은 그 라벨 소속이 아니다 (아래로만 귀속)
+    실측 좌표가 이 규칙을 요구했다:
+        공모기간(152,858)  6.10(161,1052)  ~7.31(150,1084)   ← x 거의 같음, 아래
+        결과발표(539,858)  2026.9월(538,900)                  ← 같은 열, 아래
+        최우수상(501,1047)                                    ← 6.10 과 y 는 5 차이지만 x 가 340
+    유클리드로 재면 "최우수상" 이 6.10 을 가져간다. 실제로 첫 시도가 그렇게 틀렸다.
+    """
+    labels = []   # (cx, cy, is_period)
+    for r in results:
+        c = _bbox_center(r.get("bbox"))
+        if c is None:
+            continue
+        t = r.get("text") or ""
+        if _NON_PERIOD_LABELS.search(t):
+            labels.append((c[0], c[1], False))
+        elif _PERIOD_LABELS.search(t):
+            labels.append((c[0], c[1], True))
+    if not labels:
+        return
+
+    def score(label, c):
+        """작을수록 가깝다. 같은 열 + 라벨 아래를 강하게 선호한다."""
+        dx = abs(label[0] - c[0])
+        dy = c[1] - label[1]          # 양수 = 값이 라벨 아래
+        if dy < 0:
+            # 라벨보다 위에 있는 값. 섹션 소속으로 보기 어렵다 — 크게 벌점.
+            return abs(dy) * 6 + dx * 8 + 10000
+        return dy + dx * 8
+
+    date_fields = ("event_start_date", "event_end_date")
+    for r in results:
+        if r.get("field") not in date_fields:
+            continue
+        c = _bbox_center(r.get("bbox"))
+        if c is None:
+            continue
+        # 라벨 자신이 날짜를 품은 경우("접수기간 6.10~7.31")는 건드리지 않는다.
+        if _PERIOD_LABELS.search(r.get("text") or ""):
+            continue
+        best = min(labels, key=lambda L: score(L, c))
+        if not best[2]:
+            r["field"] = "unknown"
 
 
 # 포스터 제목 후보에서 제외할 문구.
