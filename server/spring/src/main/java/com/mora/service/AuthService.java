@@ -2,6 +2,7 @@ package com.mora.service;
 
 import com.mora.dto.AuthResponse;
 import com.mora.dto.LoginRequest;
+import com.mora.dto.OAuthProfile;
 import com.mora.dto.SignupRequest;
 import com.mora.entity.BusinessCard;
 import com.mora.entity.User;
@@ -113,7 +114,7 @@ public class AuthService {
      */
     public AuthResponse login(LoginRequest request) {
         // 이메일로 사용자 조회 (없으면 예외)
-        User user = userRepository.findByEmail(normalizeEmail(request.getEmail()))
+        User user = userRepository.findByEmailAndProvider(normalizeEmail(request.getEmail()), "local")
                 .orElseThrow(() -> new RuntimeException("Invalid email or password"));
 
         // 입력된 평문 비밀번호와 저장된 BCrypt 해시를 비교
@@ -124,6 +125,41 @@ public class AuthService {
         // JWT 토큰 생성
         String token = jwtUtil.generateToken(user.getId(), user.getEmail());
 
+        return new AuthResponse(token, user.getId(), user.getEmail(), user.getName());
+    }
+
+    @Transactional
+    public AuthResponse loginWithOAuth(OAuthProfile profile) {
+        String provider = normalizeProvider(profile.provider());
+        String email = normalizeEmail(profile.email());
+        String name = normalizeName(profile.name(), email);
+        String picture = profile.picture() == null ? "" : profile.picture().trim();
+
+        User user = userRepository.findByEmailAndProvider(email, provider)
+                .orElseGet(() -> {
+                    User created = new User();
+                    created.setProvider(provider);
+                    created.setEmail(email);
+                    created.setPasswordHash(null);
+                    created.setName(name);
+                    created.setPicture(picture);
+                    return userRepository.save(created);
+                });
+
+        boolean changed = false;
+        if (user.getName() == null || user.getName().isBlank()) {
+            user.setName(name);
+            changed = true;
+        }
+        if (picture != null && !picture.isBlank() && !picture.equals(user.getPicture())) {
+            user.setPicture(picture);
+            changed = true;
+        }
+        if (changed) {
+            user = userRepository.save(user);
+        }
+
+        String token = jwtUtil.generateToken(user.getId(), user.getEmail());
         return new AuthResponse(token, user.getId(), user.getEmail(), user.getName());
     }
 
@@ -194,6 +230,17 @@ public class AuthService {
         String normalized = email.trim().toLowerCase();
         if (normalized.isBlank()) {
             throw new RuntimeException("Email is required");
+        }
+        return normalized;
+    }
+
+    private String normalizeProvider(String provider) {
+        if (provider == null) {
+            throw new RuntimeException("Provider is required");
+        }
+        String normalized = provider.trim().toLowerCase();
+        if (!normalized.equals("google") && !normalized.equals("kakao") && !normalized.equals("naver")) {
+            throw new RuntimeException("Unsupported provider");
         }
         return normalized;
     }

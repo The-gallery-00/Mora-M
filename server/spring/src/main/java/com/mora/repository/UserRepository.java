@@ -53,6 +53,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     /** 이메일 주소로 사용자를 조회한다. 존재하지 않으면 Optional.empty() 반환. */
     Optional<User> findByEmail(String email);
 
+    /** 이메일과 로그인 제공자로 사용자를 조회한다. 소셜 계정과 로컬 계정을 분리한다. */
+    Optional<User> findByEmailAndProvider(String email, String provider);
+
     /** 해당 이메일로 가입된 사용자가 있는지 확인한다 (회원가입 시 중복 검사용). */
     boolean existsByEmail(String email);
+
+    /** 해당 이메일/제공자 조합으로 가입된 사용자가 있는지 확인한다. */
+    boolean existsByEmailAndProvider(String email, String provider);
 }

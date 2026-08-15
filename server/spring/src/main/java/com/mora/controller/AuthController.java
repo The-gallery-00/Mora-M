@@ -5,10 +5,16 @@ import com.mora.entity.User;
 import com.mora.security.JwtUtil;
 import com.mora.security.PasswordChangeRateLimiter;
 import com.mora.service.AuthService;
+import com.mora.service.GoogleOAuthService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.util.UUID;
 
 /**
@@ -71,13 +77,21 @@ import java.util.UUID;
 public class AuthController {
 
     private final AuthService authService;
+    private final GoogleOAuthService googleOAuthService;
     private final JwtUtil jwtUtil;
     private final PasswordChangeRateLimiter passwordChangeRateLimiter;
+    private final String frontendUrl;
 
-    public AuthController(AuthService authService, JwtUtil jwtUtil, PasswordChangeRateLimiter passwordChangeRateLimiter) {
+    public AuthController(AuthService authService,
+                          GoogleOAuthService googleOAuthService,
+                          JwtUtil jwtUtil,
+                          PasswordChangeRateLimiter passwordChangeRateLimiter,
+                          @Value("${app.frontend-url:mora://auth}") String frontendUrl) {
         this.authService = authService;
+        this.googleOAuthService = googleOAuthService;
         this.jwtUtil = jwtUtil;
         this.passwordChangeRateLimiter = passwordChangeRateLimiter;
+        this.frontendUrl = frontendUrl;
     }
 
     /**
@@ -105,6 +119,21 @@ public class AuthController {
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.fail("Invalid email or password"));
+        }
+    }
+
+    @GetMapping("/google/login")
+    public ResponseEntity<Void> googleLogin() {
+        return redirect(googleOAuthService.authorizationUrl());
+    }
+
+    @GetMapping("/google/callback")
+    public ResponseEntity<Void> googleCallback(@RequestParam("code") String code) {
+        try {
+            AuthResponse response = authService.loginWithOAuth(googleOAuthService.profile(code));
+            return redirect(oauthSuccessUrl(response));
+        } catch (RuntimeException e) {
+            return redirect(oauthFailureUrl());
         }
     }
 
@@ -149,7 +178,14 @@ public class AuthController {
 
             UUID userId = jwtUtil.getUserId(header.substring(7));
             User user = authService.changeName(userId, body.getName());
-            UserResponse response = new UserResponse(user.getId(), user.getEmail(), user.getName(), user.getPicture());
+            UserResponse response = new UserResponse(
+                    user.getId(),
+                    user.getEmail(),
+                    user.getName(),
+                    user.getPicture(),
+                    user.getProvider(),
+                    user.getCreatedAt()
+            );
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.fail("Name change failed"));
@@ -193,5 +229,39 @@ public class AuthController {
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.fail("Account deletion failed"));
         }
+    }
+
+    private ResponseEntity<Void> redirect(String url) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setLocation(URI.create(url));
+        return new ResponseEntity<>(headers, HttpStatus.FOUND);
+    }
+
+    private String oauthSuccessUrl(AuthResponse response) {
+        return UriComponentsBuilder.fromUriString(normalizeFrontendUrl())
+                .path("/dashboard")
+                .queryParam("token", response.getToken())
+                .queryParam("userId", response.getUserId())
+                .queryParam("email", response.getEmail())
+                .queryParam("name", response.getName())
+                .queryParam("provider", "google")
+                .build()
+                .toUriString();
+    }
+
+    private String oauthFailureUrl() {
+        return UriComponentsBuilder.fromUriString(normalizeFrontendUrl())
+                .path("/login")
+                .queryParam("oauth_error", "google")
+                .build()
+                .toUriString();
+    }
+
+    private String normalizeFrontendUrl() {
+        String value = frontendUrl == null || frontendUrl.isBlank() ? "mora://auth" : frontendUrl.trim();
+        while (value.endsWith("/")) {
+            value = value.substring(0, value.length() - 1);
+        }
+        return value;
     }
 }
