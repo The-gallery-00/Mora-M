@@ -274,6 +274,12 @@ export const useScanStore = create<ScanStore>((set, get) => ({
     const requested = options.documentType ?? get().requestedDocType ?? null;
     const documentType = requested && requested !== 'ETC' ? requested : undefined;
 
+    /* 이 스캔의 종류를 **사용자가 정했는가.**
+       결과 화면 탭(userChosen)과 촬영 화면 힌트 칩(requestedDocType) 둘 다 해당한다.
+       아래 typeSource 판정이 이 값을 쓴다 — 사용자가 고른 종류에 "확인해 주세요" 를
+       띄우지 않기 위해서다. */
+    const userPicked = Boolean(options.userChosen || documentType);
+
     const handle = scanImage(prepared, {
       ...(documentType ? { documentType } : {}),
       onProgress: (ratio) => {
@@ -316,12 +322,16 @@ export const useScanStore = create<ScanStore>((set, get) => ({
       uploadProgress: 1,
       docType: scan.type,
       /* 종류의 **출처**를 그대로 기록한다. 셋을 섞지 않는 것이 이 줄의 전부다.
-         · classified === false → `default`: 서버가 판정을 하지 않았다. `type` 은 명함 전용
-           파이프라인의 기본값이고 confidence 0 은 측정값 없음이다. "저신뢰" 와 다르다
-           (→ tier `unclassified`: 확인 바는 띄우되 폼·저장은 잠그지 않는다).
+         · 사용자가 골랐다 → `manual`: 결과 화면 탭(userChosen)뿐 아니라 **촬영 화면
+           힌트 칩(requestedDocType)도 사용자의 선택**이다. 이것을 'default' 로 두면
+           사용자가 방금 고른 종류를 두고 "문서 종류를 확인해 주세요" 배너가 뜬다 —
+           이미 한 일을 다시 하라는 안내라 오류로 읽힌다.
+         · classified === false → `default`: 서버가 판정을 하지 않았고 사용자도 고르지
+           않았다. `type` 은 서버 기본값이고 confidence 0 은 측정값 없음이다.
+           "저신뢰" 와 다르다 (→ tier `unclassified`: 확인 바는 띄우되 폼·저장은 잠그지 않는다).
          · CLS-05 — 티켓 confidence 1.0 은 키워드 하드코딩이라 실측이 아니다.
          · 그 외 → `auto`: 서버가 실제로 판정했고 confidence 가 실측값이다. */
-      typeSource: options.userChosen
+      typeSource: userPicked
         ? 'manual'
         : !scan.classified
           ? 'default'
