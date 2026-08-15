@@ -65,6 +65,7 @@ os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
 
 from src.pipeline.extract_pipeline import BusinessCardPipeline
 from src.classifier.rule_based import (
+    DATE_PATTERN,
     classify_all_blocks_for_type,
     extract_clean_value,
 )
@@ -86,6 +87,9 @@ _JOIN_FIELDS = frozenset({
     # 영수증
     "store_name",
 })
+
+# 포스터 행사일. 값 선택에 범위 우선 규칙이 붙는 필드다(_aggregate 참조).
+_DATE_FIELDS = frozenset({"event_start_date", "event_end_date"})
 
 
 class ParsingSkill:
@@ -150,7 +154,18 @@ class ParsingSkill:
                         parts.append(t)
                 value = " ".join(parts)
             else:
-                best = max(blocks, key=lambda b: b.get("confidence", 0.0))
+                pool = blocks
+                if field in _DATE_FIELDS:
+                    # 포스터의 접수·행사 기간은 **범위**로 적힌다("7.1.(수)~7.17.(금)").
+                    # 단독 날짜는 발표·설명회 같은 부수 일정인 경우가 많은데,
+                    # confidence 만 보면 짧고 선명한 단독 날짜가 이겨 버린다
+                    # (실측 ck_202606040017: '9.12.' 가 '7.1.~7.17.' 을 밀어냈다).
+                    # 범위 표기가 하나라도 있으면 그 안에서만 고른다.
+                    ranged = [b for b in blocks
+                              if len(DATE_PATTERN.findall(b.get("text") or "")) >= 2]
+                    if ranged:
+                        pool = ranged
+                best = max(pool, key=lambda b: b.get("confidence", 0.0))
                 value = best["text"]
 
             value = (extract_clean_value(value, field) or "").strip()

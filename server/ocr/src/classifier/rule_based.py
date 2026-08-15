@@ -107,6 +107,11 @@ DATE_PATTERN = re.compile(
     r"|\d{1,2}[월.\-/]\s*\d{1,2}[일]?"
 )
 
+# 항목 번호("1.1차서류검토", "2.2차전문가심사", "3.3단계"). 날짜가 아니다.
+# DATE_PATTERN 의 "MM.DD" 교대와 형태가 같아서, 걸러 주지 않으면 심사 절차
+# 목록이 통째로 행사일이 된다. 뒤따르는 차/단계/회/기가 날짜와 구별해 준다.
+_LIST_ORDINAL = re.compile(r"\d{1,2}\s*[.)]\s*\d{1,2}\s*(?:차|단계|회|기)")
+
 # 시간: "14:30", "09:00", "오후 2시" 등
 TIME_PATTERN = re.compile(
     r"\d{1,2}\s*:\s*\d{2}"
@@ -351,8 +356,12 @@ _PERIOD_LABELS = re.compile(
     r"교육\s*기간|기\s*간|일\s*시|행사\s*일|공모\s*일정|접수"
 )
 # 날짜가 있어도 **행사일이 아닌** 섹션. 결과발표·심사·시상 일정이 여기 걸린다.
+#
+# "수상" 은 뺐다. 상 **이름**에 그대로 들어있어서("최우수상", "우수상") 시상 내역
+# 나열이 통째로 섹션 라벨 행세를 했다 — 실측에서 '최우수상(3명)-상금20만원' 이
+# 라벨로 잡혀 근처 날짜를 전부 죽였다. "시상" 은 남긴다("시상내역"/"시상금").
 _NON_PERIOD_LABELS = re.compile(
-    r"결과\s*발표|발\s*표|심\s*사|시\s*상|수\s*상|당첨|공지|문\s*의|"
+    r"결과\s*발표|발\s*표|심\s*사|시\s*상|당첨|공지|문\s*의|"
     r"오리엔테이션|교육\s*일|설명\s*회"
 )
 
@@ -1398,7 +1407,11 @@ def classify_text_block_for_poster(text: str) -> str:
             return "location"
 
     # 6) 날짜 패턴이 있으면 키워드로 event_end_date vs event_start_date 구분
-    has_date = DATE_PATTERN.search(text_stripped)
+    #    항목 번호("1.1차서류검토")를 먼저 지운다 — DATE_PATTERN 의 "MM.DD" 교대에
+    #    그대로 걸려 1월 1일·2월 2일 같은 행사일이 만들어졌다(실측 ck_202605200025:
+    #    '2.2차전문가심사' 가 2026-02-02 로 잡혀 진짜 시작일 6.18 을 밀어냈다).
+    date_probe = _LIST_ORDINAL.sub(" ", text_stripped)
+    has_date = DATE_PATTERN.search(date_probe)
     if has_date:
         # **선행 물결표는 "그날까지" 다.** "~7.31.(금)" 은 종료일이지 시작일이 아니다.
         # 포스터에서 "접수 ~7.31." 처럼 시작일을 생략하는 표기가 매우 흔한데,
@@ -1888,6 +1901,19 @@ def classify_all_blocks_for_type(text_blocks: list[dict], document_type: str = "
                  "bbox": b.get("bbox"), "block_index": b["block_index"],
                  "field": "unknown"} for b in text_blocks]
 
+    # 포스터도 혼합 블록을 쪼갠다.
+    #
+    # 종전에는 세그멘터가 명함에서만 돌았고, 그래서 포스터의 한 블록은 필드 하나만
+    # 가질 수 있었다. 포스터 문의처는 OCR 이 한 줄로 읽는 일이 매우 흔한데
+    #     "문의 02-123-4567 info@abc.or.kr"
+    # 이 블록은 contact_email 로만 분류되어 **전화번호가 통째로 사라졌다**
+    # (실측 12건: '042-479-4153, 4148 lsy@dicia.or.kr' 등).
+    # 세그멘터는 패턴(전화/이메일/URL)이 없는 블록을 원본 그대로 통과시키므로
+    # 제목·주최 같은 텍스트 필드는 영향받지 않는다. bbox 는 원본을 물려받아
+    # 날짜의 섹션 귀속(_reassign_poster_dates)도 그대로 동작한다.
+    if document_type == "POSTER":
+        text_blocks = segment_text_blocks(text_blocks)
+
     # 각 블록을 분류하고 결과 리스트 생성
     results = []
     title_candidates: list[dict] = []
@@ -1957,6 +1983,27 @@ def _bbox_center(bbox):
     return (sum(xs) / len(xs), sum(ys) / len(ys))
 
 
+# 날짜를 섹션 라벨에 귀속시킬 때 인정하는 최대 거리 점수(아래 score 기준).
+# 실측 정상 귀속이 50~270 이라 그 3배로 둔다 — 같은 섹션은 통과, 화면 반대편은 차단.
+_LABEL_ATTACH_MAX = 800.0
+
+
+def _is_section_label(text: str) -> bool:
+    """섹션 **라벨** 모양인가. 값을 품은 긴 문장은 라벨이 아니다.
+
+    비기간 라벨은 근처 날짜를 **강등**시키는 파괴적 권한을 가지므로 모양을
+    엄격히 본다. 실측에서 '최우수상(3명)-상금20만원' 과
+    '대상300만원,최우수상100만원' 이 라벨로 잡혀 날짜를 죽였다 — 저건 시상
+    **내역**(값)이지 섹션 제목이 아니다. 라벨은 짧고 숫자가 없다.
+
+    기간 라벨에는 이 검사를 적용하지 않는다. "접수기간 6.10~7.31" 처럼 라벨과
+    값이 한 블록에 붙어 나오는 표기가 흔한데, 그것도 기간 섹션의 앵커로는
+    유효하기 때문이다(강등이 아니라 유지 방향이라 위험하지 않다).
+    """
+    t = (text or "").strip()
+    return len(t) <= 12 and not any(ch.isdigit() for ch in t)
+
+
 def _reassign_poster_dates(results: list[dict]) -> None:
     """날짜 블록을 가장 가까운 섹션 라벨에 귀속시킨다 (results 를 제자리 수정).
 
@@ -1985,16 +2032,24 @@ def _reassign_poster_dates(results: list[dict]) -> None:
     유클리드로 재면 "최우수상" 이 6.10 을 가져간다. 실제로 첫 시도가 그렇게 틀렸다.
     """
     labels = []   # (cx, cy, is_period)
+    has_period = False
     for r in results:
         c = _bbox_center(r.get("bbox"))
         if c is None:
             continue
         t = r.get("text") or ""
-        if _NON_PERIOD_LABELS.search(t):
+        if _NON_PERIOD_LABELS.search(t) and _is_section_label(t):
             labels.append((c[0], c[1], False))
         elif _PERIOD_LABELS.search(t):
+            # 기간 라벨은 값을 품고 있어도 앵커로 인정한다("접수기간 6.10~7.31").
             labels.append((c[0], c[1], True))
-    if not labels:
+            has_period = True
+    # **기간 라벨이 하나도 없으면 아무것도 하지 않는다.** 이 함수의 판단은
+    # "기간 섹션보다 발표·시상 섹션에 가깝다" 는 상대 비교인데, 비교 대상이
+    # 없으면 근거가 성립하지 않는다. 실측에서 이 가드가 없어 기간 라벨이 없는
+    # 포스터의 날짜가 통째로 사라졌다(ck_202606100069: '시상내역' 만 있고
+    # '6.09~6.25' 가 유일한 날짜였는데 강등되어 시작일·종료일 둘 다 빔).
+    if not has_period:
         return
 
     def score(label, c):
@@ -2017,6 +2072,13 @@ def _reassign_poster_dates(results: list[dict]) -> None:
         if _PERIOD_LABELS.search(r.get("text") or ""):
             continue
         best = min(labels, key=lambda L: score(L, c))
+        # 가장 가까운 라벨이 **너무 멀면** 어느 섹션 소속인지 모르는 것이다.
+        # 모를 때는 건드리지 않는다 — 강등은 값을 없애는 파괴적 조작이라
+        # 근거가 확실할 때만 한다. 실측 정상 귀속의 점수는 50~270 범위였다
+        # (공모기간→6.10 이 266). 상한을 그 3배로 둬서 같은 섹션은 통과시키고
+        # 화면 반대편 라벨은 막는다.
+        if score(best, c) > _LABEL_ATTACH_MAX:
+            continue
         if not best[2]:
             r["field"] = "unknown"
 
