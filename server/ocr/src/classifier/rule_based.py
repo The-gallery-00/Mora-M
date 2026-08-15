@@ -1669,11 +1669,43 @@ def _classify_and_split_ticket_blocks(text_blocks: list[dict]) -> list[dict]:
     if layout_result:
         return layout_result
 
+    # 라벨과 값이 **다른 블록**으로 온 경우를 먼저 해소한다.
+    #
+    # 고속·시외버스 앱 화면이 이 형태다(실측, 0필드로 나온 유일한 티켓):
+    #     7 "출발"        8 "서울경점표완료"
+    #     9 "도착"       10 "동대구"
+    #    12 "출발일"     13 "2026.02.28"
+    #    16 "시간"       17 "10:40"
+    # _TICKET_LABEL_MAP 은 "라벨:값" 이 한 블록일 때만 동작하므로 여기서는 전멸한다.
+    # 영수증에서 쓴 것과 같은 접근이다 — 라벨 블록 뒤 3블록 안의 첫 비어있지 않은
+    # 블록을 값으로 본다.
+    label_field: dict[int, str] = {}
+    _n = len(text_blocks)
+    for i, b in enumerate(text_blocks):
+        t = re.sub(r"\s+", "", (b.get("text") or "").strip())
+        # 블록 **전체**가 라벨일 때만 인정한다. "출발일 2026.02.28" 처럼 값이 붙어
+        # 있으면 기존 라벨:값 경로가 처리한다.
+        target = _TICKET_LABEL_MAP.get(t)
+        if target is None and t in ("시간", "출발시각", "도착시각"):
+            target = "departure_time" if t != "도착시각" else "arrival_time"
+        if not target or target == "unknown":
+            continue
+        for j in range(i + 1, min(i + 4, _n)):
+            vt = (text_blocks[j].get("text") or "").strip()
+            if not vt:
+                continue
+            # 값 자리에 또 라벨이 오면 짝짓지 않는다.
+            if re.sub(r"\s+", "", vt) in _TICKET_LABEL_MAP:
+                break
+            if j not in label_field:
+                label_field[j] = target
+            break
+
     # 라벨:값 기반 파싱 (카카오 알림톡 등)
     results = []
-    for block in text_blocks:
+    for idx, block in enumerate(text_blocks):
         text = block["text"].strip()
-        field = classify_text_block_for_ticket(text)
+        field = label_field.get(idx) or classify_text_block_for_ticket(text)
         clean_text = extract_clean_value(text, field)
         base = {
             "confidence": block.get("confidence", 0.0),
