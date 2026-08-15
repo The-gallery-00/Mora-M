@@ -47,8 +47,8 @@ MORA 는 명함·티켓·포스터·영수증을 촬영하면 문자를 인식�
 
 ## 문의
 
-- 이메일: support@mora.app
-- 소스 저장소: https://github.com/lavermeanyou/OCR_FOR_MORA
+- 이메일: cvgy1915@naver.com
+- 소스 저장소: https://github.com/The-gallery-00/Mora-M
 
 ---
 

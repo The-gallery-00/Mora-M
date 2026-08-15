@@ -156,15 +156,18 @@ function DocumentGridCardBase({
           {showTypeBadge ? <DocTypeBadge docType={docType} style={{ marginTop: 2 }} /> : null}
         </View>
 
-        {subtitle ? (
-          <Text
-            className="text-caption text-text-muted"
-            numberOfLines={1}
-            maxFontSizeMultiplier={1.3}
-          >
-            {subtitle}
-          </Text>
-        ) : null}
+        {/* 영수증처럼 부제가 비어도 한 줄 높이를 남겨 같은 행의 카드 최소 높이를 맞춘다. */}
+        <View style={{ minHeight: fontScale.caption.line }}>
+          {subtitle ? (
+            <Text
+              className="text-caption text-text-muted"
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.3}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
       </View>
     </Pressable>
   );

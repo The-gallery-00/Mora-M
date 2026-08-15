@@ -1,5 +1,6 @@
 package com.mora.dto;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -23,7 +24,9 @@ import java.util.UUID;
  *   "id": "550e8400-...",
  *   "email": "user@example.com",
  *   "name": "홍길동",
- *   "picture": "https://example.com/photo.jpg"
+ *   "picture": "https://example.com/photo.jpg",
+ *   "provider": "local",
+ *   "createdAt": "2026-07-28T05:06:26.192228"
  * }
  *
  * [메서드 목록]
@@ -46,15 +49,21 @@ public class UserResponse {
     private String name;
     /** 프로필 사진 URL (없으면 null) */
     private String picture;
+    /** 로그인 제공자 (`local`, `google`, `kakao`, `naver`) */
+    private String provider;
+    /** 계정 생성 일시 */
+    private LocalDateTime createdAt;
 
     public UserResponse() {
     }
 
-    public UserResponse(UUID id, String email, String name, String picture) {
+    public UserResponse(UUID id, String email, String name, String picture, String provider, LocalDateTime createdAt) {
         this.id = id;
         this.email = email;
         this.name = name;
         this.picture = picture;
+        this.provider = provider;
+        this.createdAt = createdAt;
     }
 
     public UUID getId() {
@@ -87,5 +96,21 @@ public class UserResponse {
 
     public void setPicture(String picture) {
         this.picture = picture;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

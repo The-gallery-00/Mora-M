@@ -38,7 +38,7 @@ import { spacing } from '@/theme/scale';
 const LOAD_FAILED = '문서를 불러오지 못했습니다.';
 const OPEN_WEB = '웹에서 보기';
 const LINK_FAILED = '링크를 열 수 없습니다.';
-const FALLBACK_URL = 'https://github.com/lavermeanyou/OCR_FOR_MORA';
+const FALLBACK_URL = 'https://github.com/The-gallery-00/Mora-M';
 
 /* ══════════════════════════════════════════════════ 인라인 파서
 

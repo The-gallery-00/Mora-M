@@ -31,8 +31,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { Button, Chip, SegmentedControl, TextField, toast } from '@/components/ui';
+import { Toggle } from '@/components/settings';
 import { documentKeys } from '@/features/documents';
 import {
   DOCUMENT_TYPES,
@@ -71,6 +73,15 @@ const DOC_TONE: Record<DocumentType, 'card' | 'ticket' | 'poster' | 'receipt' | 
 
 const TYPE_OPTIONS = DOCUMENT_TYPES.map((value) => ({ value, label: TYPE_LABELS[value] }));
 
+function ZoomIcon({ color = '#FFFFFF' }: { color?: string }) {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Circle cx={11} cy={11} r={6.5} stroke={color} strokeWidth={2} />
+      <Path d="M16 16L21 21M8.5 11h5M11 8.5v5" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 export default function ScanReviewScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -96,9 +107,12 @@ export default function ScanReviewScreen() {
     clearFailure,
   } = useScan();
 
-  const previewUri = adjustedUri ?? sourceUri;
+  const editedPreviewUri = adjustedUri ?? sourceUri;
+  const canShowOriginal = Boolean(sourceUri && adjustedUri && sourceUri !== adjustedUri);
   const saving = step === 'saving';
   const [rawOpen, setRawOpen] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const previewUri = showOriginal && sourceUri ? sourceUri : editedPreviewUri;
 
   // 마운트 시점의 스토어 값을 폼 초기값으로 고정한다(이후 소유권은 폼에 있다).
   const initialValues = useRef<ParsedFields>(values);
@@ -177,6 +191,18 @@ export default function ScanReviewScreen() {
     setValues(collect());
     confirmDiscardScan(leaveToCamera);
   }, [collect, leaveToCamera, setValues]);
+
+  const openImageViewer = useCallback(() => {
+    if (!previewUri) return;
+    router.push({
+      pathname: '/viewer',
+      params: {
+        uri: previewUri,
+        title: `${TYPE_LABELS[docType]} ${showOriginal ? '원본' : '편집된'} 이미지`,
+        docType,
+      },
+    });
+  }, [docType, previewUri, router, showOriginal]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -312,24 +338,49 @@ export default function ScanReviewScreen() {
       >
         {/* ── 이미지 스트립 (다크에서도 라이트 표면 유지) ──────────────── */}
         {previewUri ? (
-          <View
-            className="border border-border-subtle"
-            style={{
-              height: STRIP_HEIGHT,
-              borderRadius: radius.card,
-              padding: 4, // 사방 4dp 매트
-              // 이 컨테이너만 테마를 따르지 않는다 → className 이 아니라 라이트 토큰을 직접 읽는다.
-              // HEX 는 여전히 tokens.ts 한 곳에서만 나온다(§13-0).
-              backgroundColor: themes.light.surface.base,
-              overflow: 'hidden',
-            }}
-          >
-            <Image
-              source={{ uri: previewUri }}
-              contentFit="contain"
-              style={{ width: '100%', height: '100%', borderRadius: radius.md }}
-              accessibilityLabel={`${TYPE_LABELS[docType]} 이미지`}
-            />
+          <View>
+            <View
+              className="border border-border-subtle"
+              style={{
+                height: STRIP_HEIGHT,
+                borderRadius: radius.card,
+                padding: 4, // 사방 4dp 매트
+                // 이 컨테이너만 테마를 따르지 않는다 → className 이 아니라 라이트 토큰을 직접 읽는다.
+                // HEX 는 여전히 tokens.ts 한 곳에서만 나온다(§13-0).
+                backgroundColor: themes.light.surface.base,
+                overflow: 'hidden',
+              }}
+            >
+              <Image
+                source={{ uri: previewUri }}
+                contentFit="contain"
+                style={{ width: '100%', height: '100%', borderRadius: radius.md }}
+                accessibilityLabel={`${TYPE_LABELS[docType]} ${showOriginal ? '원본' : '편집된'} 이미지`}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="이미지 확대해서 보기"
+                onPress={openImageViewer}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                className="absolute bottom-2 right-2 h-10 w-10 items-center justify-center rounded-full bg-black/50"
+                style={{ zIndex: 2 }}
+                testID="scan-review-image-zoom"
+              >
+                <ZoomIcon />
+              </Pressable>
+            </View>
+
+            {canShowOriginal ? (
+              <View className="mt-2 flex-row items-center justify-end gap-2 px-1">
+                <Text className="text-body-sm text-text-secondary">원본 이미지</Text>
+                <Toggle
+                  value={showOriginal}
+                  onValueChange={setShowOriginal}
+                  accessibilityLabel="원본 이미지 보기"
+                  testID="scan-review-original-toggle"
+                />
+              </View>
+            ) : null}
           </View>
         ) : null}
 

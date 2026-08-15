@@ -1,29 +1,13 @@
 // app/doc/[type]/[id].tsx — SCR-19 · 문서 상세
 //
 // 정본: wiki/design/Screen Specs.md SCR-19 (유형별 필드 표 · 필드 탭 액션 표 · 상태표 · 인터랙션표)
-//       wiki/design/Mobile UX Guide.md UX-09 (표현 분기) · UX-15(파괴적 확인은 Alert) · §7-2 문구표
+//       wiki/design/Mobile UX Guide.md UX-15(파괴적 확인은 Alert) · §7-2 문구표
 //
-// ── 표현이 유형별로 갈리는 이유 (UX-09) ────────────────────────────────────────
-// 필드 3~7개(티켓·영수증) → **바텀시트** `snapPoints ['55%','92%']`
-// 필드 10개 이상 + 큰 이미지(명함·포스터) → **풀스크린 상세 화면**
-// 둘은 본문(`DetailContent`)을 공유하고 껍데기만 다르다. 두 벌로 나누면 라벨·순서가 반드시 어긋난다.
-//
-// ── 라우트 옵션을 `<Stack.Screen>` 으로 거는 이유 ────────────────────────────
-// `app/doc/_layout.tsx` 는 이 작업의 담당 범위 밖이고 루트 Stack 은 `headerShown:false` 뿐이다.
-// 그래서 시트 모드에 필요한 `transparentModal` 을 화면 자신이 선언한다. 나중에 셸 담당이
-// `app/doc/_layout.tsx` 를 만들면 이 옵션을 그쪽으로 옮기면 된다.
-// 시트 자체는 `SortSheet` 와 같은 이유로 RN `Modal` 안에서 그린다 — 루트에
-// `BottomSheetModalProvider` 가 없기 때문이다(루트 파일도 담당 범위 밖).
+// 네 문서 유형은 같은 풀스크린 상세 화면과 본문(`DetailContent`)을 공유한다.
 //
 // ── 없는 패키지에 의존하지 않는다 (패키지 설치 금지) ────────────────────────
 // `⋯` 메뉴의 `연락처에 저장`(expo-contacts) · `캘린더에 추가`(expo-calendar)는 패키지가 없어
 // 이번 범위에서 제외한다. `공유`는 RN 내장 `Share` 로 구현했다.
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetScrollView,
-  useBottomSheetSpringConfigs,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
 import NetInfo from '@react-native-community/netinfo';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
@@ -35,12 +19,9 @@ import {
   useMemo,
   useRef,
   useState,
-  type ComponentRef,
   type ReactNode,
-  type Ref,
 } from 'react';
 import { Alert, Linking, Modal, Pressable, ScrollView, Share, Text, View } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 
@@ -71,9 +52,6 @@ import { radius, spacing } from '@/theme/scale';
 const IMAGE_HEIGHT = 200;
 /** 이미지가 없을 때의 회색 박스 최소 높이 (상태표 `빈(이미지 없음)`). */
 const IMAGE_EMPTY_MIN_HEIGHT = 160;
-
-/** UX-09 — 필드가 적은 두 종류만 시트로 띄운다. */
-const SHEET_TYPES: readonly DocumentType[] = ['TICKET', 'RECEIPT'];
 
 /**
  * 삭제 확인 다이얼로그 문구.
@@ -112,12 +90,20 @@ function PencilIcon({ color }: { color: string }) {
   );
 }
 
-function MoreIcon({ color }: { color: string }) {
+/** lucide `share-2` 공식 path. */
+function ShareIcon({ color }: { color: string }) {
   return (
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Circle cx={5} cy={12} r={1.7} fill={color} />
-      <Circle cx={12} cy={12} r={1.7} fill={color} />
-      <Circle cx={19} cy={12} r={1.7} fill={color} />
+      <Circle cx={18} cy={5} r={3} stroke={color} strokeWidth={2} />
+      <Circle cx={6} cy={12} r={3} stroke={color} strokeWidth={2} />
+      <Circle cx={18} cy={19} r={3} stroke={color} strokeWidth={2} />
+      <Path
+        d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -517,13 +503,13 @@ function ActionBar({
 function DetailHeader({
   title,
   onEdit,
-  onMore,
+  onShare,
   onClose,
   disabled,
 }: {
   title: string;
   onEdit: () => void;
-  onMore: () => void;
+  onShare: () => void;
   onClose: () => void;
   disabled: boolean;
 }) {
@@ -540,7 +526,11 @@ function DetailHeader({
           accessibilityLabel="수정"
           disabled={disabled}
         />
-        <IconButton icon={<MoreIcon color={t.text.secondary} />} onPress={onMore} accessibilityLabel="더 보기" />
+        <IconButton
+          icon={<ShareIcon color={t.text.secondary} />}
+          onPress={onShare}
+          accessibilityLabel="공유"
+        />
         <IconButton icon={<CloseIcon color={t.text.secondary} />} onPress={onClose} accessibilityLabel="닫기" />
       </View>
     </View>
@@ -629,7 +619,6 @@ function GroupPicker({
 export default function DocumentDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const t = useTheme();
   const params = useLocalSearchParams<{ type?: string; id?: string }>();
 
   const rawType = first(params.type);
@@ -637,7 +626,6 @@ export default function DocumentDetailScreen() {
   // 직접 비교하면 보관함에서 넘어온 모든 링크가 "잘못된 주소" 로 떨어진다.
   const docType: DocumentType | null = documentTypeFromSegment(rawType);
   const id = first(params.id);
-  const sheetMode = docType !== null && SHEET_TYPES.includes(docType);
 
   /* ── 데이터 ─────────────────────────────────────────────────────────────── */
   // 훅은 조건부로 부를 수 없다. 파라미터가 잘못되면 `id: undefined` 로 쿼리를 꺼 둔다.
@@ -654,7 +642,6 @@ export default function DocumentDetailScreen() {
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const closing = useRef(false);
-  const sheetRef = useRef<ComponentRef<typeof BottomSheet>>(null);
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => setOffline(state.isConnected === false));
@@ -671,12 +658,6 @@ export default function DocumentDetailScreen() {
     if (router.canGoBack()) router.back();
     else router.replace({ pathname: '/(tabs)/archive', params: docType ? { type: docType } : {} });
   }, [docType, router]);
-
-  /** 시트는 애니메이션을 마친 뒤 pop 한다. `onClose` 가 `close()` 를 부른다. */
-  const requestClose = useCallback(() => {
-    if (sheetMode) sheetRef.current?.close();
-    else close();
-  }, [close, sheetMode]);
 
   /* ── 액션 ───────────────────────────────────────────────────────────────── */
 
@@ -763,16 +744,6 @@ export default function DocumentDetailScreen() {
     void Share.share({ message: buildShareText(doc, rows) }).catch(() => undefined);
   }, [doc, rows]);
 
-  /** `⋯` — Android Alert 는 버튼 3개가 상한이라 정확히 3개로 구성한다. */
-  const openMore = useCallback(() => {
-    if (!doc) return;
-    Alert.alert(`${DOCUMENT_TYPE_LABELS[doc.type]} 상세`, undefined, [
-      { text: '이미지 보기', onPress: openViewer },
-      { text: '공유', onPress: share },
-      { text: '취소', style: 'cancel' },
-    ]);
-  }, [doc, openViewer, share]);
-
   const confirmDelete = useCallback(() => {
     if (!docType || !doc) return;
     const copy = DELETE_CONFIRM[docType];
@@ -784,7 +755,7 @@ export default function DocumentDetailScreen() {
         style: 'destructive',
         onPress: () => {
           // 낙관적 제거는 훅이 담당한다. 화면은 즉시 닫고 결과만 토스트로 알린다.
-          requestClose();
+          close();
           remove
             .mutateAsync(toDeleteInput(doc))
             .then(() => toast.success(DOCUMENT_COPY.deleted[docType]))
@@ -795,7 +766,7 @@ export default function DocumentDetailScreen() {
         },
       },
     ]);
-  }, [doc, docType, remove, requestClose]);
+  }, [close, doc, docType, remove]);
 
   const pickGroup = useCallback(
     (groupId: Uuid | null, name: string) => {
@@ -857,38 +828,7 @@ export default function DocumentDetailScreen() {
       />
     ) : null;
 
-  /* ── ① 바텀시트 (티켓 · 영수증) ─────────────────────────────────────────── */
-
-  if (sheetMode) {
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            presentation: 'transparentModal',
-            animation: 'fade',
-            contentStyle: { backgroundColor: 'transparent' },
-          }}
-        />
-        <DocumentDetailSheet
-          ref={sheetRef}
-          title={title}
-          onClosed={close}
-          onRequestClose={requestClose}
-          onEdit={goEdit}
-          onMore={openMore}
-          onDelete={confirmDelete}
-          disabled={actionsDisabled}
-          paddingBottom={insets.bottom + spacing.md}
-          scrim={t.scrim}
-        >
-          {body}
-        </DocumentDetailSheet>
-        {groupPicker}
-      </>
-    );
-  }
-
-  /* ── ② 풀스크린 (명함 · 포스터) ─────────────────────────────────────────── */
+  /* ── 네 문서 유형 공통 풀스크린 상세 ───────────────────────────────────── */
 
   return (
     <View className="flex-1 bg-bg-base">
@@ -897,7 +837,7 @@ export default function DocumentDetailScreen() {
         <DetailHeader
           title={title}
           onEdit={goEdit}
-          onMore={openMore}
+          onShare={share}
           onClose={close}
           disabled={actionsDisabled}
         />
@@ -921,131 +861,6 @@ export default function DocumentDetailScreen() {
       ) : null}
 
       {groupPicker}
-    </View>
-  );
-}
-
-/* ── 바텀시트 껍데기 ──────────────────────────────────────────────────────── */
-
-type SheetProps = {
-  title: string;
-  children: ReactNode;
-  /** 시트 애니메이션이 끝난 뒤(= 실제 닫힘) 라우트를 pop 한다. */
-  onClosed: () => void;
-  onRequestClose: () => void;
-  onEdit: () => void;
-  onMore: () => void;
-  onDelete: () => void;
-  disabled: boolean;
-  paddingBottom: number;
-  scrim: string;
-};
-
-/**
- * `ref` 로 `close()` 를 받아야 하므로 별도 컴포넌트로 뺐다.
- * React 19 라 `forwardRef` 없이 `ref` 를 prop 으로 받는다.
- */
-function DocumentDetailSheet({
-  ref,
-  title,
-  children,
-  onClosed,
-  onRequestClose,
-  onEdit,
-  onMore,
-  onDelete,
-  disabled,
-  paddingBottom,
-  scrim,
-}: SheetProps & { ref: Ref<ComponentRef<typeof BottomSheet>> }) {
-  const snapPoints = useMemo(() => ['55%', '92%'], []);
-
-  // MOT-03 — 시트 스프링. SCR-19 는 `damping 20 / stiffness 200` 을 지정한다.
-  const animationConfigs = useBottomSheetSpringConfigs({ damping: 20, stiffness: 200, mass: 1 });
-
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...props}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        opacity={1}
-        pressBehavior="close"
-        style={[props.style, { backgroundColor: scrim }]}
-      />
-    ),
-    [scrim],
-  );
-
-  return (
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onRequestClose}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <BottomSheet
-          ref={ref}
-          index={0}
-          snapPoints={snapPoints}
-          // v5 기본값이 true 라 명시적으로 끈다 — 켜져 있으면 snapPoints 가 무시된다.
-          enableDynamicSizing={false}
-          enablePanDownToClose
-          animationConfigs={animationConfigs}
-          backdropComponent={renderBackdrop}
-          onClose={onClosed}
-          // 55% ↔ 92% 스냅 시 selection 햅틱 (SCR-19 인터랙션표)
-          onChange={(index) => {
-            if (index >= 0) haptics.selection();
-          }}
-          backgroundStyle={{ borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet }}
-          handleIndicatorStyle={{ width: 36 }}
-        >
-          <SheetShell
-            title={title}
-            onEdit={onEdit}
-            onMore={onMore}
-            onClose={onRequestClose}
-            onDelete={onDelete}
-            disabled={disabled}
-            paddingBottom={paddingBottom}
-          >
-            {children}
-          </SheetShell>
-        </BottomSheet>
-      </GestureHandlerRootView>
-    </Modal>
-  );
-}
-
-/**
- * 시트 내부 구조: 고정 헤더 + 스크롤 본문 + 고정 액션바.
- * 색은 `BottomSheet` 의 `backgroundStyle` 이 아니라 여기서 className 으로 준다 — 토큰 사용 규칙(§3-0).
- */
-function SheetShell({
-  title,
-  children,
-  onEdit,
-  onMore,
-  onClose,
-  onDelete,
-  disabled,
-  paddingBottom,
-}: {
-  title: string;
-  children: ReactNode;
-  onEdit: () => void;
-  onMore: () => void;
-  onClose: () => void;
-  onDelete: () => void;
-  disabled: boolean;
-  paddingBottom: number;
-}) {
-  return (
-    <View className="flex-1 bg-bg-elevated">
-      <DetailHeader title={title} onEdit={onEdit} onMore={onMore} onClose={onClose} disabled={disabled} />
-      <BottomSheetScrollView
-        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xl }}
-      >
-        {children}
-      </BottomSheetScrollView>
-      <ActionBar onDelete={onDelete} onEdit={onEdit} disabled={disabled} paddingBottom={paddingBottom} />
     </View>
   );
 }

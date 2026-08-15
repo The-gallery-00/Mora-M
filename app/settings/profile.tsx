@@ -221,25 +221,17 @@ export default function ProfileScreen() {
           />
 
           {/* 이메일은 서버에 변경 흐름이 없다(원본 주석: `Email is read-only until /me/email
-              verification flow exists on backend`). 비활성 필드를 눌러도 아무 일이 없으면
-              고장으로 보이므로 탭을 받아 이유를 알려 준다 (SCR-26 인터랙션 표). */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${COPY.emailLabel}, ${COPY.emailHint}`}
-            onPress={() => toast.info(COPY.emailHint)}
-            className="mt-5"
-          >
-            <View pointerEvents="none">
-              <TextField
-                value={me?.email ?? ''}
-                onChangeText={() => undefined}
-                label={COPY.emailLabel}
-                hint={COPY.emailHint}
-                disabled
-                testID="field-email"
-              />
-            </View>
-          </Pressable>
+              verification flow exists on backend`). 값만 보여 주며 탭 동작은 제공하지 않는다. */}
+          <View pointerEvents="none" className="mt-5">
+            <TextField
+              value={me?.email ?? ''}
+              onChangeText={() => undefined}
+              label={COPY.emailLabel}
+              hint={COPY.emailHint}
+              disabled
+              testID="field-email"
+            />
+          </View>
 
           <SettingsSection>
             <SettingsRow

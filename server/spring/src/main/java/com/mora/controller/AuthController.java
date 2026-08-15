@@ -124,7 +124,14 @@ public class AuthController {
             // JWT에서 userId 추출 → DB에서 사용자 조회
             UUID userId = jwtUtil.getUserId(header.substring(7));
             User user = authService.getUserById(userId);
-            UserResponse response = new UserResponse(user.getId(), user.getEmail(), user.getName(), user.getPicture());
+            UserResponse response = new UserResponse(
+                    user.getId(),
+                    user.getEmail(),
+                    user.getName(),
+                    user.getPicture(),
+                    user.getProvider(),
+                    user.getCreatedAt()
+            );
             return ResponseEntity.ok(ApiResponse.ok(response));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.fail("Invalid token"));

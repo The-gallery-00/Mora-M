@@ -100,5 +100,5 @@ Apache License 2.0 및 SIL Open Font License 1.1 전문은 아래 주소에서 �
 
 © 2026 MORA. All rights reserved.
 
-https://github.com/lavermeanyou/OCR_FOR_MORA
+https://github.com/The-gallery-00/Mora-M
 `.trim();

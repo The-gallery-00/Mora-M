@@ -175,8 +175,7 @@ export default function NotificationSettingsScreen() {
                       }))}
                       value={settings.deadlineReminderDays}
                       onChange={(days) => save({ deadlineReminderDays: days })}
-                      // 5칸이라 390dp 에서 한 칸 ≈65dp — `14일` 이 줄바꿈되지 않게 가로 스크롤로 둔다.
-                      scrollable
+                      // 5개 옵션이 트랙 전체 폭을 균등 분할해 `14일` 뒤에 빈 공간이 남지 않게 한다.
                       accessibilityLabel={NOTIFICATION_SETTINGS_COPY.daysTitle}
                       testID="segment-deadline-days"
                     />
