@@ -297,7 +297,23 @@ _ORG_BULLET = " \t·・|／/※▶►●*-—–>"
 
 # 장소 키워드
 # 한글 키워드는 부분문자열 검사로 충분하다(교착어라 조사가 붙어도 어간이 남는다).
-LOCATION_KEYWORDS = ["장소", "위치", "곳", "venue", "홀", "센터", "회의실", "강당"]
+# **장소는 명시 라벨이 있을 때만 뽑는다.**
+#
+# 종전 목록은 "곳/홀/센터/회의실/강당" 같은 **시설 일반명사**를 포함했다. 그것들은
+# 장소 라벨이 아니라 아무 문장에나 들어가는 낱말이라 오탐의 원천이었다:
+#     "청년센터 창업지원사업 연계"  → location
+#     "지하 열람실 운영 및시설관리"  → location
+# 정답 대조(155장) 결과 location 은 정확 0 / 부분 7 / **오답 22** / 누락 82 였다.
+#
+# 게다가 정답 111건 중 **61%는 포스터에 근거가 없다** — 라벨 작성자가 "온라인 공모전이니
+# 장소는 온라인" 식으로 추론해 적은 값이다(감사 결과: 근거 있음 43/111 = 39%).
+# 도달 불가능한 값을 쫓다 보면 없는 장소를 만들어내게 된다. 빈 칸이 낫다 —
+# 앱도 "인식되지 않음 · 직접 입력" 으로 안내한다.
+#
+# 그래서 정밀도 우선으로 간다: **"장소:" 같은 명시 라벨이 붙은 블록만** 장소로 본다.
+LOCATION_KEYWORDS = [
+    "장소", "위치", "행사장", "개최지", "오시는 길", "오시는길", "venue",
+]
 
 # 영문 장소 전치사는 **단어 경계가 필수**다.
 #
@@ -729,15 +745,25 @@ def _clean_location(text: str) -> str:
     """장소 칸 정제: 글머리/라벨(선두+중간) 제거 + 정확 중복 절반 축약."""
     s = text.strip().lstrip("·※▶►●*-> \t")
     # 라벨(장소/위치/실험장소/오시는길/오리엔테이션/오프라인/온라인/venue) 선두·중간 제거
-    s = re.sub(r"(?i)\s*(실험\s*장소|장소|위치|오시는\s*길|오리엔테이션|오프라인|온라인|venue)\s*[:：]\s*", " ", s)
-    s = re.sub(r"(?i)^\s*(장소|위치|venue|at)\s*[:：]?\s*", "", s)
+    s = re.sub(r"(?i)\s*(실험\s*장소|장소|위치|행사장|개최지|오시는\s*길|오리엔테이션|오프라인|온라인|venue)\s*[:：]\s*", " ", s)
+    # 라벨 뒤에 구분자(: 등)가 없는 형태도 뗀다 — "행사장 COEX 3층", "오시는 길 판교역".
+    s = re.sub(r"(?i)^\s*(실험\s*장소|장소|위치|행사장|개최지|오시는\s*길|venue|at)\s*[:：]?\s*", "", s)
     s = re.sub(r"^[\-·\s]+", "", s)   # 선두 글머리(- · 등) 잔여 제거
     s = re.sub(r"\s+", " ", s).strip()
     # OCR/세그먼트 중복으로 같은 값이 두 번("A A") → 한 번으로.
     half = len(s) // 2
     if s[:half].strip() and s[:half].strip() == s[half:].strip():
         s = s[:half].strip()
-    return s.strip()
+    s = s.strip()
+
+    # **라벨만 남았으면 값이 아니다.** "장소" 블록이 라벨 하나로 끝나는 경우
+    # (값은 다음 블록에 있다) 라벨 제거 후 빈 문자열이나 조사 조각만 남는다.
+    # 그것을 장소로 내보내면 사용자는 인식된 장소인 줄 알고 그대로 저장한다.
+    if len(s) < 2:
+        return ""
+    if s in ("장소", "위치", "행사장", "개최지", "venue", "안내", "및", "또는"):
+        return ""
+    return s
 
 
 def _strip_org_label(s: str) -> str:
@@ -1367,7 +1393,8 @@ def classify_text_block_for_poster(text: str) -> str:
         for kw in LOCATION_KEYWORDS:
             if kw in lower:
                 return "location"
-        if LOCATION_PREPOSITION.search(text_stripped):
+        # 영문 전치사 "at " 은 라벨이 아니라 문장의 일부라 값이 함께 있어야 인정한다.
+        if LOCATION_PREPOSITION.search(text_stripped) and len(text_stripped) > 5:
             return "location"
 
     # 6) 날짜 패턴이 있으면 키워드로 event_end_date vs event_start_date 구분
