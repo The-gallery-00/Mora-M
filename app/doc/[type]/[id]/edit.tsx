@@ -572,7 +572,7 @@ export default function DocumentEditScreen() {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
@@ -690,18 +690,6 @@ export default function DocumentEditScreen() {
           </Text>
         ) : null}
 
-        {/* ── 하단 풀폭 저장 (헤더 저장과 같은 액션 — 도달성) ────────────── */}
-        <Button
-          label="저장"
-          loadingLabel={COPY.saving}
-          loading={saving}
-          disabled={!canSave}
-          onPress={submit}
-          variant="primary"
-          size="lg"
-          fullWidth
-          style={{ marginTop: spacing.lg }}
-        />
       </ScrollView>
     </KeyboardAvoidingView>
   );

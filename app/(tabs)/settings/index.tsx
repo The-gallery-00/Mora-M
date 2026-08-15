@@ -68,7 +68,6 @@ const COPY = {
   accountSection: '계정',
   nickname: '닉네임',
   email: '이메일',
-  emailReadonly: '이메일은 변경할 수 없습니다.',
   password: '비밀번호',
   passwordLocal: '비밀번호를 변경합니다.',
   passwordSocial: '소셜 계정은 비밀번호가 없습니다',
@@ -113,7 +112,7 @@ const COPY = {
   unit: '건',
 } as const;
 
-const SUPPORT_MAILTO = 'mailto:support@mora.app';
+const SUPPORT_MAILTO = 'mailto:cvgy1915@naver.com';
 
 /** SCR-31 진입: 버전 라벨 5회 탭. 개발 빌드에서는 아래 `개발` 섹션이 같은 곳으로 데려간다. */
 const DIAGNOSTICS_TAP_COUNT = 5;
@@ -374,18 +373,19 @@ export default function SettingsScreen() {
         )}
 
         {/* ── 보관 문서 (API-24). 원본의 나머지 두 타일은 목업이라 버렸다 ── */}
-        <StatTile
-          icon="📄"
-          tone="stored"
-          variant="row"
-          label={COPY.storedDocuments}
-          value={dashboard.data?.storedDocumentCount ?? 0}
-          unit={COPY.unit}
-          loading={dashboard.isPending}
-          onPress={() => router.push('/(tabs)/archive')}
-          style={{ marginTop: 12 }}
-          testID="settings-stored-count"
-        />
+        <View className="mt-4">
+          <StatTile
+            icon="📄"
+            tone="stored"
+            variant="row"
+            label={COPY.storedDocuments}
+            value={dashboard.data?.storedDocumentCount ?? 0}
+            unit={COPY.unit}
+            loading={dashboard.isPending}
+            onPress={() => router.push('/(tabs)/archive')}
+            testID="settings-stored-count"
+          />
+        </View>
 
         <SettingsSection title={COPY.accountSection}>
           <SettingsRow
@@ -396,15 +396,15 @@ export default function SettingsScreen() {
           />
           {/* 이메일은 서버에 변경 흐름이 없어 읽기 전용이다(원본 주석: `Email is read-only until
               /me/email verification flow exists on backend`). SCR-25 표대로 **chevron 을 달지 않고**
-              값만 보여 준다 — 다음 화면이 없는데 `›` 를 그리면 거짓말이다.
-              그래도 탭은 받는다: 눌러도 아무 일이 없으면 고장으로 읽힌다. */}
-          <SettingsRow
-            label={COPY.email}
-            value={me?.email ?? '—'}
-            chevron={false}
-            onPress={() => toast.info(COPY.emailReadonly)}
-            testID="row-email"
-          />
+              값만 보여 주며 탭 동작도 제공하지 않는다. */}
+          <View pointerEvents="none">
+            <SettingsRow
+              label={COPY.email}
+              value={me?.email ?? '—'}
+              chevron={false}
+              testID="row-email"
+            />
+          </View>
           <SettingsRow
             label={COPY.password}
             description={isSocialAccount ? COPY.passwordSocial : COPY.passwordLocal}

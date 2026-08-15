@@ -426,7 +426,7 @@ export default function ScanCropScreen() {
       {/* ── 툴바 ─────────────────────────────────────────────────────────── */}
       <View className="flex-row items-start justify-around px-4 pb-2 pt-3">
         <ToolButton icon={<RotateLeftIcon />} label="왼쪽회전" onPress={() => rotate(-90)} />
-        <ToolButton icon={<RotateRightIcon />} label="오른쪽" onPress={() => rotate(90)} />
+        <ToolButton icon={<RotateRightIcon />} label="오른쪽회전" onPress={() => rotate(90)} />
         <ToolButton icon={<FitIcon />} label="비율맞춤" onPress={resetRect} />
         <ToolButton icon={<ResetIcon />} label="초기화" onPress={handleReset} />
       </View>

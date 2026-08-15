@@ -151,8 +151,8 @@ MORA(이하 "서비스")는 「개인정보 보호법」 및 「정보통신망 
 
 ## 12. 개인정보 보호책임자 및 문의처
 
-- 문의: support@mora.app
-- 소스 저장소: https://github.com/lavermeanyou/OCR_FOR_MORA
+- 문의: cvgy1915@naver.com
+- 소스 저장소: https://github.com/The-gallery-00/Mora-M
 
 개인정보 침해에 대한 신고나 상담이 필요한 경우 아래 기관에 문의할 수 있습니다.
 
