@@ -1,37 +1,37 @@
 # ═══════════════════════════════════════════════════════════════
-# src/pipeline/extract_pipeline.py — 명함 인식 엔드투엔드 파이프라인
+# src/pipeline/extract_pipeline.py — OCR 텍스트 추출 파이프라인
 # ═══════════════════════════════════════════════════════════════
 #
 # [역할]
-# 명함 이미지를 입력받아 OCR → 필드 분류 → 구조화된 결과 출력까지
-# 전체 파이프라인을 하나의 클래스로 관리한다.
-# PaddleOCR 엔진과 규칙 기반 분류기를 조합하여 최종 연락처 정보를
-# 영문 키(company_name 등)와 한국어 키(회사이름 등) 두 가지 형태로 반환.
+# 이미지를 입력받아 PaddleOCR 로 텍스트 블록을 뽑는다. **여기까지만 한다.**
+#
+# 분류/파싱은 services.ParsingSkill 이 맡는다. 이 모듈이 그것을 못 하는 이유는
+# **문서 종류를 모르기 때문**이다 — 종류는 요청과 함께 들어오고,
+# 그것을 아는 곳은 routers/ocr.py 의 scan() 이다.
+#
+# [클래스명이 BusinessCardPipeline 인 것은 역사적 잔재다]
+# 이 파이프라인은 이제 명함 전용이 아니다. 이름을 바꾸지 않은 이유는
+# services.py·routers/ocr.py·app.py 가 이 심볼을 참조하고 있어
+# 개명이 이번 변경의 범위를 넘기 때문이다. 하는 일은 OCR 추출뿐이다.
 #
 # [코드 흐름]
 # 1) BusinessCardPipeline 인스턴스 생성 시 PaddleOCREngine을 초기화
-# 2) run() 호출 시:
-#    a) Step 1: OCR 엔진으로 이미지에서 텍스트 블록을 추출
-#    b) Step 2: classify_all_blocks()로 각 블록을 필드에 매핑
-#    c) Step 3: 같은 필드가 여러 개면 confidence가 높은 것을 선택하여
-#       구조화된 결과(result) 생성
-#    d) Step 4: 영문 필드명 → 한국어 라벨로 변환 (result_korean)
-#    e) raw_blocks, classified_blocks, result, result_korean을 반환
+# 2) run() 호출 시 OCR 엔진으로 텍스트 블록을 추출해 raw_blocks 로 반환
 # 3) run_and_save()는 run() 결과를 JSON 파일로도 저장
-# 4) print_result()는 터미널에 한국어 결과를 출력
-# 5) CLI 직접 실행 시 커맨드라인 인자로 이미지 경로를 받아 처리
+# 4) print_result()는 블록 수만 출력한다 (OCR 원문은 개인정보다)
+# 5) CLI 직접 실행 시 이미지 경로 + 문서 종류를 인자로 받아 파싱까지 보여준다
 #
 # [메서드 목록]
 # - __init__():
 #     PaddleOCREngine을 초기화. 인식 언어는 인자가 아니라 엔진이 못박은
 #     text_recognition_model_name 이 결정한다 (paddleocr 3.4.0 은 lang 을 무시한다).
 # - run(image_path):
-#     이미지 → OCR → 분류 → 구조화된 결과 딕셔너리 반환.
+#     이미지 → OCR → {image_file, raw_blocks} 반환.
 #     텍스트가 없으면 error 키를 포함한 빈 결과 반환.
 # - run_and_save(image_path, output_dir):
 #     run() 실행 후 결과를 JSON 파일로 저장.
 # - print_result(result):
-#     한국어 라벨로 결과를 터미널에 출력 (CLI용).
+#     블록 수만 출력 (CLI용, 메타데이터 전용).
 #
 # [사용된 라이브러리]
 # ───────────────────────────────────────────
@@ -52,35 +52,20 @@
 #   PaddleOCR을 감싼 엔진 클래스.
 #   extract(image_path)로 이미지에서 텍스트 블록을 추출.
 # ───────────────────────────────────────────
-# src.classifier.rule_based.classify_all_blocks(text_blocks)
-#   텍스트 블록 리스트를 정규식/휴리스틱으로 분류하여
-#   각 블록에 field(email, phone_number 등)를 부여.
-# ───────────────────────────────────────────
 # sys.argv
-#   커맨드라인 인자 리스트. CLI 실행 시 이미지 경로를 전달받음.
+#   커맨드라인 인자 리스트. CLI 실행 시 이미지 경로와 문서 종류를 전달받음.
 # ───────────────────────────────────────────
 #
 # ═══════════════════════════════════════════════════════════════
 
-"""
-엔드투엔드 파이프라인: 이미지 입력 → OCR → 필드 분류 → 구조화된 결과 출력
+"""OCR 파이프라인: 이미지 입력 → 텍스트 블록 추출.
+
+분류/파싱은 이 모듈이 하지 않는다 — services.ParsingSkill 이 문서 종류를 받아서 한다.
 """
 import json
 from pathlib import Path
 
 from src.ocr.paddle_ocr_engine import PaddleOCREngine
-from src.classifier.rule_based import classify_all_blocks
-
-# 영문 필드명 → 한국어 라벨 매핑 (사용자 표시용)
-FIELD_LABELS = {
-    "company_name": "회사이름",
-    "person_name": "이름",
-    "job_title": "직책",
-    "phone_number": "전화번호",
-    "fax_number": "팩스번호",
-    "email": "이메일",
-}
-UNKNOWN_LABEL = "unknown"
 
 
 class BusinessCardPipeline:
@@ -95,29 +80,26 @@ class BusinessCardPipeline:
 
     def run(self, image_path: str) -> dict:
         """
-        명함 이미지 → 구조화된 연락처 정보 추출.
+        이미지 → OCR 텍스트 블록 추출.
+
+        **분류는 여기서 하지 않는다.** 문서 종류를 모르기 때문이다 —
+        종류는 요청과 함께 들어오고, 그것을 아는 곳은 routers/ocr.py 의 scan() 이다.
+        예전에는 이 메서드가 명함 분류기를 돌려 result/result_korean 까지 만들었는데,
+        scan() 이 그 셋을 통째로 버리고 ParsingSkill 로 같은 분류를 한 번 더 돌렸다.
+        요청당 정규식 전수 통과가 두 번 일어났고(segment_text_blocks 포함),
+        두 경로의 판정이 어긋나도 아무도 알아채지 못하는 구조였다.
 
         Args:
-            image_path: 명함 이미지 경로
+            image_path: 이미지 경로
 
         Returns:
             {
                 "image_file": "card_001.jpg",
-                "raw_blocks": [...],          # OCR 원본 결과
-                "classified_blocks": [...],   # 분류된 블록
-                "result": {                   # 최종 구조화 결과
-                    "company_name": {"text": "...", "confidence": 0.97},
-                    "person_name": {"text": "...", "confidence": 0.95},
-                    ...
-                },
-                "result_korean": {            # 사용자 표시용 한국어 결과
-                    "회사이름": "...",
-                    "이름": "...",
-                    ...
-                }
+                "raw_blocks": [...],   # OCR 원본 블록 (text/confidence/bbox/block_index)
             }
+            텍스트를 하나도 못 찾으면 여기에 "error" 키가 추가된다.
         """
-        # Step 1: OCR 수행 — 이미지에서 텍스트 블록 추출
+        # OCR 수행 — 이미지에서 텍스트 블록 추출
         ocr_result = self.ocr_engine.extract(image_path)
         text_blocks = ocr_result["text_blocks"]
 
@@ -126,40 +108,12 @@ class BusinessCardPipeline:
             return {
                 "image_file": ocr_result["image_file"],
                 "raw_blocks": [],
-                "classified_blocks": [],
-                "result": {},
-                "result_korean": {},
                 "error": "텍스트를 감지하지 못했습니다.",
             }
 
-        # Step 2: 필드 분류 — 각 텍스트 블록을 명함 필드에 매핑
-        classified = classify_all_blocks(text_blocks)
-
-        # Step 3: 구조화된 결과 생성 — 같은 필드가 여러 개면 confidence 최고값 선택
-        result = {}
-        for block in classified:
-            field = block["field"]
-            if field == UNKNOWN_LABEL:
-                continue  # 분류 불가 블록은 제외
-            # 같은 필드가 여러 개면 confidence가 높은 것 우선
-            if field not in result or block["confidence"] > result[field]["confidence"]:
-                result[field] = {
-                    "text": block["text"],
-                    "confidence": block["confidence"],
-                }
-
-        # Step 4: 한국어 사용자 표시용 변환 (영문 키 → 한국어 라벨)
-        result_korean = {}
-        for field_key, data in result.items():
-            korean_label = FIELD_LABELS.get(field_key, field_key)
-            result_korean[korean_label] = data["text"]
-
         return {
             "image_file": ocr_result["image_file"],
-            "raw_blocks": ocr_result["text_blocks"],
-            "classified_blocks": classified,
-            "result": result,
-            "result_korean": result_korean,
+            "raw_blocks": text_blocks,
         }
 
     def run_and_save(self, image_path: str, output_dir: str) -> dict:
@@ -176,28 +130,38 @@ class BusinessCardPipeline:
         return result
 
     def print_result(self, result: dict):
-        """사용자에게 보여줄 한국어 결과 출력 (CLI용)."""
+        """진단용 요약 출력 (CLI용)."""
         if "error" in result:
             print("OCR failed")
             return
 
-        korean_result = result.get("result_korean", {})
         # OCR output commonly contains names, email addresses and phone
         # numbers. Diagnostics must remain metadata-only.
-        print(f"OCR completed (field_count={len(korean_result)})")
+        print(f"OCR completed (block_count={len(result.get('raw_blocks', []))})")
 
 
 # --- CLI 실행용 ---
+#
+# 파싱까지 보고 싶으면 문서 종류를 인자로 준다 — 이 파이프라인은 종류를 판정하지
+# 않으므로 사람이 알려줘야 한다. services 는 여기서 import 한다(모듈 최상단에서
+# 하면 services → extract_pipeline → services 순환 import 가 된다).
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("사용법: python -m src.pipeline.extract_pipeline <이미지 경로>")
+        print("사용법: python -m src.pipeline.extract_pipeline <이미지 경로> [문서종류]")
+        print("  문서종류: BUSINESS_CARD(기본) | POSTER | RECEIPT | TICKET | ETC")
         sys.exit(1)
 
     image_path = sys.argv[1]
+    document_type = sys.argv[2] if len(sys.argv) > 2 else "BUSINESS_CARD"
     output_dir = "data/ocr_outputs"
+
+    from services import parsing_skill
 
     pipeline = BusinessCardPipeline()
     result = pipeline.run_and_save(image_path, output_dir)
     pipeline.print_result(result)
+
+    parsed = parsing_skill.execute(result.get("raw_blocks", []), document_type)["parsed"]
+    print(f"parsed (type={document_type}, field_count={len(parsed)})")

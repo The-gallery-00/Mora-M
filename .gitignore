@@ -66,3 +66,13 @@ server/uploads/
 
 # Obsidian 로컬 설정 (workspace.json 에 개인 경로가 들어간다)
 .obsidian/
+
+# OCR 벤치 산출물 (bench_dataset.py)
+server/ocr/work_full/
+server/ocr/bench_full.json
+server/ocr/work_cls/
+server/ocr/work_gt/
+
+# 포스터 OCR 캐시 — tools/cache_poster_ocr.py 로 재생성한다(1MB, 이미지는 별도 저장소).
+tools/poster_ocr_cache.json
+tools/_ocr_cache_work/

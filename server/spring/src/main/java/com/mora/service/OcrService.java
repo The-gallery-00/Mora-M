@@ -202,15 +202,17 @@ public class OcrService {
     }
 
     /**
-     * 명함 이미지를 외부 OCR 서버에 전송하고 인식 결과를 반환한다.
+     * 이미지를 외부 OCR 서버에 전송하고 인식 결과를 반환한다.
      *
-     * @param file 클라이언트가 업로드한 명함 이미지 파일
-     * @return OCR 인식 결과 (이름, 회사, 직책, 전화번호, 이메일, 원본 텍스트 등)
+     * @param file 클라이언트가 업로드한 이미지 파일
+     * @param documentType 클라이언트가 고른 문서 종류. null/빈 문자열이면 파트를 붙이지 않고
+     *                     OCR 쪽 기본값(BUSINESS_CARD)에 맡긴다.
+     * @return OCR 인식 결과 (type, fields, parsed, raw_blocks, image_url 등)
      * @throws OcrUpstreamException OCR 업스트림이 4xx/5xx를 돌려주거나 응답하지 않은 경우
      * @throws RuntimeException 그 외 예기치 못한 실패 (파일 읽기 오류 등)
      */
     @SuppressWarnings("unchecked")
-    public Map<String, Object> scan(MultipartFile file) {
+    public Map<String, Object> scan(MultipartFile file, String documentType) {
         try {
             // 외부 OCR 서버로 보낼 HTTP 헤더 설정 (multipart/form-data)
             HttpHeaders headers = new HttpHeaders();
@@ -228,6 +230,22 @@ public class OcrService {
             // multipart 요청 바디 구성: "file" 파트에 이미지 파일 추가
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             body.add("file", new HttpEntity<>(resource, createFileHeaders(file)));
+
+            // document_type 파트 중계.
+            //
+            // **OCR 서비스에는 문서 종류 분류기가 없다.** 종류를 정하는 것은 앱이고,
+            // 이 게이트웨이가 그 값을 그대로 넘겨줘야 종류별 파서가 돈다. 이 파트를
+            // 빠뜨리면 OCR 이 기본값 BUSINESS_CARD 로 명함 파서를 돌리고, 포스터·영수증·
+            // 티켓은 파싱 결과가 통째로 빈 채 200 으로 돌아온다 — 실패처럼 보이지 않는
+            // 실패라 원인 추적이 특히 어렵다.
+            //
+            // **값을 검증하지 않는다.** 화이트리스트는 OCR 의 _safe_doc_type() 한 곳에만
+            // 둔다. 여기서 한 번 더 거르면 목록이 두 곳으로 갈라지고, 그때 게이트웨이가
+            // 통과시킨 값을 OCR 이 ETC 로 접는(또는 그 반대인) 조용한 어긋남이 생긴다.
+            // 이 클래스는 순수 중계자다.
+            if (documentType != null && !documentType.isBlank()) {
+                body.add("document_type", documentType);
+            }
 
             HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 

@@ -110,6 +110,13 @@ export default function ScanReviewScreen() {
   const editedPreviewUri = adjustedUri ?? sourceUri;
   const canShowOriginal = Boolean(sourceUri && adjustedUri && sourceUri !== adjustedUri);
   const saving = step === 'saving';
+  /**
+   * 종류를 바꿔 같은 이미지를 다시 파싱하는 중.
+   *
+   * 이 화면에서 `uploading` 이 될 수 있는 경로는 재파싱뿐이다 — 첫 스캔은 SCR-11
+   * (`analyzing.tsx`)이 담당하고, 그 화면이 `editing` 으로 바뀐 뒤에야 여기로 넘어온다.
+   */
+  const rescanning = step === 'uploading';
   const [rawOpen, setRawOpen] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const previewUri = showOriginal && sourceUri ? sourceUri : editedPreviewUri;
@@ -138,6 +145,13 @@ export default function ScanReviewScreen() {
   }, [fieldDefs, getValues]);
 
   /* ── 파생값은 폼 값 기준으로 계산한다(스토어 값은 저장 직전에만 동기화된다) ── */
+  /* 재파싱 중에는 종류 칩 전체를 잠근다. 요청이 겹치면 나중 응답이 먼저 온 응답을 덮어
+     엉뚱한 종류의 값이 남을 수 있다(스토어에 요청 순서 추적이 없다). */
+  const typeOptions = useMemo(
+    () => TYPE_OPTIONS.map((option) => ({ ...option, disabled: rescanning })),
+    [rescanning],
+  );
+
   const summary = useMemo(() => recognitionSummary(fieldDefs, watched), [fieldDefs, watched]);
   const softWarning = useMemo(() => softWarningFor(docType, watched), [docType, watched]);
   const formValid = useMemo(() => validateFields(fieldDefs, watched).ok, [fieldDefs, watched]);
@@ -170,7 +184,9 @@ export default function ScanReviewScreen() {
   const unclassified = tier === 'unclassified';
   /** CLS-04 ETC: 저장 경로가 없다. */
   const blocked = tier === 'blocked' || !isSavableDocumentType(docType);
-  const canSaveNow = !locked && !blocked && !saving && formValid;
+  // 재파싱 중 저장을 막는다. 응답이 폼을 덮기 직전의 값으로 저장되면 사용자가 화면에서
+  // 본 것과 다른 것이 DB 에 들어간다.
+  const canSaveNow = !locked && !blocked && !saving && !rescanning && formValid;
 
   /* 스캔 결과 없이 직접 진입한 경우 방어 */
   useEffect(() => {
@@ -215,18 +231,28 @@ export default function ScanReviewScreen() {
   /* ── 문서 종류 변경 (§9-3 승계 규칙은 스토어가 소유한다) ────────────────── */
 
   const handleTypeChange = useCallback(
-    (next: DocumentType) => {
+    async (next: DocumentType) => {
       /* 같은 값 재선택은 보통 무의미하지만 `pick`(저신뢰 잠금)에서는 "이 종류가 맞다" 는
          확정 행위라 통과시킨다. 단 **칩에서는 이 경로가 열리지 않는다** — SegmentedControl 이
          이미 선택된 칩의 탭을 onChange 전에 삼킨다(위 `locked` 주석 ①). 그래서 이 분기의
          유일한 호출자는 확인 바의 `이 종류가 맞아요` 버튼이다. */
       if (next === docType && tier !== 'pick') return;
-      // ① 현재 입력값을 스토어로 올리고 ② 스토어가 COMMON_FIELD_MAP 승계를 수행한 뒤
-      // ③ 그 결과를 폼으로 되돌린다.
+
+      // ① 현재 입력값을 스토어로 올린다. 아래 승계·재파싱이 이 값을 이긴 것으로 취급한다.
       setValues(collect());
-      changeDocType(next);
+
+      /* ② 종류를 바꾸고 **같은 이미지를 그 종류로 다시 파싱한다**(스토어 rescanAs).
+            서버 파서는 종류마다 다른 규칙을 돌리므로 재파싱 없이는 새 종류의 필드가
+            영영 빈 채로 남는다. 종류 전환 자체는 동기라 폼을 즉시 되돌릴 수 있고,
+            재파싱 결과는 프라미스가 풀린 뒤에 한 번 더 반영한다. */
+      const pending = changeDocType(next);
       reset(useScanStore.getState().values);
       clearFailure();
+
+      await pending;
+      // 재파싱이 끝났다(또는 재요청 없이 끝났다). 스토어가 든 최종 값으로 폼을 맞춘다.
+      // 사용자가 이미 입력한 값은 스토어의 inheritFieldValues 가 우선 보존한다.
+      reset(useScanStore.getState().values);
     },
     [changeDocType, clearFailure, collect, docType, reset, setValues, tier],
   );
@@ -385,7 +411,11 @@ export default function ScanReviewScreen() {
         ) : null}
 
         {/* ── 상태 배너 ────────────────────────────────────────────────── */}
-        {failure?.code === 'SCF-10' ? (
+        {/* 재파싱 중에는 아무 배너도 띄우지 않는다. 응답이 오기 전의 `parsed` 는 옛 종류의
+            것이라 "인식된 정보가 없습니다" 가 뜨는데, 그 순간 사용자가 하는 일은
+            **정확히 그 문제를 고치는 행동**(종류 바꾸기)이다. 고치는 중에 실패를
+            선언하면 안 된다. */}
+        {rescanning ? null : failure?.code === 'SCF-10' ? (
           <Banner
             title="이미지에서 글자를 찾지 못했습니다."
             body="더 밝은 곳에서 글자가 선명하게 보이도록 다시 촬영해 주세요."
@@ -463,7 +493,9 @@ export default function ScanReviewScreen() {
             {locked ? (
               <Button
                 label={`이 종류가 맞아요 (${TYPE_LABELS[docType]})`}
-                onPress={() => handleTypeChange(docType)}
+                onPress={() => {
+                  void handleTypeChange(docType);
+                }}
                 variant="secondary"
                 size="md"
                 haptic="selection"
@@ -474,10 +506,14 @@ export default function ScanReviewScreen() {
           </View>
         ) : null}
 
+        {/* 종류를 바꾸면 같은 이미지를 그 종류로 **다시 파싱한다**(handleTypeChange).
+            그 사이 다시 누르면 요청이 겹치므로 잠근다 — 재파싱은 보통 1~3초다. */}
         <SegmentedControl
-          options={TYPE_OPTIONS}
+          options={typeOptions}
           value={docType}
-          onChange={handleTypeChange}
+          onChange={(next) => {
+            void handleTypeChange(next);
+          }}
           scrollable
           size="md"
           accessibilityLabel="문서 유형 선택"
@@ -485,17 +521,30 @@ export default function ScanReviewScreen() {
         />
 
         {/* ── 인식 요약 ────────────────────────────────────────────────── */}
+        {/* 재파싱 중에는 옛 종류의 집계를 보여주지 않는다 — 숫자가 잠깐 0으로 떨어졌다
+            되돌아오는 것처럼 보여 "인식이 실패했다" 로 읽힌다. */}
         {!blocked ? (
           <View className="mt-4 flex-row items-center gap-2">
-            <Chip
-              label={`총 ${summary.total}개 중 ${summary.recognized}개 인식됨`}
-              tone="neutral"
-              size="sm"
-              docTone={DOC_TONE[docType]}
-            />
-            {summary.empty > 0 ? (
-              <Chip label={`미입력 ${summary.empty}개`} tone="neutral" size="sm" />
-            ) : null}
+            {rescanning ? (
+              <Chip
+                label={`${TYPE_LABELS[docType]}(으)로 다시 읽는 중…`}
+                tone="neutral"
+                size="sm"
+                docTone={DOC_TONE[docType]}
+              />
+            ) : (
+              <>
+                <Chip
+                  label={`총 ${summary.total}개 중 ${summary.recognized}개 인식됨`}
+                  tone="neutral"
+                  size="sm"
+                  docTone={DOC_TONE[docType]}
+                />
+                {summary.empty > 0 ? (
+                  <Chip label={`미입력 ${summary.empty}개`} tone="neutral" size="sm" />
+                ) : null}
+              </>
+            )}
           </View>
         ) : null}
 

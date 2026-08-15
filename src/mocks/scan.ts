@@ -1,5 +1,6 @@
 import { DOCUMENT_FIELD_SCHEMAS } from '@/features/scan/fieldSchema';
 import type {
+  DocumentType,
   ParsedFields,
   PreparedImage,
   RawBlock,
@@ -7,6 +8,7 @@ import type {
   ScanApiResult,
   UploadHandle,
 } from '@/features/scan/types';
+import { isSavableDocumentType } from '@/features/scan/types';
 import { storage } from '@/store/storage';
 
 /**
@@ -243,6 +245,11 @@ export type MockUploadOptions = {
   signal?: AbortSignal;
 };
 
+/** 스캔 목 전용. 실서버의 `document_type` 파트에 대응한다. */
+export type MockScanOptions = MockUploadOptions & {
+  documentType?: DocumentType;
+};
+
 /** 진행률 콜백 횟수. 12단계면 프로그레스 바가 뚝뚝 끊겨 보이지 않는다. */
 const PROGRESS_STEPS = 12;
 
@@ -343,9 +350,20 @@ const FALLBACK_IMAGE_SIZE = { width: 1280, height: 960 } as const;
 export function mockScanImage<T>(
   file: PreparedImage | null,
   parse: (json: unknown) => T,
-  options: MockUploadOptions = {},
+  options: MockScanOptions = {},
 ): UploadHandle<T> {
-  const plan = consumeScanPlan();
+  const cycled = consumeScanPlan();
+  /* 요청 종류가 오면 그것을 따른다. 실서버가 종류를 **판정하지 않고 받은 값으로
+     파싱**하므로, 목이 순환표를 고집하면 계약이 달라진다 — 특히 결과 화면에서
+     종류를 바꿔 재파싱(rescanAs)할 때 목만 엉뚱한 종류를 돌려주게 된다.
+     ETC 는 표본이 없으므로(SAMPLES 가 저장 가능 4종만 갖는다) 요청으로 와도
+     무시한다 — api.ts 가 애초에 보내지 않지만 여기서도 막아 둔다.
+     종류를 지정하지 않은 호출은 종전대로 순환표를 쓴다. */
+  const requested = options.documentType;
+  const plan: MockScanPlan =
+    requested !== undefined && isSavableDocumentType(requested)
+      ? { ...cycled, type: requested }
+      : cycled;
   const sample = SAMPLES[plan.type];
   const parsed = buildParsed(sample, plan.lowConfidence);
   const rawBlocks = buildRawBlocks(sample.lines);

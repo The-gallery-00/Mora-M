@@ -439,7 +439,27 @@ export function useScan() {
     [store],
   );
 
-  const changeDocType = useCallback((next: DocumentType) => store.setDocType(next), [store]);
+  /**
+   * 촬영 화면 힌트 칩. 첫 스캔의 `document_type` 이 된다.
+   *
+   * 서버는 문서 종류를 판정하지 않으므로(분류 모델이 없다) 이 값이 없으면 명함 파서가
+   * 돈다. 칩을 다시 눌러 `자동` 으로 돌아가면 null 을 넘겨 서버 기본값에 맡긴다 —
+   * 그 경우에도 결과 화면에서 종류를 바꾸면 그때 다시 파싱된다(changeDocType).
+   */
+  const setDocTypeHint = useCallback(
+    (next: DocumentType | null) => store.setRequestedDocType(next),
+    [store],
+  );
+
+  /**
+   * 결과 화면의 문서 종류 탭.
+   *
+   * **종류만 바꾸는 것이 아니라 그 종류로 다시 파싱한다.** 서버 파서는 종류마다 다른
+   * 규칙을 돌리므로(명함 정규식 ≠ 포스터 정규식), 재파싱 없이 탭만 바꾸면 폼이 새
+   * 종류로 바뀌면서 값은 전부 빈 채로 남는다 — "포스터로 바꿔도 아무것도 안 채워진다".
+   * 커밋 이후이거나 이미 그 종류로 스캔했으면 재요청 없이 상태만 바꾼다(rescanAs 참조).
+   */
+  const changeDocType = useCallback((next: DocumentType) => store.rescanAs(next), [store]);
 
   return {
     // ── 상태
@@ -491,6 +511,7 @@ export function useScan() {
     cancelScan: store.cancelScan,
 
     // ── 편집 / 저장
+    setDocTypeHint,
     changeDocType,
     enterManualEntry: store.enterManualEntry,
     setValue: store.setValue,

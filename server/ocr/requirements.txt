@@ -7,6 +7,24 @@ opencv-python
 Pillow
 numpy
 
+# ── 문서 종류 분류 (ONNX ResNet18) ──
+# **torch 를 쓰지 않는다.** 원본 웹은 torch + torchvision 으로 같은 ResNet18 을 돌리지만,
+# CPU wheel 만으로도 이미지가 200MB+ 커지고 런타임 상주가 250~350MB 늘어난다.
+# 이 서비스의 Cloud Run 예산 2Gi 는 OOM 때문에 깎은 값이라 여유가 약 1.1GB 뿐이다.
+# onnxruntime 는 그 1/10 수준이고, 변환 동치를 무작위 입력 200개로 검증했다
+# (argmax 불일치 0/200, softmax 최대 오차 5.96e-07 — tools/convert_classifier_to_onnx.py).
+#
+# 모델 파일은 models/image_classifier.onnx 다. 없으면 판정만 건너뛰고
+# 스캔은 정상 동작한다(src/classifier/doc_type.py 의 폴백).
+onnxruntime
+
+# ── 필드 정규화 ──
+# 전화번호 산업표준(libphonenumber) 검증/포맷 → 국내표기 010-1234-5678.
+# 순수 파이썬이라 네이티브 의존성도 메모리 영향도 없다.
+# rule_based._normalize_phone 이 lazy import + 예외 폴백으로 감싸므로
+# 이 패키지가 없어도 정규식 폴백으로 동작한다 — 있으면 정확해질 뿐이다.
+phonenumbers
+
 # ── API Server ──
 fastapi
 uvicorn

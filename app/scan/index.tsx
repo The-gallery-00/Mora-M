@@ -187,7 +187,8 @@ export default function ScanCameraScreen() {
   const t = useTheme();
   const reduceMotion = useReducedMotion();
 
-  const { acceptCapture, pickFromLibrary, openAppSettings, sessionSavedCount } = useScan();
+  const { acceptCapture, pickFromLibrary, openAppSettings, sessionSavedCount, setDocTypeHint } =
+    useScan();
   const [permission, requestPermission, getPermission] = useCameraPermissions();
 
   const cameraRef = useRef<CameraView>(null);
@@ -351,11 +352,25 @@ export default function ScanCameraScreen() {
     haptics.selection();
   }, []);
 
-  const selectGuide = useCallback((mode: GuideMode) => {
-    // 선택된 칩을 한 번 더 누르면 `자동` 으로 돌아간다.
-    setGuideMode((prev) => (prev === mode ? 'auto' : mode));
-    haptics.selection();
-  }, []);
+  const selectGuide = useCallback(
+    (mode: GuideMode) => {
+      // 선택된 칩을 한 번 더 누르면 `자동` 으로 돌아간다.
+      // 다음 값을 **업데이터 밖에서** 계산한다 — setState 업데이터는 순수해야 하고,
+      // StrictMode 는 그것을 두 번 호출한다(그 안에서 스토어를 건드리면 두 번 쓴다).
+      const next: GuideMode = guideMode === mode ? 'auto' : mode;
+      setGuideMode(next);
+
+      /* 이 칩은 **프레임 비율 힌트만이 아니다.** 여기서 고른 종류가 그대로
+         `/api/scan` 의 document_type 이 되어 종류별 파서를 결정한다.
+         `auto` 는 null 로 넘긴다 — 그러면 서버가 이미지 분류기로 종류를 정한다
+         (실측 정확도 93%). 사용자가 고른 값은 분류기보다 우선한다: 사람이 명시한
+         의도를 모델 추정으로 덮지 않는다.
+         어느 쪽이든 결과 화면에서 종류를 바꾸면 그때 다시 파싱된다. */
+      setDocTypeHint(next === 'auto' ? null : next);
+      haptics.selection();
+    },
+    [guideMode, setDocTypeHint],
+  );
 
   /* ── 권한 미확정 / 미허용 화면 (테마 무관 다크 배경) ─────────────────────── */
 
@@ -595,7 +610,10 @@ export default function ScanCameraScreen() {
           </View>
         ) : null}
 
-        {/* ── 문서 유형 힌트 칩 (선택 사항 — 서버 분류를 강제하지 않는다) ───── */}
+        {/* ── 문서 유형 칩 ────────────────────────────────────────────────
+            프레임 비율·안내문구뿐 아니라 **서버가 어느 파서를 돌릴지**를 정한다
+            (selectGuide 주석 참조). 고르지 않으면 서버가 분류하므로 선택은
+            어디까지나 선택 사항이고, 결과 화면에서 언제든 바꿔 다시 파싱할 수 있다. */}
         <View className="flex-row items-center justify-center gap-2 px-4 pb-3">
           {GUIDE_CHIPS.map((mode) => {
             const selected = guideMode === mode;
