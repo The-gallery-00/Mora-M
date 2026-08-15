@@ -548,9 +548,21 @@ export function classificationTier(state: ScanState): ClassificationTier {
   if (state.typeSource === 'manual') return 'manual';
   // 서버가 판정하지 않았다 → 임계 비교 자체가 성립하지 않는다. 임계 분기보다 먼저 걸러낸다.
   if (state.typeSource === 'default') return 'unclassified';
-  // CLS-05 — 티켓은 이미지 분류 모델에 클래스가 없고 키워드 2개 매칭 시 1.0 을 하드코딩한다.
-  // 실제 신뢰도가 아니므로 수치를 표시하지 않는다.
-  if (state.docType === 'TICKET' && state.confidence === 1) return 'keyword';
+  /* CLS-05 — 티켓은 **이미지 분류 모델에 클래스가 없다**(namecard/poster/recipt 3종).
+     그래서 서버가 OCR 텍스트의 티켓 키워드 2개 이상으로 따로 판정한다
+     (server/ocr/src/classifier/doc_type.py 의 detect_ticket).
+     실측: 티켓 10/10 검출, 비티켓 76장 오검출 0.
+
+     **키워드 매칭은 확률이 아니므로 서버가 confidence 0 을 보낸다.** 원본 웹은 여기에
+     1.0 을 하드코딩했는데 그것은 "100% 확신" 이라는 거짓 신호였다 — 우리 서버는
+     그 숫자를 만들지 않는다.
+
+     그래서 조건이 `confidence === 1` 이면 이 갈래에 **영원히 닿지 못하고** 아래
+     임계 비교로 흘러 `pick`(폼 잠금)이 된다. 키워드로 정확히 잡은 티켓이
+     "분류가 확실하지 않다" 며 잠기는 것은 정반대 신호다.
+     판정 주체가 서버(classified=true)이고 종류가 TICKET 이면 키워드 경로가 확정이므로
+     confidence 값과 무관하게 이 갈래로 보낸다. */
+  if (state.docType === 'TICKET') return 'keyword';
   if (state.confidence >= CONFIDENCE_CONFIRM_THRESHOLD) return 'confident';
   if (state.confidence >= CONFIDENCE_PICK_THRESHOLD) return 'confirm';
   /* `pick` 은 **실서버 구성에서는 도달하지 않는다** (2026-08-05 4차 확인).

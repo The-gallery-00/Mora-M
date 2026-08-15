@@ -70,3 +70,4 @@ server/uploads/
 # OCR 벤치 산출물 (bench_dataset.py)
 server/ocr/work_full/
 server/ocr/bench_full.json
+server/ocr/work_cls/

@@ -107,6 +107,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 # services.py에서 싱글톤으로 생성된 파이프라인과 파싱 스킬을 가져옴
 from services import pipeline, parsing_skill
+from src.classifier.doc_type import classify_document
 from src.classifier.field_schema import DOCUMENT_FIELDS, FIELD_LABELS_KO
 from storage import is_gcs_enabled, persist_image, save_upload_file
 
@@ -219,25 +220,28 @@ def _cleanup(img_path: Path) -> None:
 
 
 @router.post("/scan")
-async def scan(file: UploadFile = File(...), document_type: str = Form("BUSINESS_CARD")):
+async def scan(file: UploadFile = File(...), document_type: str = Form("")):
     """이미지를 받아 OCR + 문서 종류별 규칙 파싱 결과를 반환.
 
-    [document_type 을 클라이언트에게서 받는 이유]
-    **이 서비스에는 문서 종류 분류기가 없다.** 원본 웹은 ResNet18 이미지 분류기
-    (ocr/models/image_classifier.pt)로 종류를 판정하지만 이 서비스에는 그 모델도
-    torch 도 없다. 그렇다고 판정을 포기하면 종류별 파서가 아예 돌지 못한다 —
-    실제로 그것이 청첩장·포스터를 찍으면 "12개 중 0개 인식" 이 나오던 원인이었다.
-    그래서 **앱의 문서 유형 선택을 정본으로 삼는다.** 앱은 촬영 화면과 결과 화면
-    양쪽에 종류 선택 UI 를 이미 갖고 있다.
-
-    기본값이 BUSINESS_CARD 인 것은 하위호환 때문이다 — 이 파라미터를 보내지 않는
-    구버전 앱은 종전과 똑같이 명함으로 파싱된다.
+    [종류를 정하는 순서 — 사용자 > 분류기 > 기본값]
+    1) 클라이언트가 document_type 을 보냈으면 **그것이 이긴다.** 사용자가 촬영 화면
+       칩이나 결과 화면 탭으로 고른 값이고, 사람이 고른 것을 모델이 뒤집으면 안 된다.
+    2) 안 보냈으면 서버가 판정한다(src/classifier/doc_type.classify_document):
+       티켓 키워드 선판정 → ONNX ResNet18 이미지 분류.
+       실측 정확도 92.1%(70/76), 티켓 키워드는 10/10 검출·오검출 0/76.
+    3) 판정도 못 하면(모델 부재/로드 실패) BUSINESS_CARD 로 떨어뜨리고
+       classified=false 로 그 사실을 앱에 알린다.
 
     허용되지 않은 값은 ETC 로 접는다(_safe_doc_type). ETC 는 DOCUMENT_FIELDS 가
     빈 dict 라 parsed 도 fields 도 비어 나가며, 그것이 정직한 결과다.
     """
 
-    document_type = _safe_doc_type(document_type)
+    # 클라이언트가 보낸 값. 빈 문자열이면 "안 보냈다" 는 뜻이다 —
+    # Form 기본값을 BUSINESS_CARD 로 두면 "사용자가 명함을 골랐다" 와
+    # "아무것도 안 보냈다" 를 구별할 수 없어 분류기를 돌릴 기회가 사라진다.
+    requested = document_type.strip() if document_type else ""
+    client_picked = bool(requested)
+    document_type = _safe_doc_type(requested) if client_picked else "BUSINESS_CARD"
 
     # 원본 확장자를 유지하면서 UUID 기반 고유 파일명 생성
     suffix = Path(file.filename).suffix
@@ -248,6 +252,16 @@ async def scan(file: UploadFile = File(...), document_type: str = Form("BUSINESS
         # OCR 파이프라인 실행 → 이미지에서 텍스트 블록 추출
         ocr_result = pipeline.run(str(img_path))
         text_blocks = ocr_result.get("raw_blocks", [])
+
+        # 클라이언트가 종류를 안 보냈으면 서버가 판정한다.
+        # **OCR 뒤에 온다** — 티켓 선판정이 인식된 텍스트를 보기 때문이다.
+        confidence = 0.0
+        classified = False
+        if not client_picked:
+            verdict = classify_document(str(img_path), text_blocks)
+            if verdict is not None:
+                document_type, confidence = verdict
+                classified = True
 
         # 텍스트 블록을 문서 종류에 맞는 필드로 분류/파싱
         parsed_result = parsing_skill.execute(text_blocks, document_type=document_type)
@@ -263,33 +277,27 @@ async def scan(file: UploadFile = File(...), document_type: str = Form("BUSINESS
 
         # ── 성공 응답: 파싱 결과 + 원본 블록 + 라벨 맵 + 이미지 URL ────────────────
         #
-        # 대전제는 그대로다: **이 서비스에는 문서 종류 분류기가 없다.**
-        # 달라진 것은 그 공백을 메우는 방법이다 — 예전에는 종류를 BUSINESS_CARD 로
-        # 고정하고 "판정이 아니라 기본값" 이라고 앱에 알렸는데, 그러면 명함이 아닌
-        # 문서는 명함 파서를 거쳐 parsed 가 반드시 비었다. 이제는 **클라이언트가 고른
-        # 종류를 받아** 그 종류의 파서를 돌린다.
+        # [type] 이 종류로 파싱했다는 사실의 보고다. 출처는 셋 중 하나 —
+        # 클라이언트 선택 / 서버 판정 / 판정 실패 시 기본값. 앱 unwrapScan 이 이 값으로
+        # 폼을 그리므로 요청과 응답이 어긋나면 폼과 값이 따로 논다.
         #
-        # [type] 요청받은 document_type 을 그대로 되돌려준다. 판정 결과가 아니라
-        # "이 종류로 파싱했다" 는 사실의 보고다. 앱 unwrapScan 이 이 값으로 폼을
-        # 그리므로 요청과 응답이 어긋나면 폼과 값이 따로 논다.
+        # [confidence] **판정했을 때만 실측값이다.**
+        #   · 이미지 분류기가 판정 → softmax 최대 확률(실측)
+        #   · 티켓 키워드 선판정   → 0.0. 키워드 매칭은 확률이 아니다. 여기에 1.0 을
+        #     넣으면 "100% 확신" 이라는 거짓 신호가 된다(원본 웹이 그렇게 했다).
+        #     앱은 이 경우를 CLS-05 'keyword' tier 로 이미 다룬다.
+        #   · 판정 못 함 / 클라이언트가 고름 → 0.0 ("측정값 없음")
+        # **가짜 숫자를 만들지 마라.** 예전에 여기에 OCR 인식(rec) 신뢰도 평균을 넣었다가
+        # 영수증을 찍어도 BUSINESS_CARD + 0.97 이 내려가 있지도 않은 "신뢰도 97%" 를
+        # 표시한 적이 있다. 인식 신뢰도는 raw_blocks[].confidence 로 이미 블록 단위로 나간다.
         #
-        # [confidence = 0.0] 0 은 "신뢰도가 낮다" 가 아니라 **"측정값이 없다"** 는 뜻이다.
-        # 여기에 OCR **인식(rec)** 신뢰도 평균을 넣었던 것이 예전 회귀였다:
-        # 영수증을 찍어도 BUSINESS_CARD + 0.97 이 내려가 확인 절차 없이 명함 폼으로
-        # 직행하면서 있지도 않은 "신뢰도 97%" 까지 표시했다. 전형적인 거짓 신호다.
-        # **가짜 숫자를 만들지 마라.** 종류를 판정한 적이 없으므로 0 이 유일하게 정직하다.
-        # 인식 신뢰도는 이미 raw_blocks[].confidence 로 블록 단위로 나간다.
+        # [classified] **서버가 판정했는가.** 클라이언트가 종류를 골라 보낸 경우에는
+        # false 다 — 판정한 주체가 서버가 아니기 때문이다. 앱은 그때 사용자의 선택을
+        # 이미 알고 있으므로 확인 배너를 띄우지 않는다(scanStore 의 typeSource).
+        # 모델이 없거나 로드에 실패했을 때도 false 이고, 앱은 확인 바를 띄우되
+        # 폼 편집·저장은 열어둔다 ('unclassified' tier).
         #
-        # [classified = False] 의미는 **"이 서비스는 문서 종류를 판정하지 않았다"** 이다.
-        # 종류를 클라이언트에게서 받게 된 지금도 이 값은 여전히 False 다 — 판정한 주체가
-        # 서버가 아니기 때문이다. 앱은 이것을 분류 미수행 전용 상태로 다뤄 확인 바만
-        # 띄우고 폼 편집·저장은 열어둔다 (src/features/scan/types.ts 의 'unclassified' tier).
-        # 실제 분류기(ResNet18)를 붙이는 날에는 여기를 True 로 바꾸고 confidence 에
-        # 진짜 측정값을 넣으면 되며, 앱 코드는 손대지 않아도 된다.
-        #
-        # [fields] 문서 종류별 {외부 필드키: 한국어 라벨} 맵. 앱이 폼 라벨의 1순위로
-        # 쓴다. 종전에는 이 키가 없어 앱이 늘 내장 스키마로 폴백했고, 그래서 서버가
-        # 새 필드를 뽑아도 화면에 나타날 길이 없었다.
+        # [fields] 문서 종류별 {외부 필드키: 한국어 라벨} 맵. 앱이 폼 라벨의 1순위로 쓴다.
         #
         # **하위호환**: classified 키가 없는 구버전 응답을 앱은 classified=true 로 읽어
         # 종전 동작을 유지한다 (src/features/scan/api.ts unwrapScan).
@@ -301,8 +309,8 @@ async def scan(file: UploadFile = File(...), document_type: str = Form("BUSINESS
             "success": True,
             "data": {
                 "type": document_type,
-                "confidence": 0.0,
-                "classified": False,
+                "confidence": confidence,
+                "classified": classified,
                 "fields": fields,
                 "parsed": parsed,
                 "raw_blocks": text_blocks,
