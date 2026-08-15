@@ -586,7 +586,13 @@ def _clean_amount(text: str) -> str:
     """
     nums = re.findall(r"\d{1,3}(?:[.,]\d{3})+|\d{4,}", text)
     if not nums:
-        return ""   # 유효 금액 없음 → 드롭(예 라벨만/깨진 값)
+        # OCR 이 끝자리를 흘린 경우를 한 번 더 본다: "66,00"(원본 66,000).
+        # 이 경로는 **마지막 그룹이 2자리일 때만** 쓴다 — 소수점 금액(9.38)과
+        # 구분이 안 되므로 3자리로 복원하지 않고 있는 자릿수 그대로 읽는다.
+        loose = re.findall(r"\d{1,3}(?:[.,]\d{3})*[.,]\d{2}(?!\d)", text)
+        if not loose:
+            return ""   # 유효 금액 없음 → 드롭(예 라벨만/깨진 값)
+        nums = loose
     n = max(int(re.sub(r"[.,]", "", s)) for s in nums)
     return f"{n:,}원"
 
@@ -1407,13 +1413,29 @@ def classify_text_block_for_receipt(text: str) -> str:
 
 # 합계 라벨. OCR 이 "합계"의 앞 글자를 흘려 "계"만 남기는 일이 잦아 단독 "계"도 받는다.
 # 단 "설계"/"통계" 같은 단어에 걸리지 않도록 **블록 전체가 라벨일 때만** 인정한다.
-_RECEIPT_TOTAL_LABEL = re.compile(r"^\s*(?:합\s*계|총\s*액|총\s*합|합\s*산|계|total)\s*[:：]?\s*$", re.I)
+# "합계금액"/"결제금액"/"총 금액" 처럼 뒤에 '금액'/'요금'이 붙는 표기가 흔하다.
+# 종전 정규식은 그걸 허용하지 않아 롯데하이마트 영수증의 "합계금액" 을 라벨로 못 봤다.
+_RECEIPT_TOTAL_LABEL = re.compile(
+    r"^\s*(?:합\s*계|총\s*액|총\s*합|합\s*산|결\s*제|청\s*구|받\s*을\s*금\s*액|계|total)"
+    r"\s*(?:금\s*액|요\s*금)?\s*[:：]?\s*$",
+    re.I,
+)
 _RECEIPT_STORE_LABEL = re.compile(r"^\s*(?:가\s*맹\s*점|상\s*호|매\s*장)\s*(?:명)?\s*[:：]?\s*$")
 _RECEIPT_DATE_LABEL = re.compile(r"^\s*(?:거래\s*일시|거래\s*일자|구매\s*일시|구매\s*일자|일\s*시|승인\s*일시)\s*[:：]?\s*$")
 
 # 값 후보: 금액처럼 보이는 숫자(구분자 . 또는 ,). "7.500" 처럼 천단위를 마침표로 쓰는
 # 영수증이 많아 소수점과 구분이 안 된다 — 그래서 **뒤 3자리** 형태만 금액으로 본다.
-_RECEIPT_MONEY = re.compile(r"^\s*[₩\\]?\s*\d{1,3}(?:[.,]\d{3})+\s*원?\s*$|^\s*\d{4,}\s*원\s*$")
+#
+# 마지막 그룹은 2~3자리를 허용한다. OCR 이 끝자리를 흘리는 일이 흔하다 —
+# 실측(롯데하이마트): "합계금액" 다음 블록이 "66,00" 이었다(원본 66,000).
+# 3자리만 받으면 이 영수증이 통째로 0필드가 된다.
+# 소수점 금액(9.38 / 9,41)은 여전히 배제된다 — 정수부가 1자리라 이 패턴에 안 맞고,
+# 애초에 원화 영수증이 아니다(외국 영수증까지 맞히는 것은 이 파서의 범위가 아니다).
+_RECEIPT_MONEY = re.compile(
+    r"^\s*[₩\\]?\s*\d{1,3}(?:[.,]\d{3})*[.,]\d{2,3}\s*원?\s*$"
+    r"|^\s*[₩\\]?\s*\d{1,3}(?:[.,]\d{3})+\s*원?\s*$"
+    r"|^\s*\d{4,}\s*원\s*$"
+)
 
 
 def _classify_receipt_blocks(text_blocks: list[dict]) -> list[dict]:
@@ -1461,6 +1483,26 @@ def _classify_receipt_blocks(text_blocks: list[dict]) -> list[dict]:
         if fields[i] != "unknown":
             continue
         fields[i] = classify_text_block_for_receipt((b.get("text") or "").strip())
+
+    # 3) 상호를 못 찾았으면 **상단 업체명**을 후보로 본다.
+    #    한국 영수증은 맨 위에 상호를 크게 찍고 "상호:" 라벨을 생략하는 쪽이 더 흔하다.
+    #    실측(롯데하이마트 영수증): 1번 블록이 "롯데하이마트(주) 중주롯데마트점" 인데
+    #    라벨이 없어 아무 필드도 안 붙었고, 그 영수증이 통째로 0필드가 됐다.
+    #    상위 5블록 안에서 기업 표기(_ORG_SUFFIX)나 "…점" 으로 끝나는 한글 블록을 찾는다.
+    if "store_name" not in fields:
+        for i, b in enumerate(text_blocks[:5]):
+            if fields[i] != "unknown":
+                continue
+            t = (b.get("text") or "").strip()
+            if len(t) < 3 or len(t) > 40:
+                continue
+            if not re.search(r"[가-힣]", t):
+                continue                       # 영문 로고 줄은 상호로 쓰지 않는다
+            if _RECEIPT_NOTICE.search(t):
+                continue
+            if _ORG_SUFFIX.search(t) or re.search(r"(?:점|마트|백화점|편의점)\s*$", t):
+                fields[i] = "store_name"
+                break
 
     results = []
     for b, f in zip(text_blocks, fields):
