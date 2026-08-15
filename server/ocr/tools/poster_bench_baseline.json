@@ -10,10 +10,10 @@
     },
     "organizer_name": {
       "gt": 152,
-      "exact": 10,
-      "partial": 35,
-      "wrong": 50,
-      "missing": 57
+      "exact": 11,
+      "partial": 36,
+      "wrong": 45,
+      "missing": 60
     },
     "event_start_date": {
       "gt": 153,
