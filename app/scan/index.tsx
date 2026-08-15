@@ -360,12 +360,12 @@ export default function ScanCameraScreen() {
       const next: GuideMode = guideMode === mode ? 'auto' : mode;
       setGuideMode(next);
 
-      /* 이 칩은 **프레임 비율 힌트만이 아니다.** 서버 OCR 에는 문서 종류 분류기가
-         없어서, 여기서 고른 종류가 그대로 `/api/scan` 의 document_type 이 되고
-         종류별 파서를 결정한다. 넘기지 않으면 무엇을 찍든 명함 파서가 돌아
-         포스터·영수증·티켓·청첩장은 필드가 하나도 채워지지 않는다.
-         `auto` 는 null 로 넘겨 서버 기본값(BUSINESS_CARD)에 맡긴다 — 그 경우에도
-         결과 화면에서 종류를 바꾸면 그때 다시 파싱된다. */
+      /* 이 칩은 **프레임 비율 힌트만이 아니다.** 여기서 고른 종류가 그대로
+         `/api/scan` 의 document_type 이 되어 종류별 파서를 결정한다.
+         `auto` 는 null 로 넘긴다 — 그러면 서버가 이미지 분류기로 종류를 정한다
+         (실측 정확도 93%). 사용자가 고른 값은 분류기보다 우선한다: 사람이 명시한
+         의도를 모델 추정으로 덮지 않는다.
+         어느 쪽이든 결과 화면에서 종류를 바꾸면 그때 다시 파싱된다. */
       setDocTypeHint(next === 'auto' ? null : next);
       haptics.selection();
     },
@@ -612,8 +612,8 @@ export default function ScanCameraScreen() {
 
         {/* ── 문서 유형 칩 ────────────────────────────────────────────────
             프레임 비율·안내문구뿐 아니라 **서버가 어느 파서를 돌릴지**를 정한다
-            (서버에 문서 종류 분류기가 없다 — selectGuide 주석 참조).
-            선택은 여전히 선택 사항이고, 결과 화면에서 언제든 바꿔 다시 파싱할 수 있다. */}
+            (selectGuide 주석 참조). 고르지 않으면 서버가 분류하므로 선택은
+            어디까지나 선택 사항이고, 결과 화면에서 언제든 바꿔 다시 파싱할 수 있다. */}
         <View className="flex-row items-center justify-center gap-2 px-4 pb-3">
           {GUIDE_CHIPS.map((mode) => {
             const selected = guideMode === mode;
