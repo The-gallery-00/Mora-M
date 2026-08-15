@@ -66,3 +66,7 @@ server/uploads/
 
 # Obsidian 로컬 설정 (workspace.json 에 개인 경로가 들어간다)
 .obsidian/
+
+# OCR 벤치 산출물 (bench_dataset.py)
+server/ocr/work_full/
+server/ocr/bench_full.json
