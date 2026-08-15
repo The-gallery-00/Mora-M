@@ -44,6 +44,12 @@ app:
   jwt-expiration: ${JWT_EXPIRATION:1209600000}
   ocr-service-url: ${OCR_SERVICE_URL:http://localhost:8000}
   openai-api-key: ${OPENAI_API_KEY:}
+  frontend-url: ${FRONTEND_URL:mora://auth}
+  oauth:
+    google:
+      client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+      client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI:}
 
 logging:
   level:

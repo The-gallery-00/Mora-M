@@ -186,6 +186,9 @@ public class RestTemplateConfig {
     /** 임베딩 응답 대기 상한. 앱의 SAVE_TIMEOUT_MS(20초)보다 짧아야 스레드가 새지 않는다. */
     private static final Duration EMBEDDING_READ_TIMEOUT = Duration.ofSeconds(15);
 
+    /** OAuth 토큰 교환/프로필 조회 응답 대기 상한. 로그인 화면에서 기다리는 외부 API라 짧게 끊는다. */
+    private static final Duration OAUTH_READ_TIMEOUT = Duration.ofSeconds(10);
+
     /** OCR 스캔(POST /api/scan) 전용. OcrService가 @Qualifier로 주입받는다. */
     @Bean("ocrScanRestTemplate")
     public RestTemplate ocrScanRestTemplate() {
@@ -202,6 +205,12 @@ public class RestTemplateConfig {
     @Bean("embeddingRestTemplate")
     public RestTemplate embeddingRestTemplate() {
         return newRestTemplate(CONNECT_TIMEOUT, EMBEDDING_READ_TIMEOUT);
+    }
+
+    /** OAuth provider 토큰 교환/프로필 조회 전용. GoogleOAuthService가 @Qualifier로 주입받는다. */
+    @Bean("oauthRestTemplate")
+    public RestTemplate oauthRestTemplate() {
+        return newRestTemplate(CONNECT_TIMEOUT, OAUTH_READ_TIMEOUT);
     }
 
     /** 타임아웃만 다른 세 빈의 공통 생성 경로. 팩토리 설정 누락을 한 곳으로 모은다. */
