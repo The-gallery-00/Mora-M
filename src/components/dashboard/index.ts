@@ -15,7 +15,7 @@ export type { ScheduleDocType, ScheduleListItemProps } from './ScheduleListItem'
 export { NotificationItem } from './NotificationItem';
 export type { NotificationItemProps } from './NotificationItem';
 
-export { CalendarLegend, MonthCalendar } from './MonthCalendar';
+export { MonthCalendar } from './MonthCalendar';
 export type { MonthCalendarProps } from './MonthCalendar';
 
 export { WeekCalendar } from './WeekCalendar';

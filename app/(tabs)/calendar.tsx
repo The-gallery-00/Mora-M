@@ -26,7 +26,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CalendarLegend, MonthCalendar, ScheduleListItem } from '@/components/dashboard';
+import { MonthCalendar, ScheduleListItem } from '@/components/dashboard';
 import { Button, EmptyState, Skeleton, toast } from '@/components/ui';
 import {
   addMonths,
@@ -163,16 +163,13 @@ export default function CalendarScreen() {
             matrix={matrix}
             selectedDate={selectedDate}
             eventsByDate={eventsByDate}
+            events={source.data ?? monthEvents}
             onSelectDate={selectDate}
             onChangeMonth={changeMonth}
             loading={isPending}
             testID="calendar-grid"
           />
         )}
-
-        <View className="flex-row items-center justify-between">
-          <CalendarLegend />
-        </View>
       </View>
 
       <Modal
