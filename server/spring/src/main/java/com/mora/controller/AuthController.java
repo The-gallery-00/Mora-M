@@ -7,6 +7,7 @@ import com.mora.security.PasswordChangeRateLimiter;
 import com.mora.service.AuthService;
 import com.mora.service.GoogleOAuthService;
 import com.mora.service.KakaoOAuthService;
+import com.mora.service.NaverOAuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -80,6 +81,7 @@ public class AuthController {
     private final AuthService authService;
     private final GoogleOAuthService googleOAuthService;
     private final KakaoOAuthService kakaoOAuthService;
+    private final NaverOAuthService naverOAuthService;
     private final JwtUtil jwtUtil;
     private final PasswordChangeRateLimiter passwordChangeRateLimiter;
     private final String frontendUrl;
@@ -87,12 +89,14 @@ public class AuthController {
     public AuthController(AuthService authService,
                           GoogleOAuthService googleOAuthService,
                           KakaoOAuthService kakaoOAuthService,
+                          NaverOAuthService naverOAuthService,
                           JwtUtil jwtUtil,
                           PasswordChangeRateLimiter passwordChangeRateLimiter,
                           @Value("${app.frontend-url:mora://auth}") String frontendUrl) {
         this.authService = authService;
         this.googleOAuthService = googleOAuthService;
         this.kakaoOAuthService = kakaoOAuthService;
+        this.naverOAuthService = naverOAuthService;
         this.jwtUtil = jwtUtil;
         this.passwordChangeRateLimiter = passwordChangeRateLimiter;
         this.frontendUrl = frontendUrl;
@@ -153,6 +157,22 @@ public class AuthController {
             return redirect(oauthSuccessUrl(response, "kakao"));
         } catch (RuntimeException e) {
             return redirect(oauthFailureUrl("kakao"));
+        }
+    }
+
+    @GetMapping("/naver/login")
+    public ResponseEntity<Void> naverLogin() {
+        return redirect(naverOAuthService.authorizationUrl());
+    }
+
+    @GetMapping("/naver/callback")
+    public ResponseEntity<Void> naverCallback(@RequestParam("code") String code,
+                                              @RequestParam("state") String state) {
+        try {
+            AuthResponse response = authService.loginWithOAuth(naverOAuthService.profile(code, state));
+            return redirect(oauthSuccessUrl(response, "naver"));
+        } catch (RuntimeException e) {
+            return redirect(oauthFailureUrl("naver"));
         }
     }
 
