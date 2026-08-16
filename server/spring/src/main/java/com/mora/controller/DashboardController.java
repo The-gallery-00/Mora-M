@@ -22,7 +22,7 @@ public class DashboardController {
     public ResponseEntity<ApiResponse<DashboardResponse>> get(
             HttpServletRequest request,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(defaultValue = "30") int deadlineDays) {
+            @RequestParam(defaultValue = "14") int deadlineDays) {
         UUID userId = userId(request);
         if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
         return ResponseEntity.ok(ApiResponse.ok(service.get(userId, date, deadlineDays)));

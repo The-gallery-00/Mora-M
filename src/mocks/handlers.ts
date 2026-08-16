@@ -897,7 +897,7 @@ function handleDashboard(ctx: Ctx): MockResponse {
   const db = readDb();
   const date = ctx.query.date && /^\d{4}-\d{2}-\d{2}$/.test(ctx.query.date) ? ctx.query.date : todayDate();
   // 서버는 `Math.max(0, deadlineDays)` 로만 정규화한다(상한 없음).
-  const deadlineDays = Math.max(0, intParam(ctx.query.deadlineDays, 30));
+  const deadlineDays = Math.max(0, intParam(ctx.query.deadlineDays, 14));
 
   const todaySchedules: Loose[] = [];
   for (const ticket of db.tickets) {
@@ -924,9 +924,12 @@ function handleDashboard(ctx: Ctx): MockResponse {
   todaySchedules.sort((a, b) => String(a.time || '99:99').localeCompare(String(b.time || '99:99')));
 
   const deadlines: (Loose & { dDay: number })[] = [];
+  const now = new Date();
   for (const ticket of db.tickets) {
     const dDay = diffDays(date, ticket.departureDate);
     if (dDay === null || dDay < 0 || dDay > deadlineDays) continue;
+    const departureAt = new Date(`${ticket.departureDate}T${ticket.departureTime}:00`);
+    if (Number.isNaN(departureAt.getTime()) || departureAt <= now) continue;
     deadlines.push({
       type: 'TICKET',
       id: String(ticket.id),

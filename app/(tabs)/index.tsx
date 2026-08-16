@@ -18,8 +18,10 @@
 // 헤더 벨은 Phase 0 스텁에서 `toast.info('준비 중입니다.')` 로 막혀 있었다 — 목적지(SCR-08)가
 // 생겼으므로 `/notifications` 로 실제 연결하고 미읽음 배지를 붙인다.
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Modal,
+  PanResponder,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -33,6 +35,7 @@ import { MoraLogo } from "@/components/brand/MoraLogo";
 import {
   DEADLINE_CARD_WIDTH,
   DeadlineCard,
+  dDayLabel,
   ScheduleListItem,
   STAT_TILE_MIN_HEIGHT,
   STAT_TILE_WIDTH,
@@ -48,13 +51,11 @@ import {
 } from "@/components/ui";
 import {
   DASHBOARD_COPY,
-  monthLabel,
   todayString,
   useDashboard,
   useWeekStrip,
   type CalendarEvent,
   type DashboardDeadline,
-  type DashboardSchedule,
 } from "@/features/dashboard";
 import { DOC_ROUTE_SEGMENT } from "@/features/documents";
 import { formatDateShortKo, href } from "@/features/documents/ArchiveList";
@@ -62,7 +63,8 @@ import { useUnreadCount } from "@/features/notifications";
 import { haptics } from "@/lib/haptics";
 import { HEADER_HEIGHT, tabScrollBottomPadding } from "@/navigation/shell";
 import { useAuthStore } from "@/store/authStore";
-import { spacing } from "@/theme/scale";
+import { useTheme } from "@/theme/ThemeProvider";
+import { radius, spacing } from "@/theme/scale";
 
 /* ── 아이콘 (lucide 미설치 → 같은 실루엣으로 인라인 SVG) ─────────────── */
 
@@ -106,6 +108,26 @@ function formatDayHeading(iso: string): string {
   return `${month}월 ${day}일`;
 }
 
+function dateTime(iso: string, time = "00:00"): Date | null {
+  const value = new Date(`${iso}T${time}:00`);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function isOngoingEvent(event: CalendarEvent, now: Date): boolean {
+  const start = dateTime(event.startDate, event.time || "00:00");
+  if (!start || start > now) return false;
+
+  if (event.type === "TICKET") {
+    const arrival = event.arrivalDate
+      ? dateTime(event.arrivalDate, event.arrivalTime || "00:00")
+      : null;
+    return arrival !== null && now < arrival;
+  }
+
+  const end = dateTime(event.endDate, "23:59");
+  return end !== null && now <= end;
+}
+
 /* ── 문서 4종 바로가기 ─────────────────────────────────────────────
    순서는 원본 `STORAGE_ITEMS`(명함 → 티켓 → 포스터 → 영수증) 그대로다 (Screen Specs SCR-14 §3).
    색 클래스는 tailwind 가 정적 추출하므로 문자열을 조립하지 않고 통째로 적는다.
@@ -114,6 +136,9 @@ function formatDayHeading(iso: string): string {
 /** 마감 카드 캐러셀의 스냅 간격 = 카드 폭 + 카드 사이 간격. */
 const CARD_GAP = spacing.md;
 const SNAP_INTERVAL = DEADLINE_CARD_WIDTH + CARD_GAP;
+const EMPTY_DEADLINES: readonly DashboardDeadline[] = [];
+
+type UpcomingSheetItem = DashboardDeadline & { time: string };
 
 /* ── 섹션 헤더 ─────────────────────────────────────────────────────
    16/600 이다 (Design Tokens §5 `section` 롤). 16px 스케일 토큰명이 `input` 이라 클래스가
@@ -178,6 +203,159 @@ function SectionHeader({
         </Pressable>
       ) : null}
     </View>
+  );
+}
+
+function UpcomingScheduleSheet({
+  visible,
+  items,
+  onClose,
+  onOpenItem,
+}: {
+  visible: boolean;
+  items: readonly UpcomingSheetItem[];
+  onClose: () => void;
+  onOpenItem: (item: DashboardDeadline) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const t = useTheme();
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          gesture.dy > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          gesture.dy > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        onPanResponderRelease: (_, gesture) => {
+          if (gesture.dy >= 80 || gesture.vy >= 0.8) {
+            onClose();
+          }
+        },
+      }),
+    [onClose],
+  );
+
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <Pressable
+        className="flex-1 justify-end"
+        style={{ backgroundColor: t.scrim }}
+        accessibilityRole="button"
+        accessibilityLabel="다가오는 일정 전체 목록 닫기"
+        onPress={onClose}
+      >
+        <Pressable
+          className="rounded-t-sheet bg-bg-elevated px-5 pt-3"
+          style={{ maxHeight: "82%", paddingBottom: insets.bottom + spacing.lg }}
+          accessibilityViewIsModal
+          onPress={() => undefined}
+        >
+          <View {...panResponder.panHandlers}>
+            <View className="mb-3 h-1 w-9 self-center rounded-full bg-border-subtle" />
+            <View className="flex-row items-center justify-between">
+              <Text
+                className="text-h2 font-w700 text-text-primary"
+                accessibilityRole="header"
+                maxFontSizeMultiplier={1.3}
+              >
+                다가오는 일정
+              </Text>
+              <Text
+                className="text-body-sm font-w700 text-action"
+                maxFontSizeMultiplier={1.2}
+              >
+                {`총 ${items.length}건`}
+              </Text>
+            </View>
+            <Text
+              className="mb-4 mt-1 text-caption text-text-muted"
+              maxFontSizeMultiplier={1.2}
+            >
+              2주 내 일정을 보여드려요.
+            </Text>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ gap: spacing.md }}
+          >
+              {items.map((item) => {
+                const isTicket = item.type === "TICKET";
+                const label = dDayLabel(item.dDay);
+                const dDayClass = item.dDay <= 3 ? "text-deadline" : "text-action";
+                const badgeBoxClass = isTicket ? "bg-ticket-bg" : "bg-poster-bg";
+                const badgeTextClass = isTicket ? "text-ticket" : "text-poster";
+                const dateAndTime = `${formatDateShortKo(item.date)}${
+                  isTicket && item.time ? ` · ${item.time}` : ""
+                }`;
+
+                return (
+                  <Pressable
+                    key={item.key}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${isTicket ? "티켓" : "포스터"}, ${item.title}, ${dateAndTime}, ${label}`}
+                    onPress={() => {
+                      onClose();
+                      onOpenItem(item);
+                    }}
+                    className="min-h-20 flex-row items-center rounded-card border border-border-subtle bg-bg-elevated px-4 py-3"
+                    style={({ pressed }) => [
+                      t.elevation.raised,
+                      pressed ? { opacity: 0.86 } : null,
+                    ]}
+                    testID={`upcoming-sheet-${item.key}`}
+                  >
+                    <View className="mr-3 flex-1" style={{ minWidth: 0 }}>
+                      <View className="flex-row items-center" style={{ minWidth: 0 }}>
+                        <View className={`mr-2 rounded-xs px-2 py-0.5 ${badgeBoxClass}`}>
+                          <Text
+                            className={`text-caption font-w600 ${badgeTextClass}`}
+                            maxFontSizeMultiplier={1.2}
+                          >
+                            {isTicket ? "티켓" : "포스터"}
+                          </Text>
+                        </View>
+                        <Text
+                          className="flex-1 text-base font-w700 text-text-primary"
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                          maxFontSizeMultiplier={1.2}
+                          style={{ minWidth: 0, flexShrink: 1 }}
+                        >
+                          {item.title}
+                        </Text>
+                      </View>
+                      <Text
+                        className="mt-2 text-label text-text-muted"
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={1.2}
+                      >
+                        {dateAndTime}
+                      </Text>
+                    </View>
+
+                    <Text
+                      className={`text-base font-w800 ${dDayClass}`}
+                      maxFontSizeMultiplier={1.2}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -274,30 +452,53 @@ export default function HomeScreen() {
     [router],
   );
 
-  const openSchedule = useCallback(
-    (item: DashboardSchedule) => {
-      if (item.documentId === null) {
-        toast.error(DASHBOARD_COPY.documentMissing);
-        return;
-      }
-      router.push(
-        href(`/doc/${DOC_ROUTE_SEGMENT[item.type]}/${item.documentId}`),
-      );
-    },
-    [router],
-  );
-
   // 아바타 이니셜 — 이름이 없으면 원본 폴백 `U` (Screen Specs SCR-06 구성 요소).
   const initial = user?.name?.trim().charAt(0) || "U";
 
   const baseDate = data?.date || todayString();
-  const deadlines = data?.upcomingDeadlines ?? [];
-  const schedules = data?.todaySchedules ?? [];
-  const now = new Date();
+  const deadlines = data?.upcomingDeadlines ?? EMPTY_DEADLINES;
+  const [upcomingSheetVisible, setUpcomingSheetVisible] = useState(false);
   const [selectedWeekDate, setSelectedWeekDate] = useState(() => todayString());
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
   const { days: weekDays, eventsByDate: weekEventsByDate } = useWeekStrip(baseDate);
   const selectedDateEvents = weekEventsByDate[selectedWeekDate] ?? [];
   const selectedScheduleCount = selectedDateEvents.length;
+  const ongoingEvents = useMemo(() => {
+    const uniqueEvents = new Map<string, CalendarEvent>();
+    for (const events of Object.values(weekEventsByDate)) {
+      for (const event of events) uniqueEvents.set(event.key, event);
+    }
+    return [...uniqueEvents.values()].filter((event) => isOngoingEvent(event, currentTime));
+  }, [currentTime, weekEventsByDate]);
+  const upcomingSheetItems = useMemo<UpcomingSheetItem[]>(() => {
+    return deadlines
+      .map((item) => {
+        const calendarEvent = (weekEventsByDate[item.date] ?? []).find(
+          (event) => event.key === item.key,
+        );
+        return {
+          ...item,
+          time: item.type === "TICKET" ? (calendarEvent?.time ?? "") : "",
+        };
+      })
+      .sort((a, b) => {
+        const dateOrder = a.date.localeCompare(b.date);
+        if (dateOrder !== 0) return dateOrder;
+
+        if (a.type === "TICKET" && b.type === "TICKET") {
+          const timeOrder = (a.time || "99:99").localeCompare(b.time || "99:99");
+          if (timeOrder !== 0) return timeOrder;
+        } else if (a.type !== b.type) {
+          return a.type === "TICKET" ? -1 : 1;
+        }
+
+        return a.title.localeCompare(b.title, "ko");
+      });
+  }, [deadlines, weekEventsByDate]);
 
   const openCalendarEvent = useCallback(
     (event: CalendarEvent) => {
@@ -380,65 +581,6 @@ export default function HomeScreen() {
           </View>
         ) : data ? (
           <>
-            {/* ── 통계 타일 3개 (가로 스크롤) ──
-                390dp 에서 4분할은 칸당 90dp 라 숫자+라벨이 안 들어간다 → 3개 가로 스크롤이다.
-
-                `alignItems: 'stretch'` 는 기본값이지만 **명시한다.** 세 타일의 높이를 서로 맞추는
-                유일한 장치이기 때문이다 — 한 타일이 (큰 글꼴 배율 등으로) 더 커지면 나머지 둘이
-                따라 늘어난다. 여기서 `alignItems: 'flex-start'` 로 바꾸면 세 타일 높이가 어긋나고,
-                캐러셀이 잰 높이보다 큰 타일은 잘린다. */}
-            <View
-              style={{
-                width: "100%",
-                flexDirection: "row",
-                gap: CARD_GAP,
-                marginTop: spacing.sm,
-                minHeight: STAT_TILE_MIN_HEIGHT,
-              }}
-            >
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <StatTile
-                  icon="📅"
-                  tone="schedule"
-                  label="오늘 일정"
-                  value={data.todayScheduleCount}
-                  unit="건"
-                  hint="예정된 일정"
-                  style={{ width: "100%" }}
-                  onPress={() => router.push(href("/calendar"))}
-                  testID="stat-today"
-                />
-              </View>
-
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <StatTile
-                  icon="⏰"
-                  tone="deadline"
-                  label="마감 임박"
-                  value={data.upcomingDeadlineCount}
-                  unit="건"
-                  hint={`${data.deadlineDays}일 이내 마감`}
-                  style={{ width: "100%" }}
-                  onPress={() => router.push(href("/calendar"))}
-                  testID="stat-deadline"
-                />
-              </View>
-
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <StatTile
-                  icon="📄"
-                  tone="stored"
-                  label="보관 문서"
-                  value={data.storedDocumentCount}
-                  unit="건"
-                  hint="전체 저장 문서"
-                  style={{ width: "100%" }}
-                  onPress={() => router.push("/(tabs)/archive")}
-                  testID="stat-stored"
-                />
-              </View>
-            </View>
-
             {dashboard.isBrandNew ? (
               /* ── 빈(전체 신규 유저) — 통계 전부 0 ── */
               <View className="mt-6 rounded-card border border-border-subtle bg-bg-elevated">
@@ -450,152 +592,10 @@ export default function HomeScreen() {
                   testID="home-empty"
                 />
               </View>
-            ) : (
-              <>
-                {/* ── 마감 임박 ── */}
-                <SectionHeader
-                  title="마감 임박"
-                  {...(deadlines.length > 0
-                    ? { badge: `${deadlines.length}건` }
-                    : {})}
-                />
-
-                {deadlines.length === 0 ? (
-                  <View className="h-24 items-center justify-center rounded-card border border-dashed border-border-subtle">
-                    <Text
-                      className="text-body-sm text-text-muted"
-                      maxFontSizeMultiplier={1.3}
-                    >
-                      {DASHBOARD_COPY.emptyDeadlines}
-                    </Text>
-                  </View>
-                ) : (
-                  /* FlashList 를 쓰지 않는다 — 세로 ScrollView 안에 가로 가상 리스트를 넣으면
-                     중첩 스크롤 경고와 측정 충돌이 난다. 항목 수가 마감 윈도우(30일) 안쪽으로
-                     제한돼 있어 가상화 이득도 없다. 스냅 간격만 스펙대로 맞춘다. */
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    snapToInterval={SNAP_INTERVAL}
-                    decelerationRate="fast"
-                    style={{ marginHorizontal: -16 }}
-                    contentContainerStyle={{
-                      paddingHorizontal: 16,
-                      gap: CARD_GAP,
-                    }}
-                  >
-                    {deadlines.map((item) => (
-                      <DeadlineCard
-                        key={item.key}
-                        docType={item.type}
-                        title={item.title}
-                        {...(item.subtitle ? { subtitle: item.subtitle } : {})}
-                        dateLabel={formatDateShortKo(item.date)}
-                        dDay={item.dDay}
-                        imageUri={item.thumbnailUrl}
-                        onPress={() => openDeadline(item)}
-                        testID={`deadline-${item.key}`}
-                      />
-                    ))}
-                  </ScrollView>
-                )}
-
-                {/* ── 오늘 일정 ──
-                    우측 링크는 SCR-06 와이어프레임의 `2026년 7월 >` 이다. 월간 전체는 SCR-07 이 맡는다. */}
-                {false ? (
-                <>
-                <SectionHeader
-                  title={`${formatDayHeading(baseDate)} 일정`}
-                  {...(schedules.length > 0
-                    ? { badge: `${schedules.length}건` }
-                    : {})}
-                  linkLabel={monthLabel(now.getFullYear(), now.getMonth() + 1)}
-                  onLink={() => router.push(href("/calendar"))}
-                />
-
-                {schedules.length === 0 ? (
-                  <View className="items-center rounded-card border border-border-subtle bg-bg-elevated py-8">
-                    <Text
-                      className="text-body-sm text-text-muted"
-                      maxFontSizeMultiplier={1.3}
-                    >
-                      {DASHBOARD_COPY.emptySchedules}
-                    </Text>
-                  </View>
-                ) : (
-                  <View className="overflow-hidden rounded-card">
-                    {schedules.map((item, index) => (
-                      <View key={item.key}>
-                        {index > 0 ? (
-                          <View className="h-px bg-bg-base" />
-                        ) : null}
-                        <ScheduleListItem
-                          docType={item.type}
-                          title={item.title}
-                          {...(item.time ? { time: item.time } : {})}
-                          onPress={() => openSchedule(item)}
-                          testID={`schedule-${item.key}`}
-                        />
-                      </View>
-                    ))}
-                  </View>
-                )}
-                </>
-                ) : null}
-              </>
-            )}
+            ) : null}
           </>
         ) : null}
 
-        {/* ── 문서 4종 바로가기 → 보관함(SCR-14)의 해당 유형 필터 ── */}
-        {/*
-        <Text
-          className="mb-3 mt-7 text-input font-w600 text-text-primary"
-          accessibilityRole="header"
-        >
-          문서 유형
-        </Text>
-        <View className="flex-row flex-wrap gap-3">
-          {DOC_SHORTCUTS.map((doc) => (
-            <Pressable
-              key={doc.type}
-              accessibilityRole="button"
-              accessibilityLabel={`${doc.label} 보관함 열기`}
-              onPress={() =>
-                router.push({
-                  pathname: "/(tabs)/archive",
-                  params: { type: doc.type },
-                })
-              }
-              // 2열 그리드 — 47% 두 칸 + gap 12 가 한 줄에 들어가고 남는 폭은 grow 가 나눠 갖는다
-              className={`h-20 grow basis-[47%] justify-end rounded-card p-4 ${doc.box}`}
-            >
-              <Text className={`text-h3 font-w700 ${doc.text}`}>
-                {doc.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        */}
-
-        {false ? (
-        <>
-        {/* ── 주 CTA. 용어집(§7-4)상 등록 진입은 `스캔하기` 다 ── */}
-        <Button
-          label="스캔하기"
-          onPress={() => router.push("/scan")}
-          variant="primary"
-          size="lg"
-          fullWidth
-          haptic="medium"
-          style={{ marginTop: 28 }}
-        />
-        </>
-        ) : null}
-
-        <SectionHeader
-          title="이번 주"
-        />
         <WeekCalendar
           days={weekDays}
           selectedDate={selectedWeekDate}
@@ -619,7 +619,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              <View className="overflow-hidden rounded-card">
+              <View className="rounded-card">
                 {selectedDateEvents.map((item, index) => (
                   <View key={item.key}>
                     {index > 0 ? <View className="h-px bg-bg-base" /> : null}
@@ -627,6 +627,15 @@ export default function HomeScreen() {
                       docType={item.type}
                       title={item.title}
                       {...(item.time ? { time: item.time } : {})}
+                      {...(item.subtitle ? { subtitle: item.subtitle } : {})}
+                      style={{
+                        borderTopLeftRadius: index === 0 ? radius.card : 0,
+                        borderTopRightRadius: index === 0 ? radius.card : 0,
+                        borderBottomLeftRadius:
+                          index === selectedDateEvents.length - 1 ? radius.card : 0,
+                        borderBottomRightRadius:
+                          index === selectedDateEvents.length - 1 ? radius.card : 0,
+                      }}
                       onPress={() => openCalendarEvent(item)}
                       testID={`schedule-${item.key}`}
                     />
@@ -636,16 +645,108 @@ export default function HomeScreen() {
             )}
           </>
         ) : null}
-        <Button
-          label="스캔하기"
-          onPress={() => router.push("/scan")}
-          variant="primary"
-          size="lg"
-          fullWidth
-          haptic="medium"
-          style={{ marginTop: 28 }}
-        />
+
+        {data && !dashboard.isBrandNew ? (
+          <>
+            <SectionHeader
+              title="다가오는 일정"
+              {...(deadlines.length > 0
+                ? {
+                    badge: `${deadlines.length}건`,
+                    linkLabel: "전체",
+                    onLink: () => setUpcomingSheetVisible(true),
+                  }
+                : {})}
+            />
+
+            {deadlines.length === 0 ? (
+              <View className="items-center rounded-card border border-border-subtle bg-bg-elevated py-8">
+                <Text
+                  className="text-body-sm text-text-muted"
+                  maxFontSizeMultiplier={1.3}
+                >
+                  {DASHBOARD_COPY.emptyDeadlines}
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={SNAP_INTERVAL}
+                decelerationRate="fast"
+                style={{ marginHorizontal: -16 }}
+                contentContainerStyle={{
+                  paddingHorizontal: 16,
+                  gap: CARD_GAP,
+                }}
+              >
+                {deadlines.map((item) => (
+                  <DeadlineCard
+                    key={item.key}
+                    docType={item.type}
+                    title={item.title}
+                    {...(item.subtitle ? { subtitle: item.subtitle } : {})}
+                    dateLabel={formatDateShortKo(item.date)}
+                    dDay={item.dDay}
+                    imageUri={item.thumbnailUrl}
+                    onPress={() => openDeadline(item)}
+                    testID={`deadline-${item.key}`}
+                  />
+                ))}
+              </ScrollView>
+            )}
+          </>
+        ) : null}
+
+        {data ? (
+          <>
+            <SectionHeader
+              title="진행 중"
+              {...(ongoingEvents.length > 0
+                ? { badge: `${ongoingEvents.length}건` }
+                : {})}
+            />
+            {ongoingEvents.length === 0 ? (
+              <View className="items-center rounded-card border border-border-subtle bg-bg-elevated py-8">
+                <Text className="text-body-sm text-text-muted" maxFontSizeMultiplier={1.3}>
+                  진행 중인 일정이 없습니다
+                </Text>
+              </View>
+            ) : (
+              <View className="rounded-card">
+                {ongoingEvents.map((item, index) => (
+                  <View key={item.key}>
+                    {index > 0 ? <View className="h-px bg-bg-base" /> : null}
+                    <ScheduleListItem
+                      docType={item.type}
+                      title={item.title}
+                      {...(item.time ? { time: item.time } : {})}
+                      {...(item.subtitle ? { subtitle: item.subtitle } : {})}
+                      style={{
+                        borderTopLeftRadius: index === 0 ? radius.card : 0,
+                        borderTopRightRadius: index === 0 ? radius.card : 0,
+                        borderBottomLeftRadius:
+                          index === ongoingEvents.length - 1 ? radius.card : 0,
+                        borderBottomRightRadius:
+                          index === ongoingEvents.length - 1 ? radius.card : 0,
+                      }}
+                      onPress={() => openCalendarEvent(item)}
+                      testID={`ongoing-${item.key}`}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        ) : null}
       </ScrollView>
+
+      <UpcomingScheduleSheet
+        visible={upcomingSheetVisible}
+        items={upcomingSheetItems}
+        onClose={() => setUpcomingSheetVisible(false)}
+        onOpenItem={openDeadline}
+      />
     </View>
   );
 }

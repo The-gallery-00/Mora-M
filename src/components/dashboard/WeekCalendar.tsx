@@ -15,7 +15,6 @@ export interface WeekCalendarProps {
 
 const TODAY_BADGE = 28;
 const DOT_SIZE = 5;
-const MAX_DOTS = 3;
 
 function WeekCalendarBase({
   days,
@@ -62,8 +61,8 @@ function WeekCalendarBase({
       <View className="flex-row">
         {days.map((day) => {
           const events = eventsByDate[day.date] ?? [];
-          const dots = events.slice(0, MAX_DOTS);
-          const overflow = events.length - dots.length;
+          const hasTicket = events.some((event) => event.type === 'TICKET');
+          const hasPoster = events.some((event) => event.type === 'POSTER');
           const selected = selectedDate === day.date;
 
           return (
@@ -105,21 +104,25 @@ function WeekCalendarBase({
               </View>
 
               <View className="mt-1 h-2 flex-row items-center justify-center gap-0.5">
-                {dots.map((event) => (
+                {hasTicket ? (
                   <View
-                    key={event.key}
                     style={{
                       width: DOT_SIZE,
                       height: DOT_SIZE,
                       borderRadius: DOT_SIZE / 2,
-                      backgroundColor: event.type === 'TICKET' ? t.doc.TICKET.fg : t.calendar.poster,
+                      backgroundColor: t.doc.TICKET.fg,
                     }}
                   />
-                ))}
-                {overflow > 0 ? (
-                  <Text className="text-micro font-w600 text-text-muted" maxFontSizeMultiplier={1}>
-                    {`+${overflow}`}
-                  </Text>
+                ) : null}
+                {hasPoster ? (
+                  <View
+                    style={{
+                      width: DOT_SIZE,
+                      height: DOT_SIZE,
+                      borderRadius: DOT_SIZE / 2,
+                      backgroundColor: t.calendar.poster,
+                    }}
+                  />
                 ) : null}
               </View>
             </Pressable>

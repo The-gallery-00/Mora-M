@@ -140,7 +140,7 @@ MORA 모바일 앱이 호출하는 Spring(:8080) · OCR(:8000) 엔드포인트 6
 
 | ID | 메서드 | 경로 | 인증 | 요청 | 응답 data | 화면 | 페이즈 |
 |---|---|---|---|---|---|---|---|
-| API-24 | GET | `/api/dashboard` | 필수 | `?date=YYYY-MM-DD&deadlineDays=30` (음수는 0 보정) | `DashboardResponse` | SCR-06 | Phase 6 |
+| API-24 | GET | `/api/dashboard` | 필수 | `?date=YYYY-MM-DD&deadlineDays=14` (음수는 0 보정) | `DashboardResponse` | SCR-06 | Phase 6 |
 
 ```ts
 DashboardResponse {

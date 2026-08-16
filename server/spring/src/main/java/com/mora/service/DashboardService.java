@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -40,8 +41,14 @@ public class DashboardService {
         LocalDate base = date == null ? LocalDate.now(SEOUL_ZONE) : date;
         int days = Math.max(0, requestedDays);
         LocalDate end = base.plusDays(days);
+        LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
         List<DashboardResponse.DeadlineItem> deadlines = new ArrayList<>();
         for (Ticket t : tickets.findByUserIdAndDepartureDateBetweenOrderByDepartureDateAscDepartureTimeAsc(userId, base, end)) {
+            if (t.getDepartureTime() == null
+                    ? !t.getDepartureDate().isAfter(now.toLocalDate())
+                    : !LocalDateTime.of(t.getDepartureDate(), t.getDepartureTime()).isAfter(now)) {
+                continue;
+            }
             deadlines.add(new DashboardResponse.DeadlineItem("TICKET", String.valueOf(t.getId()),
                     title(t), value(t.getTransportType()), t.getDepartureDate(),
                     ChronoUnit.DAYS.between(base, t.getDepartureDate()), imageUrl(t.getParsedJson())));

@@ -31,7 +31,7 @@ export interface DeadlineCardProps {
   subtitle?: string;
   /** `MM.DD (요일)`. */
   dateLabel: string;
-  /** 0 이면 라벨이 `D-DAY` 다 (SCR-06 구성 요소 표). */
+  /** 0 이면 라벨이 `D-Day` 다. */
   dDay: number;
   imageUri?: string | null;
   onPress: () => void;
@@ -43,6 +43,7 @@ export interface DeadlineCardProps {
 export const DEADLINE_CARD_WIDTH = 280;
 export const DEADLINE_CARD_HEIGHT = 120;
 const IMAGE_WIDTH = 100;
+const TEXT_COLUMN_WIDTH = DEADLINE_CARD_WIDTH - IMAGE_WIDTH;
 
 /** 이미지 부재 시 이모지 폴백 (원본 규칙). */
 const FALLBACK_EMOJI: Record<DeadlineDocType, string> = {
@@ -60,9 +61,9 @@ const BADGE_CLASS: Record<DeadlineDocType, { box: string; text: string }> = {
   POSTER: { box: "bg-poster-bg", text: "text-poster" },
 };
 
-/** SCR-06: `dDay===0` → `D-DAY`. 음수는 서버가 만들지 않지만 들어와도 날짜만 보여 준다. */
+/** `dDay===0` → `D-Day`. 음수는 서버가 만들지 않지만 들어와도 날짜만 보여 준다. */
 export function dDayLabel(dDay: number): string {
-  if (dDay === 0) return "D-DAY";
+  if (dDay === 0) return "D-Day";
   return dDay > 0 ? `D-${dDay}` : "";
 }
 
@@ -104,14 +105,23 @@ function DeadlineCardBase({
       className="flex-row overflow-hidden rounded-card border border-border-subtle bg-bg-elevated"
       style={({ pressed }) => [
         t.elevation.raised,
-        { width: DEADLINE_CARD_WIDTH, height: DEADLINE_CARD_HEIGHT },
+        {
+          width: DEADLINE_CARD_WIDTH,
+          minWidth: DEADLINE_CARD_WIDTH,
+          maxWidth: DEADLINE_CARD_WIDTH,
+          height: DEADLINE_CARD_HEIGHT,
+          flexShrink: 0,
+        },
         style,
         // SCR-06 인터랙션 표: 마감 카드 탭 scale 0.98
         pressed ? { opacity: 0.94, transform: [{ scale: 0.98 }] } : null,
       ]}
     >
-      <View className="flex-1 justify-between px-4 py-3">
-        <View>
+      <View
+        className="justify-between px-4 py-3"
+        style={{ width: TEXT_COLUMN_WIDTH, maxWidth: TEXT_COLUMN_WIDTH, flexShrink: 0 }}
+      >
+        <View style={{ width: "100%", minWidth: 0 }}>
           <View className={`self-start rounded-xs px-2 py-0.5 ${badge.box}`}>
             <Text
               className={`text-caption font-w600 ${badge.text}`}
@@ -123,14 +133,16 @@ function DeadlineCardBase({
 
           <Text
             className="mt-2 text-base font-w800 text-text-primary"
-            numberOfLines={2}
+            numberOfLines={1}
+            ellipsizeMode="tail"
             maxFontSizeMultiplier={1.2}
+            style={{ width: "100%", maxWidth: "100%", minWidth: 0, flexShrink: 1 }}
           >
             {title}
           </Text>
         </View>
 
-        <View>
+        <View style={{ width: "100%", minWidth: 0 }}>
           {label ? (
             <Text
               className={`text-body-sm font-w800 ${dDayClass}`}
@@ -142,7 +154,9 @@ function DeadlineCardBase({
           <Text
             className="text-label text-text-muted"
             numberOfLines={1}
+            ellipsizeMode="tail"
             maxFontSizeMultiplier={1.2}
+            style={{ width: "100%", maxWidth: "100%", minWidth: 0, flexShrink: 1 }}
           >
             {subtitle ? `${dateLabel} · ${subtitle}` : dateLabel}
           </Text>
@@ -152,7 +166,13 @@ function DeadlineCardBase({
       {/* 썸네일 — 다크에서 흰 문서가 카드 배경에 직접 닿지 않게 surface-alt 매트를 깐다(CMP-24). */}
       <View
         className="items-center justify-center bg-surface-alt"
-        style={{ width: IMAGE_WIDTH, height: "100%" }}
+        style={{
+          width: IMAGE_WIDTH,
+          minWidth: IMAGE_WIDTH,
+          maxWidth: IMAGE_WIDTH,
+          height: "100%",
+          flexShrink: 0,
+        }}
       >
         {showImage ? (
           <Image
