@@ -6,6 +6,7 @@ import com.mora.security.JwtUtil;
 import com.mora.security.PasswordChangeRateLimiter;
 import com.mora.service.AuthService;
 import com.mora.service.GoogleOAuthService;
+import com.mora.service.KakaoOAuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -78,17 +79,20 @@ public class AuthController {
 
     private final AuthService authService;
     private final GoogleOAuthService googleOAuthService;
+    private final KakaoOAuthService kakaoOAuthService;
     private final JwtUtil jwtUtil;
     private final PasswordChangeRateLimiter passwordChangeRateLimiter;
     private final String frontendUrl;
 
     public AuthController(AuthService authService,
                           GoogleOAuthService googleOAuthService,
+                          KakaoOAuthService kakaoOAuthService,
                           JwtUtil jwtUtil,
                           PasswordChangeRateLimiter passwordChangeRateLimiter,
                           @Value("${app.frontend-url:mora://auth}") String frontendUrl) {
         this.authService = authService;
         this.googleOAuthService = googleOAuthService;
+        this.kakaoOAuthService = kakaoOAuthService;
         this.jwtUtil = jwtUtil;
         this.passwordChangeRateLimiter = passwordChangeRateLimiter;
         this.frontendUrl = frontendUrl;
@@ -131,9 +135,24 @@ public class AuthController {
     public ResponseEntity<Void> googleCallback(@RequestParam("code") String code) {
         try {
             AuthResponse response = authService.loginWithOAuth(googleOAuthService.profile(code));
-            return redirect(oauthSuccessUrl(response));
+            return redirect(oauthSuccessUrl(response, "google"));
         } catch (RuntimeException e) {
-            return redirect(oauthFailureUrl());
+            return redirect(oauthFailureUrl("google"));
+        }
+    }
+
+    @GetMapping("/kakao/login")
+    public ResponseEntity<Void> kakaoLogin() {
+        return redirect(kakaoOAuthService.authorizationUrl());
+    }
+
+    @GetMapping("/kakao/callback")
+    public ResponseEntity<Void> kakaoCallback(@RequestParam("code") String code) {
+        try {
+            AuthResponse response = authService.loginWithOAuth(kakaoOAuthService.profile(code));
+            return redirect(oauthSuccessUrl(response, "kakao"));
+        } catch (RuntimeException e) {
+            return redirect(oauthFailureUrl("kakao"));
         }
     }
 
@@ -237,22 +256,22 @@ public class AuthController {
         return new ResponseEntity<>(headers, HttpStatus.FOUND);
     }
 
-    private String oauthSuccessUrl(AuthResponse response) {
+    private String oauthSuccessUrl(AuthResponse response, String provider) {
         return UriComponentsBuilder.fromUriString(normalizeFrontendUrl())
                 .path("/dashboard")
                 .queryParam("token", response.getToken())
                 .queryParam("userId", response.getUserId())
                 .queryParam("email", response.getEmail())
                 .queryParam("name", response.getName())
-                .queryParam("provider", "google")
+                .queryParam("provider", provider)
                 .build()
                 .toUriString();
     }
 
-    private String oauthFailureUrl() {
+    private String oauthFailureUrl(String provider) {
         return UriComponentsBuilder.fromUriString(normalizeFrontendUrl())
                 .path("/login")
-                .queryParam("oauth_error", "google")
+                .queryParam("oauth_error", provider)
                 .build()
                 .toUriString();
     }
