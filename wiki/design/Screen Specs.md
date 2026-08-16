@@ -723,7 +723,7 @@ router.replace('/(tabs)')
 | 초기 | 스켈레톤 3블록(배너/타일/카드) | — |
 | 로딩 | 통계 값 자리 `-`, 마감 섹션 스켈레톤 2장 | 3초 초과 시 `불러오는 중...` |
 | 성공 | 전체 렌더, 콘텐츠 fade-in 200ms | — |
-| 빈(마감) | 점선 카드 1장, 높이 96 | `30일 이내 마감되는 일정이 없습니다` |
+| 빈(다가오는 일정) | 점선 카드 1장, 높이 96 | `14일 이내 시작하는 일정이 없습니다` |
 | 빈(일정) | 리스트 자리에 중앙 텍스트, 패딩 32 | `일정이 없습니다` |
 | 빈(전체 신규 유저) | 통계 전부 0 + 히어로 EmptyState + CTA | `아직 저장된 문서가 없어요` / `첫 문서를 스캔하고 MORA를 시작해 보세요.` / 버튼 `문서 스캔하기` |
 | 에러 | 상단 인라인 에러 카드 + `다시 시도` | `대시보드를 불러오지 못했습니다.` (결정: 원본은 에러를 조용히 삼켰다 — `res.success === false`면 빈 배열. 상용 앱에선 부적절) |
@@ -751,7 +751,7 @@ router.replace('/(tabs)')
 
 | API | 시점 | 파라미터 | 캐시 정책 |
 |---|---|---|---|
-| API-24 `GET /api/dashboard` | 화면 포커스 시(`useFocusEffect`) | `date`(생략=서버 today), `deadlineDays=30` | 키 `['dashboard', date]`, `staleTime: 2분`, `gcTime: 30분`, `refetchOnWindowFocus` |
+| API-24 `GET /api/dashboard` | 화면 포커스 시(`useFocusEffect`) | `date`(생략=서버 today), `deadlineDays=14` | 키 `['dashboard', date]`, `staleTime: 2분`, `gcTime: 30분`, `refetchOnWindowFocus` |
 | API-33 `GET /api/notifications/unread-count` | 헤더 마운트 + 60초 폴링 | — | 키 `['notif','unread']`, `staleTime: 30초`. 응답이 `Map`이라 **`data.count`로 뜯는다** |
 | API-64 이미지 | 카드 렌더 시 | — | expo-image disk 캐시 7일 |
 

@@ -10,7 +10,7 @@
  *
  *   GET /api/dashboard
  *   {"success":true,"data":{
- *      "date":"2026-07-28","deadlineDays":30,
+ *      "date":"2026-07-28","deadlineDays":14,
  *      "todayScheduleCount":0,"upcomingDeadlineCount":0,"storedDocumentCount":3,
  *      "upcomingDeadlines":[],"todaySchedules":[]}}
  *
@@ -21,7 +21,7 @@
  *  2. `date` 는 `LocalDate` 이고 **ISO 문자열** `"2026-07-28"` 로 온다 (숫자 배열 아님).
  *  3. 홈 1화면에 필요한 것이 전부 이 1건에 들어 있다 — 원본 웹의 3콜(카드/티켓/포스터 100건씩)을
  *     대체한다. **홈에서 다른 목록 API 를 추가로 부르지 마라** (FR-081 의 핵심).
- *  4. `deadlineDays` 는 서버 기본 30 이지만 앱은 항상 명시 전송한다(프로젝트 규약).
+ *  4. `deadlineDays` 는 서버 기본 14 이지만 앱은 항상 명시 전송한다(프로젝트 규약).
  *     서버는 `Math.max(0, deadlineDays)` 로만 정규화하고 상한이 없다.
  *  5. **`todaySchedules` 는 `date` 하루치뿐이다.** 주간 스트립(SCR-06)·월간 캘린더(SCR-07)를
  *     이 응답으로 그릴 수 없다. 캘린더는 `calendar.ts` 가 티켓·포스터 목록에서 직접 조립한다.
@@ -77,7 +77,7 @@ export type DashboardDeadline = {
   subtitle: string;
   /** `YYYY-MM-DD`. */
   date: string;
-  /** 기준일로부터 남은 일수. 0 이면 오늘 마감(`D-DAY` 라벨). 음수는 서버가 만들지 않는다. */
+  /** 기준일로부터 남은 일수. 0 이면 오늘 마감(`D-Day` 라벨). 음수는 서버가 만들지 않는다. */
   dDay: number;
   /** 절대 URL. 없으면 `null` → 화면이 종별 폴백을 그린다. */
   thumbnailUrl: string | null;
@@ -115,12 +115,12 @@ export type Dashboard = {
 export type DashboardParams = {
   /** `YYYY-MM-DD`. 생략하면 서버 today. */
   date?: string;
-  /** 마감 윈도우(일). 기본 30 (SCR-06 빈 상태 문구 `30일 이내 …` 와 짝을 이룬다). */
+  /** 다가오는 일정 조회 범위(일). 기본 14이며 D-14까지 포함한다. */
   deadlineDays?: number;
 };
 
 /** SCR-06 통계 타일 `마감 임박` 부제 `30일 내` 와 문구가 묶여 있다. 함부로 바꾸지 마라. */
-export const DEFAULT_DEADLINE_DAYS = 30;
+export const DEFAULT_DEADLINE_DAYS = 14;
 
 // ───────────────────────────────────────────────────────────── 원시 값 헬퍼
 
@@ -204,7 +204,7 @@ export function toDashboardDeadline(raw: unknown): DashboardDeadline | null {
     title: str(d.title),
     subtitle: str(d.subtitle),
     date: normDate(d.date),
-    // `dDay` 는 서버가 long 으로 준다. 0 = 오늘(`D-DAY` 라벨 — SCR-06 구성요소 표).
+    // `dDay` 는 서버가 long 으로 준다. 0 = 오늘(`D-Day` 라벨).
     dDay: int(d.dDay, 0),
     // 빈 문자열이면 `resolveImageUrl` 이 null 을 돌려준다(falsy 가드 내장).
     thumbnailUrl: resolveImageUrl(str(d.imageUrl)),

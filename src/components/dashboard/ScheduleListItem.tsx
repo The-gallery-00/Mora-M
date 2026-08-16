@@ -26,6 +26,10 @@ export interface ScheduleListItemProps {
   title: string;
   /** `HH:MM`. 포스터는 서버가 항상 빈 문자열을 준다. */
   time?: string;
+  /** 티켓 시각을 제목 뒤 우측에 표시한다. default false */
+  timeOnRight?: boolean;
+  /** 우측 시간·기간 영역의 고정 폭. 미지정 시 내용 폭을 사용한다. */
+  trailingWidth?: number;
   /** 포스터 기간 `07.25~07.30`. */
   dateRange?: string;
   subtitle?: string;
@@ -73,6 +77,8 @@ function ScheduleListItemBase({
   docType,
   title,
   time,
+  timeOnRight = false,
+  trailingWidth,
   dateRange,
   subtitle,
   size = "compact",
@@ -83,8 +89,7 @@ function ScheduleListItemBase({
 }: ScheduleListItemProps) {
   const t = useTheme();
   const height = size === "compact" ? 56 : 72;
-  // 우측 보조 텍스트: 티켓은 시각, 포스터는 기간. 둘 다 없으면 부제를 올린다.
-  const trailingText = time || dateRange || "";
+  const trailingText = timeOnRight && time ? time : !time ? dateRange || "" : "";
 
   return (
     <Pressable
@@ -125,7 +130,7 @@ function ScheduleListItemBase({
         </Text>
       </View>
 
-      {time ? (
+      {time && !timeOnRight ? (
         <Text
           className="text-body-sm font-w700 text-text-primary"
           maxFontSizeMultiplier={1.2}
@@ -134,7 +139,7 @@ function ScheduleListItemBase({
         </Text>
       ) : null}
 
-      <View className="flex-1">
+      <View className="flex-1" style={trailingWidth ? { minWidth: 0 } : undefined}>
         <Text
           className="text-base font-w600 text-text-primary"
           numberOfLines={1}
@@ -153,12 +158,16 @@ function ScheduleListItemBase({
         ) : null}
       </View>
 
-      {/* 시각을 이미 좌측에 그렸다면 우측에는 기간만 남긴다(같은 값 중복 방지). */}
-      {!time && trailingText ? (
+      {trailingText ? (
         <Text
           className="text-caption text-text-secondary"
           numberOfLines={1}
           maxFontSizeMultiplier={1.2}
+          style={
+            trailingWidth
+              ? { width: trailingWidth, flexShrink: 0, textAlign: "center" }
+              : undefined
+          }
         >
           {trailingText}
         </Text>

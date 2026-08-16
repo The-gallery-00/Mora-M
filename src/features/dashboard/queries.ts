@@ -96,7 +96,7 @@ export const DASHBOARD_COPY = {
   loadFailed: '대시보드를 불러오지 못했습니다.',
   refreshFailed: '새로고침에 실패했습니다.',
   calendarLoadFailed: CALENDAR_COPY.loadFailed,
-  emptyDeadlines: '30일 이내 마감되는 일정이 없습니다',
+  emptyDeadlines: '2주 내 일정이 없습니다',
   emptySchedules: '일정이 없습니다',
   emptyMonth: '이번 달 등록된 일정이 없습니다.',
   emptyMonthCaption: '티켓과 포스터를 스캔하면 자동으로 표시됩니다.',

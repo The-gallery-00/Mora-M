@@ -198,6 +198,9 @@ export type CalendarEvent = {
   endDate: string;
   /** `HH:MM`. 포스터는 항상 빈 문자열. */
   time: string;
+  /** 티켓 도착일·시각. 진행 중 티켓 판정에만 사용한다. */
+  arrivalDate?: string;
+  arrivalTime?: string;
 };
 
 /**
@@ -222,6 +225,8 @@ function ticketEvent(ticket: TicketDetail): CalendarEvent | null {
     startDate: ticket.departureDate,
     endDate: ticket.departureDate,
     time: ticket.departureTime,
+    arrivalDate: ticket.arrivalDate,
+    arrivalTime: ticket.arrivalTime,
   };
 }
 
