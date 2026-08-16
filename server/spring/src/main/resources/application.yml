@@ -54,6 +54,10 @@ app:
       client-id: ${KAKAO_OAUTH_CLIENT_ID:}
       client-secret: ${KAKAO_OAUTH_CLIENT_SECRET:}
       redirect-uri: ${KAKAO_OAUTH_REDIRECT_URI:}
+    naver:
+      client-id: ${NAVER_OAUTH_CLIENT_ID:}
+      client-secret: ${NAVER_OAUTH_CLIENT_SECRET:}
+      redirect-uri: ${NAVER_OAUTH_REDIRECT_URI:}
 
 logging:
   level:
