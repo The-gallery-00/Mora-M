@@ -135,9 +135,11 @@ export function addRecentSearch(q: string, docType: SearchDocType): RecentSearch
   return commit([{ q: query, docType, at: Date.now() }, ...deduped].slice(0, RECENT_SEARCH_MAX));
 }
 
-/** 최근 검색어 `✕` — **로컬에서만** 지운다. 서버에는 단건 삭제 API 가 없다 (SCR-23 인터랙션 표). */
+/** 최근 검색어 `✕` — 로컬은 즉시 지우고, 서버 삭제는 응답을 기다리지 않는다. */
 export function removeRecentSearch(q: string, docType: SearchDocType): RecentSearch[] {
-  return commit(getRecentSearches().filter((item) => !(item.q === q && item.docType === docType)));
+  const next = commit(getRecentSearches().filter((item) => !(item.q === q && item.docType === docType)));
+  void removeSearchHistoryItem(docType, q);
+  return next;
 }
 
 export function clearRecentSearches(): RecentSearch[] {
@@ -225,6 +227,22 @@ export async function fetchSearchHistories(): Promise<ApiResult<SearchHistory[]>
  */
 export async function clearSearchHistories(): Promise<ApiResult<number>> {
   const res = await request<unknown>('/api/search-histories', { method: 'DELETE' });
+  if (!res.ok) return res;
+
+  const deleted = typeof res.data === 'number' ? res.data : Number(res.data);
+  return { ok: true, data: Number.isFinite(deleted) ? deleted : 0 };
+}
+
+export async function removeSearchHistoryItem(
+  docType: SearchDocType,
+  q: string,
+): Promise<ApiResult<number>> {
+  const params = new URLSearchParams({ q: q.trim() });
+  if (docType !== 'ALL') params.set('documentType', docType);
+
+  const res = await request<unknown>(`/api/search-histories/item?${params.toString()}`, {
+    method: 'DELETE',
+  });
   if (!res.ok) return res;
 
   const deleted = typeof res.data === 'number' ? res.data : Number(res.data);
