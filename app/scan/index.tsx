@@ -130,7 +130,7 @@ function FlipIcon({ color = '#FFFFFF', size = 24 }: IconProps) {
 type GuideDocMode = Extract<DocumentType, 'BUSINESS_CARD' | 'POSTER' | 'RECEIPT' | 'TICKET'>;
 type GuideMode = 'auto' | GuideDocMode;
 
-/** 가로:세로 비율. `auto` 는 프레임 없이 4모서리 마커만 그린다. */
+/** 가로:세로 비율. `auto` 는 별도 프레임을 그리지 않는다. */
 const GUIDE_RATIO: Record<GuideMode, number | null> = {
   auto: null,
   BUSINESS_CARD: 1.75,
@@ -567,18 +567,9 @@ export default function ScanCameraScreen() {
               </Text>
             </>
           ) : (
-            // `자동` — 프레임 없이 화각 4모서리 마커만 (Screen Specs 와이어프레임: 흰색 24dp L자)
+            // `자동` — 프레임 없이 촬영 힌트만 표시한다.
             guideBox.width > 0 && (
               <>
-                <CornerMarkers
-                  x={spacing.xxl}
-                  y={spacing.xxl}
-                  width={guideBox.width - spacing.xxl * 2}
-                  height={guideBox.height - spacing.giant * 2}
-                  color="#FFFFFF"
-                  length={24}
-                  thickness={3}
-                />
                 <Text
                   className="absolute text-center text-body-sm text-white/80"
                   style={{ bottom: spacing.md, left: 0, right: 0 }}

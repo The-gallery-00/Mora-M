@@ -387,7 +387,11 @@ export default function SearchScreen() {
           }
           ListEmptyComponent={
             <View className="pt-6">
-              <EmptyState title={SEARCH_COPY.emptyTitle} description={SEARCH_COPY.emptyBody} />
+              <EmptyState
+                title={SEARCH_COPY.emptyTitle}
+                description={SEARCH_COPY.emptyBody}
+                hideIcon
+              />
             </View>
           }
           ListFooterComponent={<View style={{ height: spacing.sm }} />}

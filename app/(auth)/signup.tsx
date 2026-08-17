@@ -23,6 +23,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -229,6 +230,48 @@ export default function SignupScreen() {
               />
             )}
           />
+
+          <View className="items-center">
+            <Text className="text-center text-body-sm text-text-muted">
+              가입하기 전에 이용약관과 개인정보 처리방침을 확인해 주세요.
+            </Text>
+            <View className="flex-row items-center justify-center gap-4">
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="이용약관 보기"
+                onPress={() =>
+                  router.push({
+                    pathname: '/settings/legal/[doc]',
+                    params: { doc: 'terms' },
+                  })
+                }
+                hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+                className="min-h-11 justify-center"
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                testID="link-terms"
+              >
+                <Text className="text-body-sm font-w600 text-action underline">이용약관 보기</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="개인정보 처리방침 보기"
+                onPress={() =>
+                  router.push({
+                    pathname: '/settings/legal/[doc]',
+                    params: { doc: 'privacy' },
+                  })
+                }
+                hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+                className="min-h-11 justify-center"
+                style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                testID="link-privacy-policy"
+              >
+                <Text className="text-body-sm font-w600 text-action underline">
+                  개인정보 처리방침 보기
+                </Text>
+              </Pressable>
+            </View>
+          </View>
         </>
       )}
     />

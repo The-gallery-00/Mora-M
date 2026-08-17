@@ -219,8 +219,6 @@ export default function ArchiveCardsScreen() {
             ? {
                 // 그룹 필터의 빈 상태는 "명함이 없다"가 아니라 "이 명함첩이 비었다"다.
                 title: '이 명함첩에 저장된 명함이 없습니다.',
-                actionLabel: '명함 가져오기',
-                onAction: () => router.push(href('/groups')),
               }
             : {
                 title: '아직 저장된 명함이 없습니다',
