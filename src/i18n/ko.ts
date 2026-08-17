@@ -113,11 +113,11 @@ export const ko = {
      ───────────────────────────────────────────────────────────────────── */
   notifications: {
     screenTitle: '알림',
-    markAllAction: '모두 읽음',
+    markAllAction: '모두 읽음으로 표시',
     listFailed: '알림을 불러오지 못했습니다.',
     retry: '다시 시도',
     emptyTitle: '알림이 없습니다',
-    emptyCaption: '마감이 다가오면 알려드릴게요.',
+    emptyCaption: '다가오는 일정과 종료 일정을 알려드릴게요.',
     readFailed: '읽음 처리에 실패했습니다.',
     deleteFailed: '삭제에 실패했습니다.',
     refreshFailed: '새로고침에 실패했습니다.',

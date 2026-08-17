@@ -23,12 +23,13 @@
 import { FlashList, type ListRenderItemInfo } from '@shopify/flash-list';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useCallback } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { NotificationItem } from '@/components/dashboard';
-import { Button, EmptyState, Skeleton, toast } from '@/components/ui';
+import { Button, EmptyState, IconButton, Skeleton, toast } from '@/components/ui';
 import { ArchiveHeader, href } from '@/features/documents/ArchiveList';
 import {
   markAllReadMessage,
@@ -47,6 +48,140 @@ import { spacing } from '@/theme/scale';
 
 /** 행 높이가 2줄 본문 기준 88dp 근처다 — 화면 밖 3행 분량을 미리 그린다(FlashList v2 `drawDistance`). */
 const DRAW_DISTANCE = 260;
+
+function MoreVerticalIcon({ color }: { color?: string }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={5} r={1.75} fill={color} />
+      <Circle cx={12} cy={12} r={1.75} fill={color} />
+      <Circle cx={12} cy={19} r={1.75} fill={color} />
+    </Svg>
+  );
+}
+
+function TrashIcon({ color }: { color: string }) {
+  return (
+    <Svg
+      width={22}
+      height={22}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Path d="M3 6h18" />
+      <Path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <Path d="M10 11v6" />
+      <Path d="M14 11v6" />
+    </Svg>
+  );
+}
+
+function CheckIcon({ color }: { color: string }) {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 12l4 4 8-8"
+        stroke={color}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+interface NotificationMoreMenuProps {
+  visible: boolean;
+  top: number;
+  canReadAll: boolean;
+  canSelectForDelete: boolean;
+  onReadAll: () => void;
+  onSelectForDelete: () => void;
+  onClose: () => void;
+}
+
+function NotificationMoreMenu({
+  visible,
+  top,
+  canReadAll,
+  canSelectForDelete,
+  onReadAll,
+  onSelectForDelete,
+  onClose,
+}: NotificationMoreMenuProps) {
+  const t = useTheme();
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <View className="flex-1">
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          accessibilityRole="button"
+          accessibilityLabel="더보기 메뉴 닫기"
+          onPress={onClose}
+          testID="notifications-more-backdrop"
+        />
+
+        <View
+          className="absolute right-2 w-[216px] overflow-hidden rounded-md border border-border-subtle bg-bg-elevated py-1"
+          style={[{ top }, t.elevation.dropdown]}
+          accessibilityViewIsModal
+          testID="notifications-more-menu"
+        >
+          <Pressable
+            accessibilityRole="menuitem"
+            accessibilityLabel="삭제"
+            accessibilityState={{ disabled: !canSelectForDelete }}
+            disabled={!canSelectForDelete}
+            onPress={() => {
+              onClose();
+              onSelectForDelete();
+            }}
+            className="h-12 justify-center px-4"
+            style={({ pressed }) => (pressed ? { opacity: 0.65 } : null)}
+            testID="notifications-select-delete"
+          >
+            <Text
+              className={`text-body-sm font-w600 ${canSelectForDelete ? 'text-text-primary' : 'text-text-disabled'}`}
+              maxFontSizeMultiplier={1.3}
+            >
+              삭제
+            </Text>
+          </Pressable>
+
+          <View className="mx-4 h-px bg-bg-sunken" />
+
+          <Pressable
+            accessibilityRole="menuitem"
+            accessibilityLabel={NOTIFICATION_COPY.markAllAction}
+            accessibilityState={{ disabled: !canReadAll }}
+            disabled={!canReadAll}
+            onPress={() => {
+              onClose();
+              onReadAll();
+            }}
+            className="h-12 justify-center px-4"
+            style={({ pressed }) => (pressed ? { opacity: 0.65 } : null)}
+            testID="notifications-read-all"
+          >
+            <Text
+              className={`text-body-sm font-w600 ${canReadAll ? 'text-text-primary' : 'text-text-disabled'}`}
+              maxFontSizeMultiplier={1.3}
+            >
+              {NOTIFICATION_COPY.markAllAction}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 /* ── 초기 스켈레톤 5행 (SCR-08 상태 표) ─────────────────────────────── */
 
@@ -70,6 +205,10 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const t = useTheme();
   const queryClient = useQueryClient();
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [deletingSelected, setDeletingSelected] = useState(false);
 
   const list = useInfiniteNotifications();
   const markRead = useMarkNotificationRead();
@@ -77,6 +216,73 @@ export default function NotificationsScreen() {
   const remove = useDeleteNotification();
 
   const { notifications, hasUnread, isEmpty } = list;
+
+  const enterSelectionMode = useCallback(() => {
+    setSelectionMode(true);
+    setSelectedIds(new Set());
+  }, []);
+
+  const closeSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((current) => {
+      const allSelected =
+        notifications.length > 0 && notifications.every((item) => current.has(item.id));
+      return allSelected ? new Set() : new Set(notifications.map((item) => item.id));
+    });
+  }, [notifications]);
+
+  const deleteSelected = useCallback(async () => {
+    if (selectedIds.size === 0 || deletingSelected) return;
+
+    const ids = [...selectedIds];
+    const byId = new Map(notifications.map((item) => [item.id, item]));
+    let deletedCount = 0;
+    let firstError = '';
+
+    setDeletingSelected(true);
+    try {
+      for (const id of ids) {
+        try {
+          const item = byId.get(id);
+          await remove.mutateAsync({ id, wasUnread: item ? !item.read : false });
+          deletedCount += 1;
+          setSelectedIds((current) => {
+            const next = new Set(current);
+            next.delete(id);
+            return next;
+          });
+        } catch (error) {
+          if (!firstError) {
+            firstError = error instanceof Error ? error.message : NOTIFICATION_COPY.deleteFailed;
+          }
+        }
+      }
+    } finally {
+      setDeletingSelected(false);
+    }
+
+    if (deletedCount === ids.length) {
+      toast.success(`알림 ${deletedCount}건을 삭제했습니다.`);
+      closeSelectionMode();
+    } else if (deletedCount > 0) {
+      toast.error(`알림 ${deletedCount}건을 삭제했고 ${ids.length - deletedCount}건은 실패했습니다.`);
+    } else {
+      toast.error(firstError || NOTIFICATION_COPY.deleteFailed);
+    }
+  }, [closeSelectionMode, deletingSelected, notifications, remove, selectedIds]);
 
   /* 행 탭: ① 읽음 낙관적 갱신 ② linkUrl 매핑 라우트로 이동.
      **`await` 하지 않는다** — SCR-08 인터랙션 표가 "읽음 실패해도 이동은 진행, 배지 롤백" 이라고
@@ -87,17 +293,6 @@ export default function NotificationsScreen() {
       router.push(href(toAppRoute(item.linkUrl)));
     },
     [markRead, router],
-  );
-
-  const deleteNotification = useCallback(
-    (item: Notification) => {
-      haptics.impact('medium'); // CMP-46 삭제 확정
-      remove.mutate(
-        { id: item.id, wasUnread: !item.read },
-        { onError: (error) => toast.error(error.message) },
-      );
-    },
-    [remove],
   );
 
   const readAll = useCallback(() => {
@@ -128,43 +323,68 @@ export default function NotificationsScreen() {
         message={item.message}
         createdAt={item.createdAt}
         read={item.read}
-        onPress={() => openNotification(item)}
-        onDelete={() => deleteNotification(item)}
+        selectionMode={selectionMode}
+        selected={selectedIds.has(item.id)}
+        onPress={() =>
+          selectionMode ? toggleSelection(item.id) : openNotification(item)
+        }
         testID={`notification-${item.id}`}
       />
     ),
-    [deleteNotification, openNotification],
+    [openNotification, selectedIds, selectionMode, toggleSelection],
   );
 
   const canReadAll = hasUnread && !markAll.isPending;
+  const canSelectForDelete = notifications.length > 0;
+  const allSelected =
+    notifications.length > 0 && notifications.every((item) => selectedIds.has(item.id));
 
   return (
     <View className="flex-1 bg-bg-base">
       <ArchiveHeader
-        title={NOTIFICATION_COPY.screenTitle}
-        onBack={() => router.back()}
+        title={
+          selectionMode
+            ? selectedIds.size === 0
+              ? '알림 선택'
+              : `${selectedIds.size}개 선택`
+            : NOTIFICATION_COPY.screenTitle
+        }
+        onBack={() => {
+          if (selectionMode) closeSelectionMode();
+          else router.back();
+        }}
         trailing={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={NOTIFICATION_COPY.markAllAction}
-            accessibilityState={{ disabled: !canReadAll }}
-            disabled={!canReadAll}
-            onPress={readAll}
-            // 텍스트 액션(18dp) + py-1 = 26dp. 44dp 하한을 hitSlop 으로 채운다(A11Y §11-1)
-            hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}
-            className="px-2 py-1"
-            style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
-            testID="notifications-read-all"
-          >
-            <Text
-              className={`text-body-sm font-w600 ${canReadAll ? 'text-action' : 'text-text-disabled'}`}
-              maxFontSizeMultiplier={1.2}
-            >
-              {NOTIFICATION_COPY.markAllAction}
-            </Text>
-          </Pressable>
+          selectionMode ? (
+            <Button
+              label="전체"
+              onPress={toggleSelectAll}
+              variant="ghost"
+              size="sm"
+              haptic="selection"
+              trailingIcon={allSelected ? <CheckIcon color={t.action.base} /> : undefined}
+              testID="notifications-selection-all"
+            />
+          ) : (
+            <IconButton
+              icon={<MoreVerticalIcon />}
+              accessibilityLabel="더보기"
+              onPress={() => setMoreMenuOpen(true)}
+              size="sm"
+              testID="notifications-more"
+            />
+          )
         }
         testID="notifications-header"
+      />
+
+      <NotificationMoreMenu
+        visible={moreMenuOpen}
+        top={insets.top + 48}
+        canReadAll={canReadAll}
+        canSelectForDelete={canSelectForDelete}
+        onReadAll={readAll}
+        onSelectForDelete={enterSelectionMode}
+        onClose={() => setMoreMenuOpen(false)}
       />
 
       {list.isPending ? (
@@ -189,11 +409,13 @@ export default function NotificationsScreen() {
         <EmptyState
           title={NOTIFICATION_COPY.emptyTitle}
           description={NOTIFICATION_COPY.emptyCaption}
+          hideIcon
           testID="notifications-empty"
         />
       ) : (
         <FlashList
           data={notifications}
+          extraData={selectedIds}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           drawDistance={DRAW_DISTANCE}
@@ -204,7 +426,11 @@ export default function NotificationsScreen() {
           refreshing={list.isRefetching && !list.isFetchingNextPage}
           onRefresh={refresh}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
+          contentContainerStyle={{
+            paddingBottom: selectionMode && selectedIds.size > 0
+              ? insets.bottom + 56 + spacing.md + spacing.sm + spacing.xxl
+              : insets.bottom + spacing.xxl,
+          }}
           ItemSeparatorComponent={() => <View className="h-px bg-bg-sunken" />}
           ListFooterComponent={
             list.isFetchingNextPage ? (
@@ -217,6 +443,47 @@ export default function NotificationsScreen() {
           }
         />
       )}
+
+      {selectionMode && selectedIds.size > 0 ? (
+        <View
+          className="absolute inset-x-0 bottom-0 z-20 border-t border-border-subtle bg-bg-elevated px-4 pt-3"
+          style={[{ paddingBottom: insets.bottom + spacing.sm }, t.elevation.raised]}
+          testID="notifications-selection-actions"
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`선택한 알림 ${selectedIds.size}개 삭제`}
+            accessibilityState={{
+              disabled: selectedIds.size === 0 || deletingSelected,
+              busy: deletingSelected,
+            }}
+            disabled={selectedIds.size === 0 || deletingSelected}
+            onPress={() => {
+              haptics.impact('medium');
+              void deleteSelected();
+            }}
+            className="h-14 items-center justify-center gap-0.5"
+            style={({ pressed }) => (pressed ? { opacity: 0.65 } : null)}
+            testID="notifications-delete-selected"
+          >
+            {deletingSelected ? (
+              <ActivityIndicator size="small" color={t.text.primary} />
+            ) : (
+              <TrashIcon
+                color={selectedIds.size === 0 ? t.text.disabled : t.text.primary}
+              />
+            )}
+            <Text
+              className={`text-body-sm ${
+                selectedIds.size === 0 ? 'text-text-disabled' : 'text-text-primary'
+              }`}
+              maxFontSizeMultiplier={1.3}
+            >
+              {deletingSelected ? '삭제 중...' : '삭제'}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
