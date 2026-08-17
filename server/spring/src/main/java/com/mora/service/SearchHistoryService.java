@@ -33,4 +33,14 @@ public class SearchHistoryService {
 
     @Transactional
     public long clear(UUID userId) { return repository.deleteByUserId(userId); }
+
+    @Transactional
+    public long removeByQuery(UUID userId, String documentType, String query) {
+        String normalized = query == null ? "" : query.trim();
+        if (normalized.isEmpty()) return 0;
+        if (documentType == null || documentType.isBlank() || "ALL".equals(documentType)) {
+            return repository.deleteByUserIdAndQuery(userId, normalized);
+        }
+        return repository.deleteByUserIdAndDocumentTypeAndQuery(userId, documentType, normalized);
+    }
 }

@@ -8,4 +8,6 @@ import java.util.UUID;
 public interface SearchHistoryRepository extends JpaRepository<SearchHistory, UUID> {
     List<SearchHistory> findByUserIdOrderByCreatedAtDesc(UUID userId);
     long deleteByUserId(UUID userId);
+    long deleteByUserIdAndQuery(UUID userId, String query);
+    long deleteByUserIdAndDocumentTypeAndQuery(UUID userId, String documentType, String query);
 }
