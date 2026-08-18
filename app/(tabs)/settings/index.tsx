@@ -1,11 +1,9 @@
 // app/(tabs)/settings/index.tsx — SCR-25 설정
 //
 // 원본 `frontend/app/dashboard/settings/page.tsx` 의 2열 그리드 7섹션 → **1열 세로 섹션 리스트**.
-// 모달 5종(password/nickname/confirm ×3)은 전용 화면(SCR-26~28)으로 갈라졌고 여기서는 진입만 한다.
+// 비밀번호·프로필은 전용 화면으로, 회원 탈퇴 확인은 설정 화면의 Bottom Sheet로 제공한다.
 //
 // 원본에서 **의도적으로 버린 것들** (SCR-25 변경점 표):
-//   - StatTile 3개 중 2개 — `integrationsActive:1`, `lastSyncLabel:'6분 전'` 이 하드코딩 목업이었다.
-//     실 데이터가 있는 `보관 문서`(API-24 `storedDocumentCount`) 하나만 남긴다.
 //   - 기본값 `'leechoeun'` / `'mvp6276@gmail.com'` — 실제 사용자 정보가 코드에 박혀 있었다.
 //   - `연락처` 토글 — API 가 없는 로컬 상태 스위치였다.
 //   - 아바타 업로드 — 서버 엔드포인트가 없어 기기에만 남는 사진이 된다.
@@ -24,20 +22,23 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { StatTile } from '@/components/dashboard';
 import { Avatar, ChevronIcon, SettingsRow, SettingsSection } from '@/components/settings';
 import { Button, Skeleton, toast } from '@/components/ui';
 import { variant } from '@/config/env';
-import { NOTIFICATION_SETTINGS_COPY, PASSWORD_FORM_COPY } from '@/features/account';
-import { useAuth, useMe } from '@/features/auth';
-import { CALENDAR_COPY, useCalendarLink, useDashboard } from '@/features/dashboard';
 import {
-  SEARCH_COPY,
-  searchHistoryClearedMessage,
-  useClearSearchHistory,
-} from '@/features/search';
+  DANGER_ZONE_COPY,
+  NOTIFICATION_SETTINGS_COPY,
+  PASSWORD_FORM_COPY,
+  deletedDocumentsMessage,
+  useDeleteAccount,
+  useDeleteMyDocuments,
+} from '@/features/account';
+import { DeleteConfirmSheet } from '@/features/account/DeleteConfirmSheet';
+import { useAuth, useMe } from '@/features/auth';
+import { CALENDAR_COPY, useCalendarLink } from '@/features/dashboard';
+import { ArchiveHeader } from '@/features/documents/ArchiveList';
 import { haptics } from '@/lib/haptics';
-import { HEADER_HEIGHT, tabScrollBottomPadding } from '@/navigation/shell';
+import { tabScrollBottomPadding } from '@/navigation/shell';
 import { useTheme } from '@/theme/ThemeProvider';
 
 /**
@@ -46,7 +47,7 @@ import { useTheme } from '@/theme/ThemeProvider';
  * **`app/(tabs)/settings/index.tsx`(`/settings`)와 `app/settings/*`(`/settings/profile` …)의
  * 세그먼트 공유는 실제로 문제가 없다.** Navigation Map §2 각주가 Phase 0 실검증 항목으로
  * 남겨 둔 사항인데, `expo export` 로 라우트 트리를 실제 생성해 확인했다 —
- * 생성된 `.expo/types/router.d.ts` 에 `/settings`(탭)와 `/settings/profile|password|danger|
+ * 생성된 `.expo/types/router.d.ts` 에 `/settings`(탭)와 `/settings/profile|password|
  * notifications|legal/[doc]`(루트 스택)이 **충돌 없이 함께** 들어 있다.
  * → 하위 스택을 `app/account/*` 로 옮길 필요가 없다.
  *
@@ -66,8 +67,6 @@ const COPY = {
   joinedUnknown: '가입일 정보 없음',
 
   accountSection: '계정',
-  nickname: '닉네임',
-  email: '이메일',
   password: '비밀번호',
   passwordLocal: '비밀번호를 변경합니다.',
   passwordSocial: '소셜 계정은 비밀번호가 없습니다',
@@ -77,12 +76,9 @@ const COPY = {
   notifRow: '알림 설정',
 
   dataSection: '데이터',
-  clearHistory: '검색 기록 삭제',
-  clearHistoryDesc: '저장된 모든 검색어를 삭제합니다.',
-  clearHistoryTitle: '검색 기록을 모두 삭제할까요?',
-  clearHistoryBody: '이 작업은 되돌릴 수 없습니다. 계속하려면 확인을 눌러주세요.',
   deleteAll: '내 데이터 전체 삭제',
-  deleteAllDesc: '복구할 수 없습니다. 신중히 진행하세요.',
+  deleteAllDesc:
+    '저장한 모든 문서와 검색 기록이 삭제됩니다. 구글 캘린더 연동은 유지됩니다.',
 
   supportSection: '지원',
   contact: '문의하기',
@@ -105,11 +101,8 @@ const COPY = {
   signOutBody: '다시 로그인하려면 이메일과 비밀번호가 필요합니다.',
   leave: '회원 탈퇴',
   cancel: '취소',
-  confirm: '삭제',
   copyright: '© 2026 MORA. All rights reserved.',
 
-  storedDocuments: '보관 문서',
-  unit: '건',
 } as const;
 
 const SUPPORT_MAILTO = 'mailto:cvgy1915@naver.com';
@@ -136,9 +129,9 @@ export default function SettingsScreen() {
   const meQuery = useMe();
   const me = meQuery.data ?? user;
 
-  const dashboard = useDashboard();
   const calendar = useCalendarLink(me?.id);
-  const clearHistory = useClearSearchHistory();
+  const deleteAccount = useDeleteAccount();
+  const deleteDocuments = useDeleteMyDocuments();
 
   const appVersion = Constants.expoConfig?.version ?? '—';
   const buildNumber = Constants.expoConfig?.android?.versionCode;
@@ -146,6 +139,10 @@ export default function SettingsScreen() {
   const isDevBuild = variant !== 'production';
 
   const [versionTaps, setVersionTaps] = useState(0);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+  const [deleteDocumentsOpen, setDeleteDocumentsOpen] = useState(false);
+  const [deleteDocumentsError, setDeleteDocumentsError] = useState<string | null>(null);
 
   /* ── DL-02: 구글 캘린더 콜백 착지 (`mora://settings?calendar=connected|failed`) ────────
      인앱 브라우저가 아니라 **외부 브라우저**로 흘러간 경우 `startCalendarConnect()` 의
@@ -224,22 +221,6 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const confirmClearHistory = () => {
-    haptics.warning(); // G-6
-    Alert.alert(COPY.clearHistoryTitle, COPY.clearHistoryBody, [
-      { text: COPY.cancel, style: 'cancel' },
-      {
-        text: COPY.confirm,
-        style: 'destructive',
-        onPress: () =>
-          clearHistory.mutate(undefined, {
-            onSuccess: (count) => toast.success(searchHistoryClearedMessage(count)),
-            onError: () => toast.error(SEARCH_COPY.historyClearFailed),
-          }),
-      },
-    ]);
-  };
-
   const openContact = () => {
     void (async () => {
       try {
@@ -288,6 +269,62 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const openDeleteAccount = () => {
+    haptics.warning();
+    setDeleteAccountError(null);
+    setDeleteAccountOpen(true);
+  };
+
+  const closeDeleteAccount = () => {
+    if (deleteAccount.isPending) return;
+    setDeleteAccountOpen(false);
+    setDeleteAccountError(null);
+  };
+
+  const submitDeleteAccount = (input: string) => {
+    setDeleteAccountError(null);
+    deleteAccount.mutate(
+      isSocialAccount ? { kind: 'social' } : { kind: 'local', password: input },
+      {
+        onSuccess: () => {
+          setDeleteAccountOpen(false);
+          toast.success(DANGER_ZONE_COPY.accountSuccess);
+          // mutation 이 세션과 캐시를 정리한 뒤 탈퇴한 계정 화면으로 돌아오지 못하게 교체한다.
+          router.replace('/(auth)/login');
+        },
+        onError: (error) => {
+          const wrongPassword = !isSocialAccount && error.status === 400;
+          setDeleteAccountError(
+            wrongPassword ? DANGER_ZONE_COPY.passwordInvalid : error.message,
+          );
+        },
+      },
+    );
+  };
+
+  const openDeleteDocuments = () => {
+    haptics.warning();
+    setDeleteDocumentsError(null);
+    setDeleteDocumentsOpen(true);
+  };
+
+  const closeDeleteDocuments = () => {
+    if (deleteDocuments.isPending) return;
+    setDeleteDocumentsOpen(false);
+    setDeleteDocumentsError(null);
+  };
+
+  const submitDeleteDocuments = () => {
+    setDeleteDocumentsError(null);
+    deleteDocuments.mutate(undefined, {
+      onSuccess: (result) => {
+        setDeleteDocumentsOpen(false);
+        toast.success(deletedDocumentsMessage(result.totalDocuments));
+      },
+      onError: (error) => setDeleteDocumentsError(error.message),
+    });
+  };
+
   /* ── 렌더 ──────────────────────────────────────────────────────────────── */
 
   // 캐시된 사용자조차 없고 조회도 실패한 상태에서만 에러 카드를 그린다 —
@@ -298,14 +335,12 @@ export default function SettingsScreen() {
   return (
     <View className="flex-1 bg-bg-base">
       {/* ── 헤더 (CMP-20) ── */}
-      <View
-        className="justify-center px-4"
-        style={{ paddingTop: insets.top, height: HEADER_HEIGHT + insets.top }}
-      >
-        <Text className="text-h1 font-w700 text-text-primary" accessibilityRole="header">
-          {COPY.title}
-        </Text>
-      </View>
+      <ArchiveHeader
+        title={COPY.title}
+        onBack={() => router.navigate('/(tabs)')}
+        offlineBanner={false}
+        testID="settings-header"
+      />
 
       <ScrollView
         className="flex-1"
@@ -372,39 +407,7 @@ export default function SettingsScreen() {
           </Pressable>
         )}
 
-        {/* ── 보관 문서 (API-24). 원본의 나머지 두 타일은 목업이라 버렸다 ── */}
-        <View className="mt-4">
-          <StatTile
-            icon="📄"
-            tone="stored"
-            variant="row"
-            label={COPY.storedDocuments}
-            value={dashboard.data?.storedDocumentCount ?? 0}
-            unit={COPY.unit}
-            loading={dashboard.isPending}
-            onPress={() => router.push('/(tabs)/archive')}
-            testID="settings-stored-count"
-          />
-        </View>
-
         <SettingsSection title={COPY.accountSection}>
-          <SettingsRow
-            label={COPY.nickname}
-            value={me?.name ?? '—'}
-            onPress={() => router.push('/settings/profile')}
-            testID="row-nickname"
-          />
-          {/* 이메일은 서버에 변경 흐름이 없어 읽기 전용이다(원본 주석: `Email is read-only until
-              /me/email verification flow exists on backend`). SCR-25 표대로 **chevron 을 달지 않고**
-              값만 보여 주며 탭 동작도 제공하지 않는다. */}
-          <View pointerEvents="none">
-            <SettingsRow
-              label={COPY.email}
-              value={me?.email ?? '—'}
-              chevron={false}
-              testID="row-email"
-            />
-          </View>
           <SettingsRow
             label={COPY.password}
             description={isSocialAccount ? COPY.passwordSocial : COPY.passwordLocal}
@@ -450,18 +453,11 @@ export default function SettingsScreen() {
 
         <SettingsSection title={COPY.dataSection}>
           <SettingsRow
-            label={COPY.clearHistory}
-            description={COPY.clearHistoryDesc}
-            tone="danger"
-            disabled={clearHistory.isPending}
-            onPress={confirmClearHistory}
-            testID="row-clear-history"
-          />
-          <SettingsRow
             label={COPY.deleteAll}
             description={COPY.deleteAllDesc}
             tone="danger"
-            onPress={() => router.push('/settings/danger')}
+            disabled={deleteDocuments.isPending}
+            onPress={openDeleteDocuments}
             testID="row-delete-all"
           />
         </SettingsSection>
@@ -548,10 +544,7 @@ export default function SettingsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={COPY.leave}
-          onPress={() => {
-            haptics.selection(); // HAP-01
-            router.push('/settings/danger');
-          }}
+          onPress={openDeleteAccount}
           // py-3 만으로는 42dp 라 44dp 하한에 2dp 모자란다 (A11Y §11-1)
           className="mt-4 min-h-11 items-center justify-center py-3"
           testID="settings-leave"
@@ -561,6 +554,28 @@ export default function SettingsScreen() {
 
         <Text className="mt-4 text-center text-caption text-text-muted">{COPY.copyright}</Text>
       </ScrollView>
+
+      <DeleteConfirmSheet
+        key={deleteDocumentsOpen ? 'documents-open' : 'documents-closed'}
+        kind="documents"
+        visible={deleteDocumentsOpen}
+        requirePassword={false}
+        busy={deleteDocuments.isPending}
+        error={deleteDocumentsError}
+        onSubmit={submitDeleteDocuments}
+        onClose={closeDeleteDocuments}
+      />
+
+      <DeleteConfirmSheet
+        key={deleteAccountOpen ? 'account-open' : 'account-closed'}
+        kind="account"
+        visible={deleteAccountOpen}
+        requirePassword={!isSocialAccount}
+        busy={deleteAccount.isPending}
+        error={deleteAccountError}
+        onSubmit={submitDeleteAccount}
+        onClose={closeDeleteAccount}
+      />
     </View>
   );
 }

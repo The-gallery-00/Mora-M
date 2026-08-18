@@ -19,8 +19,8 @@
 // 월 파생은 전부 메모이즈된 순수 계산이다 — 서버에 기간 필터 파라미터가 없어 어차피 전건을 받아야
 // 하고, 좌우 스와이프가 네트워크를 기다리면 체감이 무너진다.
 //
-// 날짜별 일정은 날짜 셀을 누르면 고정 크기 모달에서 표시한다. 일정이 많아도 캘린더 화면은 움직이지
-// 않고 모달 내부 목록만 스크롤한다.
+// 날짜별 일정은 날짜 셀을 누르면 고정 크기 모달에서 표시한다. 월간 그리드는 낮은 화면에서도 마지막
+// 주까지 볼 수 있도록 루트가 스크롤되고, 일정이 많으면 모달 내부 목록도 별도로 스크롤한다.
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
@@ -41,6 +41,7 @@ import {
 import { DOC_ROUTE_SEGMENT } from '@/features/documents';
 import { href } from '@/features/documents/ArchiveList';
 import { haptics } from '@/lib/haptics';
+import { tabScrollBottomPadding } from '@/navigation/shell';
 import { useTheme } from '@/theme/ThemeProvider';
 
 /* ── 날짜 문구 ─────────────────────────────────────────────────────── */
@@ -146,31 +147,40 @@ export default function CalendarScreen() {
 
   return (
     <View className="flex-1 bg-bg-base">
-      {/* ── 상단: 월간 그리드 (고정) ───────────────────────────────── */}
-      <View className="px-4 pt-3" style={{ paddingTop: insets.top + 12 }}>
-        {isError ? (
-          <View
-            className="items-center gap-3 rounded-card border border-danger-border bg-danger-container p-5"
-            accessibilityLiveRegion="polite"
-          >
-            <Text className="text-center text-base font-w600 text-danger" maxFontSizeMultiplier={1.3}>
-              {error?.message ?? CALENDAR_COPY.loadFailed}
-            </Text>
-            <Button label="다시 시도" onPress={refetch} variant="secondary" size="sm" />
-          </View>
-        ) : (
-          <MonthCalendar
-            matrix={matrix}
-            selectedDate={selectedDate}
-            eventsByDate={eventsByDate}
-            events={source.data ?? monthEvents}
-            onSelectDate={selectDate}
-            onChangeMonth={changeMonth}
-            loading={isPending}
-            testID="calendar-grid"
-          />
-        )}
-      </View>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: tabScrollBottomPadding(insets.bottom) }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── 상단: 월간 그리드 ────────────────────────────────────── */}
+        <View className="px-4 pt-3" style={{ paddingTop: insets.top + 12 }}>
+          {isError ? (
+            <View
+              className="items-center gap-3 rounded-card border border-danger-border bg-danger-container p-5"
+              accessibilityLiveRegion="polite"
+            >
+              <Text
+                className="text-center text-base font-w600 text-danger"
+                maxFontSizeMultiplier={1.3}
+              >
+                {error?.message ?? CALENDAR_COPY.loadFailed}
+              </Text>
+              <Button label="다시 시도" onPress={refetch} variant="secondary" size="sm" />
+            </View>
+          ) : (
+            <MonthCalendar
+              matrix={matrix}
+              selectedDate={selectedDate}
+              eventsByDate={eventsByDate}
+              events={source.data ?? monthEvents}
+              onSelectDate={selectDate}
+              onChangeMonth={changeMonth}
+              loading={isPending}
+              testID="calendar-grid"
+            />
+          )}
+        </View>
+      </ScrollView>
 
       <Modal
         visible={dayModalVisible}

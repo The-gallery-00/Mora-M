@@ -64,7 +64,6 @@ app/
 ├─ settings/                    # ── 설정 하위 스택
 │  ├─ profile.tsx               #    SCR-26 프로필(닉네임) 편집
 │  ├─ password.tsx              #    SCR-27 비밀번호 변경
-│  ├─ danger.tsx                #    SCR-28 계정·데이터 삭제
 │  ├─ notifications.tsx         #    SCR-29 알림 설정
 │  └─ legal/[doc].tsx           #    SCR-30 약관 / 개인정보 / 라이선스 / 앱 정보
 │
@@ -123,7 +122,7 @@ app/
 | SCR-25 | `/dashboard/settings` | `app/dashboard/settings/page.tsx` | `/(tabs)/settings` | 탭 | 필수 | 2열 그리드 → 1열 섹션 리스트. 모달 5종 → 전용 화면 5개(SCR-26~30) |
 | SCR-26 | (설정 모달) | `settings/page.tsx` | `/settings/profile` | 스택 | 필수 | 닉네임 변경. 하드코딩 fallback 제거 |
 | SCR-27 | (설정 모달) | `settings/page.tsx` | `/settings/password` | 스택 | 필수 | 429 rate limit 처리 + 소셜 계정 진입 차단 |
-| SCR-28 | (설정 모달) | `settings/page.tsx` | `/settings/danger` | 스택 | 필수 | 회원 탈퇴 + 내 문서 전체 삭제 |
+| SCR-28 | (설정 모달) | `settings/page.tsx` | `/(tabs)/settings` | Bottom Sheet | 필수 | 회원 탈퇴 + 내 데이터 전체 삭제 확인 |
 | SCR-29 | (설정 섹션) | `settings/page.tsx` | `/settings/notifications` | 스택 | 필수 | **신규.** localStorage → 서버 저장(API-39/40) |
 | SCR-30 | (빈 onClick) | `settings/page.tsx` | `/settings/legal/[doc]` | 스택 | 불필요 | **신규 필수.** 원본은 `{/* TODO */}`. 약관·개인정보·라이선스·앱 정보 |
 | SCR-31 | (환경변수) | `.env` | `/(dev)/diagnostics` | 스택 | 불필요 | **신규(개발 빌드 전용).** APK가 개발 PC LAN IP로 붙어야 하므로 앱 안에서 주소를 바꿀 수 있어야 한다 (FR-121, [[ADR-002 Backend Connectivity]] §2) |
@@ -247,7 +246,7 @@ flowchart TD
   ARCHIVE -->|"명함 그룹"| GROUPS["SCR-22 명함첩"]
   SETTINGS --> PROF["SCR-26 프로필"]
   SETTINGS --> PW["SCR-27 비밀번호"]
-  SETTINGS --> DANGER["SCR-28 계정·데이터 삭제"]
+  SETTINGS -.->|"Bottom Sheet"| DANGER["SCR-28 계정·데이터 삭제"]
   SETTINGS --> NSET["SCR-29 알림 설정"]
   SETTINGS --> LEGAL["SCR-30 약관·개인정보·앱정보"]
   SETTINGS -.->|"버전 5회 탭"| CONN["SCR-31 서버 연결·진단<br/>(개발 빌드)"]

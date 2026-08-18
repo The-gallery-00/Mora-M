@@ -9,7 +9,7 @@
 // 그 외 → `지난 일정`(내림차순). 원본은 `createdAt` 단일 정렬이라 이미 지나간 티켓이 늘
 // 상단을 점유했다. 정렬을 `등록일 순` 으로 바꾸면 이 구획도 함께 사라진다(등록일 축에는
 // 다가옴/지남 개념이 없다).
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +40,7 @@ const PAST = 'past';
 export default function ArchiveTicketsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const rootNavigation = useNavigation('/');
 
   const [sort, setSort] = useState<ArchiveSort>('departureDate');
   const [sortOpen, setSortOpen] = useState(false);
@@ -74,12 +75,22 @@ export default function ArchiveTicketsScreen() {
     setTotal(loaded);
   }, []);
 
+  // 전역 router.back()은 중첩 Tabs history를 먼저 소비할 수 있다. Android 시스템 백처럼
+  // 루트 Stack을 직접 pop해야 알림에서 진입한 경우 알림 화면으로 돌아간다.
+  const handleBack = useCallback(() => {
+    if (rootNavigation.canGoBack()) {
+      rootNavigation.goBack();
+      return;
+    }
+    router.replace({ pathname: '/(tabs)/archive', params: { type: 'TICKET' } });
+  }, [rootNavigation, router]);
+
   return (
     <View className="flex-1 bg-bg-base">
       <ArchiveHeader
         title="티켓"
         count={total}
-        onBack={() => router.replace({ pathname: '/(tabs)/archive', params: { type: 'TICKET' } })}
+        onBack={handleBack}
         onSort={() => setSortOpen(true)}
         testID="archive-tickets-header"
       />

@@ -105,20 +105,14 @@ export const DELETE_DOCUMENTS_CONFIRM_TEXT = '전체삭제';
 
 /** SCR-28 카피 원문 전량. 화면이 문장을 다시 쓰지 않게 여기서 준다. */
 export const DANGER_ZONE_COPY = {
-  screenTitle: '계정 및 데이터',
-  documentsSection: '데이터 삭제',
-  documentsCardTitle: '내 데이터 전체 삭제',
-  documentsCardBody:
-    '저장한 명함, 티켓, 포스터, 영수증과 검색 기록이 삭제됩니다. 구글 캘린더 연동 자체는 유지됩니다.',
   documentsAction: '전체 삭제',
-  documentsSheetTitle: '내 데이터 전체를 삭제할까요?',
+  documentsSheetTitle: '내 데이터를 모두 삭제할까요?',
+  documentsSheetBody:
+    '저장한 모든 문서와 검색 기록이 삭제되며 복구할 수 없습니다. 구글 캘린더 연동은 유지됩니다.',
   documentsConfirmLabel: '확인 문구',
   documentsConfirmHint: `계속하려면 "${DELETE_DOCUMENTS_CONFIRM_TEXT}"를 정확히 입력하세요.`,
 
-  accountSection: '회원 탈퇴',
   accountCardTitle: '정말 탈퇴하시겠어요?',
-  accountCardBody: '이 작업은 되돌릴 수 없습니다. 저장된 계정과 서비스 데이터가 삭제됩니다.',
-  accountAction: '회원 탈퇴',
   /** 로컬 계정 확인 시트 본문 (SCR-28 표). */
   accountLocalBody: '이 작업은 되돌릴 수 없습니다. 계속하려면 계정 비밀번호를 입력하세요.',
   /** 소셜 계정 확인 시트 본문 (SCR-28 표). */

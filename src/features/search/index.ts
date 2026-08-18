@@ -30,19 +30,16 @@ export {
 // ── 네트워크 ─────────────────────────────────────────────────────────
 export { runSearch, searchAllDocuments, searchDocuments, sortSearchHits, toSearchHit } from './api';
 
-// ── 최근 검색어 · 검색기록 ───────────────────────────────────────────
-export type { RecentSearch, SearchHistory, SearchHistoryGroup } from './recent';
+// ── 최근 검색어 · 검색기록 삭제 ─────────────────────────────────────
+export type { RecentSearch } from './recent';
 export {
   RECENT_SEARCH_MAX,
   RECENT_SEARCH_TTL_MS,
-  SEARCH_HISTORY_MERGE_WINDOW_MS,
   addRecentSearch,
   clearRecentSearches,
   clearSearchHistories,
   clearSearchPreferences,
-  fetchSearchHistories,
   getRecentSearches,
-  mergeSearchHistories,
   readLastSearchDocType,
   removeRecentSearch,
   subscribeRecentSearches,
@@ -62,5 +59,4 @@ export {
   useClearSearchHistory,
   useRecentSearches,
   useSearch,
-  useSearchHistories,
 } from './queries';
