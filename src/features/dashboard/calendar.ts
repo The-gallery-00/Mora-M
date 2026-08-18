@@ -77,7 +77,7 @@ import { toLocalDateString } from './api';
 
 // ═══════════════════════════════════════════════════════ 1. 월간 캘린더 그리드
 //
-// 달력 라이브러리가 없다(설치 금지). 7×6 그리드를 직접 만든다.
+// 달력 라이브러리가 없다(설치 금지). 월에 필요한 4~6주 그리드를 직접 만든다.
 // `Date` 산술만 쓰고 타임존 변환을 하지 않는다 — 모든 날짜는 **기기 로컬 자정** 기준이다.
 
 /** 요일 헤더 라벨. 일요일 시작 고정 (SCR-07 와이어프레임). */
@@ -96,7 +96,7 @@ export type CalendarDay = {
   weekday: number;
 };
 
-/** 한 달치 그리드. `weeks` 는 항상 6주 × 7일 = 42칸이다(높이가 달마다 튀지 않게). */
+/** 한 달치 그리드. `weeks` 는 해당 월에 필요한 4~6주로 구성된다. */
 export type CalendarMonth = {
   year: number;
   /** 1~12 (JS `Date` 의 0-based 가 아니다 — 서버 파라미터와 같은 어휘). */
@@ -123,19 +123,20 @@ export function addMonths(
 }
 
 /**
- * 7×6 월간 그리드를 만든다.
+ * 해당 월에 필요한 4~6주의 월간 그리드를 만든다.
  *
- * 시작 칸 = 1일이 속한 주의 **일요일**. 6주 고정이라 앞뒤 달 날짜가 섞여 들어오고
- * `inMonth: false` 로 구분된다. 42칸 고정은 월 이동 시 캘린더 높이가 흔들리지 않게 하는 장치다
- * (SCR-07: 셀 56dp × 6주 = 336dp 가 상한).
+ * 시작 칸 = 1일이 속한 주의 **일요일**. 마지막 칸 = 말일이 속한 주의 **토요일**.
+ * 이 범위를 채우는 데 필요한 앞뒤 달 날짜만 포함하고 `inMonth: false` 로 구분한다.
  */
 export function buildMonthMatrix(year: number, month: number, today: Date = new Date()): CalendarMonth {
   const todayKey = toLocalDateString(today);
   const first = new Date(year, month - 1, 1);
   const start = new Date(year, month - 1, 1 - first.getDay());
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const weekCount = Math.ceil((first.getDay() + daysInMonth) / 7);
 
   const weeks: CalendarDay[][] = [];
-  for (let w = 0; w < 6; w += 1) {
+  for (let w = 0; w < weekCount; w += 1) {
     const week: CalendarDay[] = [];
     for (let d = 0; d < 7; d += 1) {
       const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + d);

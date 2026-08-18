@@ -46,6 +46,8 @@ public class PosterController {
             UUID userId = getUserId(request);
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             return ResponseEntity.ok(ApiResponse.ok(posterService.save(userId, body)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }
@@ -88,6 +90,8 @@ public class PosterController {
             UUID userId = getUserId(request);
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             return ResponseEntity.ok(ApiResponse.ok(posterService.update(userId, id, body)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }

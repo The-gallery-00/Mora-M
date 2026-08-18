@@ -229,15 +229,20 @@ function ScanTabButton({ onPress }: { onPress?: (event: GestureResponderEvent) =
 
 /* ── 하드웨어 뒤로가기 정책 ─────────────────────────────────────────────
    Mobile UX Guide §4: 홈 탭 루트에서만 "두 번 눌러 종료", 나머지 탭 루트는 홈 탭으로 이동한다.
+   보관함 종별 화면처럼 숨겨진 하위 탭은 이 정책이 소비하지 않고 Tabs history 의 기본 뒤로가기에
+   맡긴다. 그래야 `/archive/tickets` 에서 직전의 `/archive` 로 돌아갈 수 있다.
    (다른 탭에서 앱이 종료되면 사용자가 데이터를 잃었다고 느낀다 — §4 구현 노트)
 
    `useFocusEffect` 를 쓰는 이유: `/scan` 같은 루트 스택 모달이 위에 올라오면 이 레이아웃은
    포커스를 잃고 리스너가 해제된다. 그래야 모달의 자체 백 가드(SCR-09/12)가 가려지지 않는다. */
+const TAB_ROOT_PATHS = new Set(['/', '/archive', '/search', '/calendar', '/settings']);
+
 function useTabsBackPolicy(): void {
   const router = useRouter();
-  // 그룹 세그먼트 `(tabs)` 는 경로에 나타나지 않는다 → 홈 탭의 경로는 정확히 '/' 다
-  // (보관함 '/archive', 검색 '/search', 설정 '/settings').
-  const isHomeTab = usePathname() === '/';
+  // 그룹 세그먼트 `(tabs)` 는 경로에 나타나지 않는다.
+  const pathname = usePathname();
+  const isHomeTab = pathname === '/';
+  const isTabRoot = TAB_ROOT_PATHS.has(pathname);
 
   useFocusEffect(
     useCallback(() => {
@@ -245,12 +250,18 @@ function useTabsBackPolicy(): void {
       let timer: ReturnType<typeof setTimeout> | null = null;
 
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        // 숨김 하위 화면은 `backBehavior="history"` 가 기록한 실제 직전 탭으로 돌아간다.
+        if (!isTabRoot) return false;
+
         if (!isHomeTab) {
           router.navigate('/(tabs)');
           return true;
         }
-        // 두 번째 백은 처리하지 않고 기본 동작(앱 종료)에 넘긴다.
-        if (exitArmed) return false;
+        // 루트 Stack 에 이전 엔트리가 남아 있어도 Tabs history 로 돌아가지 않고 앱을 종료한다.
+        if (exitArmed) {
+          BackHandler.exitApp();
+          return true;
+        }
 
         exitArmed = true;
         toast.info('한 번 더 누르면 종료됩니다', { haptic: false });
@@ -264,7 +275,7 @@ function useTabsBackPolicy(): void {
         subscription.remove();
         if (timer) clearTimeout(timer);
       };
-    }, [isHomeTab, router]),
+    }, [isHomeTab, isTabRoot, router]),
   );
 }
 
@@ -297,6 +308,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false, // 화면별 커스텀 헤더 (UX-05)
         tabBarActiveTintColor: t.action.base,

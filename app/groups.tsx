@@ -711,6 +711,7 @@ export default function GroupsScreen() {
         ) : groups.length === 0 ? (
           <EmptyState
             compact
+            hideIcon
             title="명함첩이 없습니다."
             description="명함첩을 만들어 명함을 분류해 보세요."
           />

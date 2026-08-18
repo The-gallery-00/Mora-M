@@ -4,7 +4,7 @@
 //
 // **달력 라이브러리를 쓰지 않는다.** 프로젝트 규약상 패키지 추가가 금지돼 있고, Component Library
 // §5-2 도 `react-native-calendars` 를 반려했다(유형 dot·기간 이벤트·요일 색 규칙이 고유해서
-// 테마 오버라이드가 자체 구현보다 길어진다). 7×6 그리드 계산은 데이터 계층
+// 테마 오버라이드가 자체 구현보다 길어진다). 4~6주 그리드 계산은 데이터 계층
 // `features/dashboard/calendar.ts` 의 `buildMonthMatrix()` 가 이미 순수 함수로 갖고 있으므로
 // 이 파일은 **그 결과를 그리는 일만** 한다.
 //
@@ -35,7 +35,7 @@ import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export interface MonthCalendarProps {
-  /** `buildMonthMatrix(year, month)` 결과. 항상 6주 × 7일 = 42칸이다. */
+  /** `buildMonthMatrix(year, month)` 결과. 해당 월에 필요한 4~6주로 구성된다. */
   matrix: CalendarMonth;
   selectedDate: string | null;
   /** `YYYY-MM-DD` → 그 날 걸치는 이벤트. `buildEventIndex()` 결과를 그대로 넘긴다. */
@@ -291,7 +291,7 @@ function MonthCalendarBase({
       {/* ── 그리드 ────────────────────────────────────────────────────── */}
       {loading ? (
         <View className="gap-2 px-3 pt-2">
-          {[0, 1, 2, 3, 4, 5].map((row) => (
+          {matrix.weeks.map((_, row) => (
             <Skeleton key={row} height={CELL_HEIGHT - 16} radius={8} />
           ))}
         </View>

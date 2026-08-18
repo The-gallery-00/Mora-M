@@ -1,22 +1,13 @@
 /**
- * 최근 검색어 · 검색기록 (로컬 MMKV + 서버 API-54/55).
+ * 최근 검색어 · 검색기록 삭제 (로컬 MMKV + 서버 API-55).
  *
  * 정본: wiki/tech/Offline and State.md §1-4(키 정의) · §10 ST-05~ST-07 · §10-1 ST-09~ST-14
  *       wiki/tech/API Contract.md §3-12(SearchHistoryController)
  *       wiki/design/Screen Specs.md SCR-23
  *       wiki/product/Requirements.md FR-069 · FR-074 · FR-075 · FR-130
  *
- * ─────────────────────────── 두 개의 소스, 두 개의 역할 ───────────────────────────
- *
- * | 소스 | 역할 | 쓰는 주체 |
- * |---|---|---|
- * | 로컬 MMKV `search.recent` | 화면의 최근 검색어 **1차 소스** (최대 10건, 30일) | **앱**이 검색 성공 시 적립 |
- * | 서버 `/api/search-histories` | `전체 기록 보기` 에서만 조회 · 설정의 전체 삭제 | **서버**가 검색 API 호출마다 자동 적립 |
- *
- * 이 분리는 성능 최적화가 아니라 **정확성 문제**다. 서버는 검색 API 호출마다 무조건 1건을 남기므로
- * `전체` 검색 1회가 서버에 4행을 만든다(막을 수단이 없다 — ST-13). 로컬은 그 4콜을 `docType:'ALL'`
- * **1건으로** 적립해(ST-12) 최근 검색어 10칸이 한 번의 검색으로 40% 차 버리는 것을 막고,
- * 서버 기록을 보여줄 때는 렌더 단계에서 동일 `query` + 2초 이내를 1건으로 병합한다(`mergeSearchHistories`).
+ * 화면에는 로컬 MMKV `search.recent`를 최대 10건, 30일 동안 표시한다. 서버 검색 기록은
+ * 검색 API 호출 때 계속 적립되므로 `전체 삭제` 시 API-55와 로컬 목록을 함께 비운다.
  *
  * ─────────────────────────── MMKV 키에 대한 주의 ───────────────────────────
  *
@@ -178,45 +169,6 @@ export function writeLastSearchDocType(type: SearchDocType): void {
 export function clearSearchPreferences(): void {
   storage.remove(StorageKey.searchLastDocType);
   clearRecentSearches();
-}
-
-// ───────────────────────────────────────────── 서버 검색기록 (API-54/55)
-
-/** `SearchHistoryResponse` — `{id:UUID, documentType, query, createdAt}`. 실측으로 필드명 확인. */
-export type SearchHistory = {
-  id: string;
-  /** 서버가 남긴 유형. 열거형 밖의 값이 오면 `null` 로 두고 화면이 배지를 생략한다. */
-  docType: SearchDocType | null;
-  query: string;
-  /** ISO 문자열. 이 서버의 `LocalDateTime` 은 `"2026-07-28T10:51:57.165603"` 형태다. */
-  createdAt: string;
-};
-
-/**
- * 검색기록 조회 (API-54).
- *
- * **화면의 최근 검색어 1차 소스가 아니다.** `전체 기록 보기` 에서만 호출한다 (ST-06).
- * 여기서 `staleTime` 을 두지 않는 것은 이 호출이 기록을 **적립하지 않기 때문**이다 —
- * 적립 억제가 필요한 것은 검색 API 4종이지 이 조회가 아니다.
- */
-export async function fetchSearchHistories(): Promise<ApiResult<SearchHistory[]>> {
-  const res = await request<unknown>('/api/search-histories');
-  if (!res.ok) return res;
-
-  const rows = Array.isArray(res.data) ? res.data : [];
-  const items: SearchHistory[] = [];
-  for (const row of rows) {
-    if (row === null || typeof row !== 'object') continue;
-    const item = row as Record<string, unknown>;
-    if (typeof item.query !== 'string') continue;
-    items.push({
-      id: typeof item.id === 'string' ? item.id : '',
-      docType: isSearchDocType(item.documentType) ? item.documentType : null,
-      query: item.query,
-      createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
-    });
-  }
-  return { ok: true, data: items };
 }
 
 /**

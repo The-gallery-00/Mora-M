@@ -108,14 +108,15 @@ function ShareIcon({ color }: { color: string }) {
   );
 }
 
-function CloseIcon({ color }: { color: string }) {
+function BackIcon({ color }: { color: string }) {
   return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M6 6L18 18M18 6L6 18"
+        d="M15 5L8 12L15 19"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
@@ -504,19 +505,25 @@ function DetailHeader({
   title,
   onEdit,
   onShare,
-  onClose,
+  onBack,
   disabled,
 }: {
   title: string;
   onEdit: () => void;
   onShare: () => void;
-  onClose: () => void;
+  onBack: () => void;
   disabled: boolean;
 }) {
   const t = useTheme();
   return (
-    <View className="h-14 flex-row items-center justify-between px-4">
-      <Text className="flex-1 text-h3 font-w700 text-text-primary" accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+    <View className="h-14 flex-row items-center px-2">
+      <IconButton
+        icon={<BackIcon color={t.text.primary} />}
+        onPress={onBack}
+        accessibilityLabel="뒤로"
+        testID="document-detail-back"
+      />
+      <Text className="ml-1 flex-1 text-h3 font-w700 text-text-primary" accessibilityRole="header" maxFontSizeMultiplier={1.3}>
         {title}
       </Text>
       <View className="flex-row items-center gap-1">
@@ -531,7 +538,6 @@ function DetailHeader({
           onPress={onShare}
           accessibilityLabel="공유"
         />
-        <IconButton icon={<CloseIcon color={t.text.secondary} />} onPress={onClose} accessibilityLabel="닫기" />
       </View>
     </View>
   );
@@ -650,6 +656,8 @@ export default function DocumentDetailScreen() {
 
   const imageUrl = doc?.imageUrl ?? null;
   const imageFailed = imageUrl !== null && failedImageUrl === imageUrl;
+
+  const goBack = useCallback(() => router.back(), [router]);
 
   /* ── 닫기 ───────────────────────────────────────────────────────────────── */
   const close = useCallback(() => {
@@ -838,7 +846,7 @@ export default function DocumentDetailScreen() {
           title={title}
           onEdit={goEdit}
           onShare={share}
-          onClose={close}
+          onBack={goBack}
           disabled={actionsDisabled}
         />
       </View>

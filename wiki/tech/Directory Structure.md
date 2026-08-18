@@ -51,7 +51,6 @@ mora-mobile/
 │  ├─ settings/
 │  │  ├─ profile.tsx                   # SCR-26 닉네임 변경
 │  │  ├─ password.tsx                  # SCR-27 비밀번호 변경
-│  │  ├─ danger.tsx                    # SCR-28 회원 탈퇴 / 데이터 전체 삭제
 │  │  ├─ notifications.tsx             # SCR-29 알림 설정
 │  │  └─ legal/[doc].tsx               # SCR-30 약관/개인정보/라이선스/앱정보
 │  ├─ (dev)/

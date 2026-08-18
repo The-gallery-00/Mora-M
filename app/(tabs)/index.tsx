@@ -44,7 +44,6 @@ import {
 } from "@/components/dashboard";
 import {
   Button,
-  EmptyState,
   IconButton,
   Skeleton,
   toast,
@@ -579,21 +578,6 @@ export default function HomeScreen() {
           <View className="mt-2">
             <HomeSkeleton slow={slow} />
           </View>
-        ) : data ? (
-          <>
-            {dashboard.isBrandNew ? (
-              /* ── 빈(전체 신규 유저) — 통계 전부 0 ── */
-              <View className="mt-6 rounded-card border border-border-subtle bg-bg-elevated">
-                <EmptyState
-                  title="아직 저장된 문서가 없어요"
-                  description="첫 문서를 스캔하고 MORA를 시작해 보세요."
-                  actionLabel="문서 스캔하기"
-                  onAction={() => router.push("/scan")}
-                  testID="home-empty"
-                />
-              </View>
-            ) : null}
-          </>
         ) : null}
 
         <WeekCalendar
@@ -646,7 +630,7 @@ export default function HomeScreen() {
           </>
         ) : null}
 
-        {data && !dashboard.isBrandNew ? (
+        {data ? (
           <>
             <SectionHeader
               title="다가오는 일정"

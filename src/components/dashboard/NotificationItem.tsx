@@ -15,14 +15,29 @@
 // 거치지 않고 들어오는 경로가 실제로 존재한다 — 마지막 방어선을 화면 쪽에 둔다.
 import { memo } from 'react';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
-import { SwipeableRow, type SwipeAction } from '@/components/documents';
 import {
   formatRelativeTime,
   NOTIFICATION_COPY,
   normalizeNotificationMessage,
   type NotificationType,
 } from '@/features/notifications';
+import { useTheme } from '@/theme/ThemeProvider';
+
+function CheckIcon({ color }: { color: string }) {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M6 12l4 4 8-8"
+        stroke={color}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export interface NotificationItemProps {
   id: string;
@@ -32,9 +47,9 @@ export interface NotificationItemProps {
   /** ISO 문자열. 상대시각으로 변환해 우상단에 그린다. */
   createdAt: string;
   read: boolean;
+  selectionMode?: boolean;
+  selected?: boolean;
   onPress: () => void;
-  /** 좌스와이프 `삭제`. 오프라인 등으로 막아야 하면 화면이 생략한다. */
-  onDelete?: () => void;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -45,11 +60,13 @@ function NotificationItemBase({
   message,
   createdAt,
   read,
+  selectionMode = false,
+  selected = false,
   onPress,
-  onDelete,
   style,
   testID,
 }: NotificationItemProps) {
+  const t = useTheme();
   const body = normalizeNotificationMessage(message);
   const when = formatRelativeTime(createdAt);
   const heading = title || NOTIFICATION_COPY.typeLabel[type];
@@ -58,10 +75,19 @@ function NotificationItemBase({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityState={{ selected: !read }}
-      accessibilityLabel={[read ? '' : '읽지 않음', heading, body, when].filter(Boolean).join(', ')}
+      accessibilityState={
+        selectionMode ? { selected, checked: selected } : { selected: !read }
+      }
+      accessibilityLabel={[
+        selectionMode ? (selected ? '선택됨' : '선택 안 됨') : read ? '' : '읽지 않음',
+        heading,
+        body,
+        when,
+      ]
+        .filter(Boolean)
+        .join(', ')}
       onPress={onPress}
-      className={`flex-row items-stretch ${read ? 'bg-bg-elevated' : 'bg-surface-active'}`}
+      className={`flex-row items-stretch ${selected || !read ? 'bg-surface-active' : 'bg-bg-elevated'}`}
       style={({ pressed }) => [style, pressed ? { opacity: 0.9 } : null]}
     >
       {/* 미읽음 좌측 4dp 바(행 전체 높이). 읽으면 같은 폭의 투명 자리만 남아 정렬이 흔들리지 않는다. */}
@@ -92,13 +118,22 @@ function NotificationItemBase({
           {body}
         </Text>
       </View>
+
+      {selectionMode ? (
+        <View className="pr-4 items-center justify-center">
+          <View
+            className={`h-5 w-5 items-center justify-center rounded-full border ${
+              selected ? 'border-action bg-action' : 'border-border-subtle bg-bg-base'
+            }`}
+          >
+            {selected ? <CheckIcon color={t.text.inverse} /> : null}
+          </View>
+        </View>
+      ) : null}
     </Pressable>
   );
 
-  if (!onDelete) return row;
-
-  const actions: SwipeAction[] = [{ label: '삭제', tone: 'danger', onPress: onDelete }];
-  return <SwipeableRow rightActions={actions}>{row}</SwipeableRow>;
+  return row;
 }
 
 export const NotificationItem = memo(NotificationItemBase);

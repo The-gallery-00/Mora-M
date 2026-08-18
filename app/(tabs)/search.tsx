@@ -25,7 +25,6 @@ import { FlashList, type ListRenderItemInfo } from '@shopify/flash-list';
 import { useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  Alert,
   Keyboard,
   Modal,
   Pressable,
@@ -48,7 +47,6 @@ import {
 import {
   Button,
   EmptyState,
-  IconButton,
   SegmentedControl,
   Skeleton,
   toast,
@@ -64,7 +62,6 @@ import {
   useClearSearchHistory,
   useRecentSearches,
   useSearch,
-  useSearchHistories,
   type SearchDocType,
   type SearchHit,
   type SearchSortOrder,
@@ -88,6 +85,13 @@ const SORT_OPTIONS: SortOption<SearchSortOrder>[] = [
   { value: 'relevance', label: SEARCH_COPY.sortRelevance },
   { value: 'recent', label: SEARCH_COPY.sortRecent },
 ];
+
+const CLEAR_HISTORY_SHEET_COPY = {
+  title: '검색 기록을 모두 삭제할까요?',
+  description: '삭제한 검색 기록은 복구할 수 없습니다.',
+  cancel: '취소',
+  confirm: '모두 삭제',
+} as const;
 
 /** 정렬 트리거의 `⌄` — lucide `chevron-down` 공식 path (Design Tokens §12 매핑 `▾`→ChevronDown).
     lucide-react-native 는 설치하지 않는다 — 다른 아이콘과 같이 react-native-svg 로 그린다. */
@@ -160,6 +164,95 @@ function Banner({ text, tone }: { text: string; tone: 'danger' | 'warn' }) {
   );
 }
 
+function ClearHistorySheet({
+  visible,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const t = useTheme();
+  const insets = useSafeAreaInsets();
+  const cancel = () => {
+    if (!busy) onCancel();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={cancel}
+    >
+      <Pressable
+        className="flex-1 justify-end"
+        style={{ backgroundColor: t.scrim }}
+        accessibilityRole="button"
+        accessibilityLabel="닫기"
+        onPress={cancel}
+      >
+        <Pressable
+          className="gap-4 rounded-t-sheet bg-bg-elevated px-5 pt-4"
+          style={{ paddingBottom: insets.bottom + spacing.lg }}
+          onPress={() => undefined}
+          accessibilityViewIsModal
+          testID="search-clear-history-sheet"
+        >
+          <View className="items-center">
+            <View className="h-1 w-9 rounded-full bg-border-subtle" />
+          </View>
+
+          <View className="items-center gap-2 py-2">
+            <Text
+              className="text-center text-h3 font-w700 text-text-primary"
+              accessibilityRole="header"
+            >
+              {CLEAR_HISTORY_SHEET_COPY.title}
+            </Text>
+            <Text className="text-center text-body-sm text-text-secondary">
+              {CLEAR_HISTORY_SHEET_COPY.description}
+            </Text>
+          </View>
+
+          <View className="flex-row gap-2">
+            <View className="flex-1">
+              <Button
+                label={CLEAR_HISTORY_SHEET_COPY.cancel}
+                onPress={cancel}
+                variant="secondary"
+                size="md"
+                fullWidth
+                disabled={busy}
+                haptic="none"
+                testID="search-clear-history-cancel"
+              />
+            </View>
+            <View className="flex-[2]">
+              <Button
+                label={CLEAR_HISTORY_SHEET_COPY.confirm}
+                loadingLabel="삭제 중..."
+                onPress={onConfirm}
+                variant="primary"
+                size="md"
+                fullWidth
+                loading={busy}
+                disabled={busy}
+                haptic="none"
+                testID="search-clear-history-confirm"
+              />
+            </View>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function SearchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -173,7 +266,7 @@ export default function SearchScreen() {
   const [docType, setDocType] = useState<SearchDocType>(readLastSearchDocType);
   const [order, setOrder] = useState<SearchSortOrder>('relevance');
   const [sortOpen, setSortOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [offline, setOffline] = useState(false);
 
@@ -220,21 +313,21 @@ export default function SearchScreen() {
   }, []);
 
   /* ── 최근 검색어 전체 삭제 (CP-38 → API-55) ──────────────────────────────── */
-  const confirmClearAll = useCallback(() => {
-    Alert.alert('검색 기록을 모두 삭제할까요?', '이 작업은 되돌릴 수 없습니다. 계속하려면 확인을 눌러주세요.', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: () => {
-          clearHistory.mutate(undefined, {
-            // 서버 삭제 건수를 그대로 문구에 쓴다. 로컬 `search.recent` 비우기는 훅이 함께 처리한다(ST-07).
-            onSuccess: (deleted) => toast.success(searchHistoryClearedMessage(deleted)),
-            onError: (error) => toast.error(error.message),
-          });
-        },
+  const confirmClearAll = useCallback(() => setClearHistoryOpen(true), []);
+
+  const closeClearHistory = useCallback(() => {
+    if (!clearHistory.isPending) setClearHistoryOpen(false);
+  }, [clearHistory.isPending]);
+
+  const clearAllHistory = useCallback(() => {
+    clearHistory.mutate(undefined, {
+      // 서버 삭제 건수를 그대로 문구에 쓴다. 로컬 `search.recent` 비우기는 훅이 함께 처리한다(ST-07).
+      onSuccess: (deleted) => {
+        setClearHistoryOpen(false);
+        toast.success(searchHistoryClearedMessage(deleted));
       },
-    ]);
+      onError: (error) => toast.error(error.message),
+    });
   }, [clearHistory]);
 
   /* ── 결과 ──────────────────────────────────────────────────────────────── */
@@ -301,21 +394,6 @@ export default function SearchScreen() {
           clearing={clearHistory.isPending}
           testID="search-recent"
         />
-
-        {/* `전체 기록 보기`(API-54)는 로컬 목록과 별개다 — 열 때만 조회한다(ST-06). */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={SEARCH_COPY.historyTitle}
-          onPress={() => setHistoryOpen(true)}
-          className="mt-3 self-center"
-          // body-sm 한 줄(18dp) — 44dp 하한을 hitSlop 으로 채운다(A11Y §11-1)
-          hitSlop={{ top: 14, bottom: 14, left: 16, right: 16 }}
-          style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
-        >
-          <Text className="text-body-sm font-w600 text-action" maxFontSizeMultiplier={1.3}>
-            {SEARCH_COPY.historyTitle}
-          </Text>
-        </Pressable>
 
         <Text className="mb-2 mt-6 text-input font-w600 text-text-primary" accessibilityRole="header">
           {SEARCH_COPY.guideTitle}
@@ -387,7 +465,11 @@ export default function SearchScreen() {
           }
           ListEmptyComponent={
             <View className="pt-6">
-              <EmptyState title={SEARCH_COPY.emptyTitle} description={SEARCH_COPY.emptyBody} />
+              <EmptyState
+                title={SEARCH_COPY.emptyTitle}
+                description={SEARCH_COPY.emptyBody}
+                hideIcon
+              />
             </View>
           }
           ListFooterComponent={<View style={{ height: spacing.sm }} />}
@@ -471,112 +553,13 @@ export default function SearchScreen() {
         onClose={() => setSortOpen(false)}
       />
 
-      <SearchHistorySheet
-        visible={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        onSelect={(q, type) => {
-          setHistoryOpen(false);
-          submit(q, type);
-        }}
+      <ClearHistorySheet
+        visible={clearHistoryOpen}
+        busy={clearHistory.isPending}
+        onCancel={closeClearHistory}
+        onConfirm={clearAllHistory}
       />
+
     </View>
-  );
-}
-
-/* ───────────────────────────────────────────────────── 전체 기록 보기 (API-54)
-   로컬 최근 검색어와 **다른 소스**다(서버가 검색 API 호출마다 자동 적립한 기록).
-   `전체` 검색 1회가 서버에 남긴 4행은 `mergeSearchHistories` 가 이미 1건으로 묶어 준다(ST-13).
-   시트는 `ArchiveList` 의 ActionSheet 와 같은 이유로 순수 `Modal` 이다 — 제스처가 필요 없고
-   루트에 `BottomSheetModalProvider` 가 없다. */
-function SearchHistorySheet({
-  visible,
-  onClose,
-  onSelect,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onSelect: (q: string, docType: SearchDocType) => void;
-}) {
-  const t = useTheme();
-  const insets = useSafeAreaInsets();
-  const history = useSearchHistories({ enabled: visible });
-
-  if (!visible) return null;
-
-  return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <Pressable
-        className="flex-1 justify-end"
-        style={{ backgroundColor: t.scrim }}
-        accessibilityRole="button"
-        accessibilityLabel="닫기"
-        onPress={onClose}
-      >
-        <Pressable
-          className="rounded-t-sheet bg-bg-elevated px-5 pt-4"
-          style={{ paddingBottom: insets.bottom + spacing.lg, maxHeight: '70%' }}
-          onPress={() => undefined}
-        >
-          <Text className="pb-2 text-h3 font-w700 text-text-primary" accessibilityRole="header">
-            {SEARCH_COPY.historyTitle}
-          </Text>
-
-          {history.isLoading ? (
-            <View className="gap-2 py-3">
-              {[0, 1, 2].map((index) => (
-                <Skeleton key={index} width="100%" height={20} radius={4} />
-              ))}
-            </View>
-          ) : history.isError ? (
-            /* 에러에는 반드시 재시도가 붙는다 — 시트를 닫았다 다시 여는 것 말고는
-               다시 부를 방법이 없었다(FR-109). */
-            <View className="items-center gap-3 py-6" accessibilityLiveRegion="polite">
-              <Text className="text-center text-body-sm text-danger-strong">
-                {history.error?.message ?? SEARCH_COPY.historyFailed}
-              </Text>
-              <Button
-                label="다시 시도"
-                onPress={() => void history.refetch()}
-                variant="secondary"
-                size="sm"
-              />
-            </View>
-          ) : history.isEmpty ? (
-            <Text className="py-6 text-center text-body-sm text-text-muted">
-              검색 기록이 없습니다.
-            </Text>
-          ) : (
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {history.groups.map((group) => {
-                // 서버 4행이 묶인 그룹(= `전체` 검색)은 `ALL` 로, 단일 유형은 그 유형으로 복원한다.
-                const only = group.docTypes.length === 1 ? group.docTypes[0] : undefined;
-                const restored: SearchDocType = only ?? 'ALL';
-                return (
-                  <Pressable
-                    key={group.id || `${group.query}:${group.createdAt}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${group.query}, ${SEARCH_DOC_TYPE_LABELS[restored]}으로 검색`}
-                    onPress={() => onSelect(group.query, restored)}
-                    className="h-12 flex-row items-center justify-between"
-                    style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
-                  >
-                    <Text
-                      className="flex-1 text-base text-text-primary"
-                      numberOfLines={1}
-                      maxFontSizeMultiplier={1.3}
-                    >
-                      {group.query}
-                    </Text>
-                    <Text className="ml-2 text-caption text-text-muted" maxFontSizeMultiplier={1.2}>
-                      {SEARCH_DOC_TYPE_LABELS[restored]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          )}
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
