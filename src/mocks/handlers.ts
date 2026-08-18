@@ -1111,6 +1111,25 @@ function handleClearSearchHistories(): MockResponse {
   });
 }
 
+function handleRemoveSearchHistoryItem(ctx: Ctx): MockResponse {
+  const q = ctx.query.q;
+  if (q === undefined) return fail(400, "Required request parameter 'q' is not present");
+  const documentType = ctx.query.documentType;
+
+  return mutate((data) => {
+    const before = data.searchHistories.length;
+    data.searchHistories = data.searchHistories.filter((row) => {
+      const matches =
+        row.query === q &&
+        (documentType === undefined || documentType === '' || documentType === 'ALL'
+          ? true
+          : row.documentType === documentType);
+      return !matches;
+    });
+    return ok(before - data.searchHistories.length);
+  });
+}
+
 // ───────────────────────────────────────────────────────────── 챗봇
 
 const CHAT_DOC_TYPES: readonly MockChatDocType[] = [
@@ -1319,6 +1338,12 @@ const ROUTES: readonly Route[] = [
     pattern: '/api/search-histories',
     auth: true,
     handle: handleClearSearchHistories,
+  },
+  {
+    method: 'DELETE',
+    pattern: '/api/search-histories/item',
+    auth: true,
+    handle: handleRemoveSearchHistoryItem,
   },
 
   // 챗봇

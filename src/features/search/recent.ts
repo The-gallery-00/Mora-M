@@ -126,9 +126,11 @@ export function addRecentSearch(q: string, docType: SearchDocType): RecentSearch
   return commit([{ q: query, docType, at: Date.now() }, ...deduped].slice(0, RECENT_SEARCH_MAX));
 }
 
-/** 최근 검색어 `✕` — **로컬에서만** 지운다. 서버에는 단건 삭제 API 가 없다 (SCR-23 인터랙션 표). */
+/** 최근 검색어 `✕` — 로컬은 즉시 지우고, 서버 삭제는 응답을 기다리지 않는다. */
 export function removeRecentSearch(q: string, docType: SearchDocType): RecentSearch[] {
-  return commit(getRecentSearches().filter((item) => !(item.q === q && item.docType === docType)));
+  const next = commit(getRecentSearches().filter((item) => !(item.q === q && item.docType === docType)));
+  void removeSearchHistoryItem(docType, q);
+  return next;
 }
 
 export function clearRecentSearches(): RecentSearch[] {
@@ -181,4 +183,88 @@ export async function clearSearchHistories(): Promise<ApiResult<number>> {
 
   const deleted = typeof res.data === 'number' ? res.data : Number(res.data);
   return { ok: true, data: Number.isFinite(deleted) ? deleted : 0 };
+}
+
+export async function removeSearchHistoryItem(
+  docType: SearchDocType,
+  q: string,
+): Promise<ApiResult<number>> {
+  const params = new URLSearchParams({ q: q.trim() });
+  if (docType !== 'ALL') params.set('documentType', docType);
+
+  const res = await request<unknown>(`/api/search-histories/item?${params.toString()}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) return res;
+
+  const deleted = typeof res.data === 'number' ? res.data : Number(res.data);
+  return { ok: true, data: Number.isFinite(deleted) ? deleted : 0 };
+}
+
+// ───────────────────────────────────────────── 서버 기록 병합 표시 (ST-13)
+
+/** 같은 검색 1회가 서버에 남긴 여러 행으로 인정하는 시간 폭. */
+export const SEARCH_HISTORY_MERGE_WINDOW_MS = 2_000;
+
+export type SearchHistoryGroup = {
+  /** 대표 행의 id. 리스트 key 로 쓴다. */
+  id: string;
+  query: string;
+  /** 병합된 행들의 유형. `전체` 검색이면 4종이 들어온다. */
+  docTypes: SearchDocType[];
+  /** 그룹에서 가장 최근 시각(ISO). */
+  createdAt: string;
+  /** 병합된 서버 행 수. 화면에는 보통 노출하지 않는다(디버깅·검증용). */
+  count: number;
+};
+
+/**
+ * 서버 기록 병합 표시 (ST-13).
+ *
+ * `전체` 검색 1회는 서버에 **4행**을 남긴다. 앱이 막을 수 없으므로 렌더 단계에서
+ * 동일 `query` + `createdAt` 2초 이내를 1건으로 묶어 사용자에게 4줄을 보여주지 않는다.
+ *
+ * 2초인 이유: 4콜이 병렬로 나가고 서버가 검색 실행 **전에** 기록하므로 4행의 시각차는
+ * 실측상 수십 ms 수준이다. 2초는 느린 네트워크까지 감싸면서, 사용자가 같은 검색어를
+ * 의도적으로 다시 실행한 경우(수 초 이상 간격)와는 겹치지 않는 폭이다.
+ */
+export function mergeSearchHistories(list: readonly SearchHistory[]): SearchHistoryGroup[] {
+  const sorted = [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const groups: SearchHistoryGroup[] = [];
+  // 그룹별 "가장 오래된" 시각(ms). 내림차순 순회라 다음 항목과 비교할 기준이 된다.
+  const oldestAt: number[] = [];
+
+  for (const item of sorted) {
+    const at = Date.parse(item.createdAt);
+    const last = groups[groups.length - 1];
+    const lastOldest = oldestAt[oldestAt.length - 1];
+
+    const mergeable =
+      last !== undefined &&
+      lastOldest !== undefined &&
+      last.query === item.query &&
+      Number.isFinite(at) &&
+      Number.isFinite(lastOldest) &&
+      lastOldest - at <= SEARCH_HISTORY_MERGE_WINDOW_MS;
+
+    if (mergeable && last !== undefined) {
+      if (item.docType !== null && !last.docTypes.includes(item.docType)) {
+        last.docTypes.push(item.docType);
+      }
+      last.count += 1;
+      if (Number.isFinite(at)) oldestAt[oldestAt.length - 1] = at;
+      continue;
+    }
+
+    groups.push({
+      id: item.id,
+      query: item.query,
+      docTypes: item.docType === null ? [] : [item.docType],
+      createdAt: item.createdAt,
+      count: 1,
+    });
+    oldestAt.push(Number.isFinite(at) ? at : Number.NEGATIVE_INFINITY);
+  }
+
+  return groups;
 }

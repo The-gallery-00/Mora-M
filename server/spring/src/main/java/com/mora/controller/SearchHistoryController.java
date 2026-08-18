@@ -25,6 +25,13 @@ public class SearchHistoryController {
         UUID userId = userId(request); if (userId == null) return unauthorized();
         return ResponseEntity.ok(ApiResponse.ok(service.clear(userId)));
     }
+    @DeleteMapping("/item") public ResponseEntity<ApiResponse<Long>> removeItem(
+            HttpServletRequest request,
+            @RequestParam("q") String q,
+            @RequestParam(value = "documentType", required = false) String documentType) {
+        UUID userId = userId(request); if (userId == null) return unauthorized();
+        return ResponseEntity.ok(ApiResponse.ok(service.removeByQuery(userId, documentType, q)));
+    }
     private UUID userId(HttpServletRequest request) {
         String h = request.getHeader("Authorization");
         try { return h != null && h.startsWith("Bearer ") ? jwtUtil.getUserId(h.substring(7)) : null; }
