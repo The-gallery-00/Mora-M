@@ -218,6 +218,14 @@ export type SearchHistoryGroup = {
   count: number;
 };
 
+export type SearchHistory = {
+  id: string;
+  query: string;
+  /** `전체` 검색처럼 특정 유형으로 귀속되지 않는 서버 행은 null 로 둔다. */
+  docType: SearchDocType | null;
+  createdAt: string;
+};
+
 /**
  * 서버 기록 병합 표시 (ST-13).
  *
