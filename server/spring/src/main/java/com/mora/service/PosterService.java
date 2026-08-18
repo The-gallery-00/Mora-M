@@ -41,6 +41,9 @@ public class PosterService {
     }
 
     public PosterResponse save(UUID userId, PosterRequest request) {
+        LocalDate eventStartDate = parseDate(request.getEventStartDate());
+        LocalDate eventEndDate = parseDate(request.getEventEndDate());
+        validateDateOrder(eventStartDate, eventEndDate);
         String rawTextJoined = joinRawText(request.getRawText());
         String embedding = embeddingService.getEmbedding(rawTextJoined);
 
@@ -50,8 +53,8 @@ public class PosterService {
         poster.setClassificationConfidence(request.getClassificationConfidence());
         poster.setTitle(request.getTitle());
         poster.setOrganizerName(request.getOrganizerName());
-        poster.setEventStartDate(parseDate(request.getEventStartDate()));
-        poster.setEventEndDate(parseDate(request.getEventEndDate()));
+        poster.setEventStartDate(eventStartDate);
+        poster.setEventEndDate(eventEndDate);
         poster.setContactPhone(request.getContactPhone());
         poster.setContactEmail(request.getContactEmail());
         poster.setLocation(request.getLocation());
@@ -83,12 +86,18 @@ public class PosterService {
         Poster poster = posterRepository.findByIdAndUserId(posterId, userId)
                 .orElseThrow(() -> new RuntimeException("Poster not found or unauthorized"));
 
+        LocalDate eventStartDate = request.getEventStartDate() != null
+                ? parseDate(request.getEventStartDate()) : poster.getEventStartDate();
+        LocalDate eventEndDate = request.getEventEndDate() != null
+                ? parseDate(request.getEventEndDate()) : poster.getEventEndDate();
+        validateDateOrder(eventStartDate, eventEndDate);
+
         if (request.getDocType() != null) poster.setDocType(request.getDocType());
         if (request.getClassificationConfidence() != null) poster.setClassificationConfidence(request.getClassificationConfidence());
         if (request.getTitle() != null) poster.setTitle(request.getTitle());
         if (request.getOrganizerName() != null) poster.setOrganizerName(request.getOrganizerName());
-        if (request.getEventStartDate() != null) poster.setEventStartDate(parseDate(request.getEventStartDate()));
-        if (request.getEventEndDate() != null) poster.setEventEndDate(parseDate(request.getEventEndDate()));
+        if (request.getEventStartDate() != null) poster.setEventStartDate(eventStartDate);
+        if (request.getEventEndDate() != null) poster.setEventEndDate(eventEndDate);
         if (request.getContactPhone() != null) poster.setContactPhone(request.getContactPhone());
         if (request.getContactEmail() != null) poster.setContactEmail(request.getContactEmail());
         if (request.getLocation() != null) poster.setLocation(request.getLocation());
@@ -202,6 +211,12 @@ public class PosterService {
         }
 
         return null;
+    }
+
+    private static void validateDateOrder(LocalDate eventStartDate, LocalDate eventEndDate) {
+        if (eventStartDate != null && eventEndDate != null && eventEndDate.isBefore(eventStartDate)) {
+            throw new IllegalArgumentException("Event end date cannot be before event start date");
+        }
     }
 
     private String joinRawText(List<String> rawTextList) {

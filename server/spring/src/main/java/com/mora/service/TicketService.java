@@ -40,6 +40,9 @@ public class TicketService {
     }
 
     public TicketResponse save(UUID userId, TicketRequest request) {
+        LocalDate departureDate = parseDate(request.getDepartureDate());
+        LocalDate arrivalDate = parseDate(request.getArrivalDate());
+        validateDateOrder(departureDate, arrivalDate);
         String rawTextJoined = joinRawText(request.getRawText());
         String embedding = embeddingService.getEmbedding(rawTextJoined);
 
@@ -49,10 +52,10 @@ public class TicketService {
         ticket.setClassificationConfidence(request.getClassificationConfidence());
         ticket.setTransportType(request.getTransportType());
         ticket.setDepartureLocation(request.getDepartureLocation());
-        ticket.setDepartureDate(parseDate(request.getDepartureDate()));
+        ticket.setDepartureDate(departureDate);
         ticket.setDepartureTime(parseTime(request.getDepartureTime()));
         ticket.setArrivalLocation(request.getArrivalLocation());
-        ticket.setArrivalDate(parseDate(request.getArrivalDate()));
+        ticket.setArrivalDate(arrivalDate);
         ticket.setArrivalTime(parseTime(request.getArrivalTime()));
         ticket.setRawText(rawTextJoined);
         ticket.setParsedJson(request.getParsedJson());
@@ -79,14 +82,20 @@ public class TicketService {
         Ticket ticket = ticketRepository.findByIdAndUserId(ticketId, userId)
                 .orElseThrow(() -> new RuntimeException("Ticket not found or unauthorized"));
 
+        LocalDate departureDate = request.getDepartureDate() != null
+                ? parseDate(request.getDepartureDate()) : ticket.getDepartureDate();
+        LocalDate arrivalDate = request.getArrivalDate() != null
+                ? parseDate(request.getArrivalDate()) : ticket.getArrivalDate();
+        validateDateOrder(departureDate, arrivalDate);
+
         if (request.getDocType() != null) ticket.setDocType(request.getDocType());
         if (request.getClassificationConfidence() != null) ticket.setClassificationConfidence(request.getClassificationConfidence());
         if (request.getTransportType() != null) ticket.setTransportType(request.getTransportType());
         if (request.getDepartureLocation() != null) ticket.setDepartureLocation(request.getDepartureLocation());
-        if (request.getDepartureDate() != null) ticket.setDepartureDate(parseDate(request.getDepartureDate()));
+        if (request.getDepartureDate() != null) ticket.setDepartureDate(departureDate);
         if (request.getDepartureTime() != null) ticket.setDepartureTime(parseTime(request.getDepartureTime()));
         if (request.getArrivalLocation() != null) ticket.setArrivalLocation(request.getArrivalLocation());
-        if (request.getArrivalDate() != null) ticket.setArrivalDate(parseDate(request.getArrivalDate()));
+        if (request.getArrivalDate() != null) ticket.setArrivalDate(arrivalDate);
         if (request.getArrivalTime() != null) ticket.setArrivalTime(parseTime(request.getArrivalTime()));
         if (request.getParsedJson() != null) ticket.setParsedJson(request.getParsedJson());
         if (request.getRawJson() != null) ticket.setRawJson(request.getRawJson());
@@ -193,6 +202,12 @@ public class TicketService {
         }
 
         return null;
+    }
+
+    private static void validateDateOrder(LocalDate departureDate, LocalDate arrivalDate) {
+        if (departureDate != null && arrivalDate != null && arrivalDate.isBefore(departureDate)) {
+            throw new IllegalArgumentException("Arrival date cannot be before departure date");
+        }
     }
 
     private LocalTime parseTime(String timeStr) {
