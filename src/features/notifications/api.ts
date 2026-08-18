@@ -52,6 +52,7 @@
  * 읽는 코드는 리뷰 반려 대상이다 — `toNotification()` 이 이미 정규화한 값을 담아 준다.
  */
 
+import { DOC_ROUTE_SEGMENT, isDocumentType } from '@/features/documents/types';
 import { request, type ApiResult } from '@/services/http';
 
 // ───────────────────────────────────────────────────────────── 어휘
@@ -82,6 +83,10 @@ export type Notification = {
   rawMessage: string;
   /** 서버가 저장한 웹 경로. 앱 라우트로 쓰려면 `toAppRoute()` 를 통과시켜야 한다. */
   linkUrl: string;
+  /** 이 알림을 만든 문서의 종류(`TICKET`/`POSTER`, 대문자). 없으면 빈 문자열. */
+  sourceType: string;
+  /** 이 알림을 만든 문서의 id(문자열). 없으면 빈 문자열. */
+  sourceId: string;
   read: boolean;
   /** ISO 문자열. 안 읽었으면 빈 문자열. */
   readAt: string;
@@ -129,14 +134,28 @@ export function normalizeNotificationMessage(message: string): string {
  * | `/dashboard/storage/tickets`    | `/(tabs)/archive/tickets`    |
  * | 그 외 / 없음                    | `/(tabs)`                    |
  *
- * `sourceType`+`sourceId` 로 문서 상세까지 바로 열 수 있으면 좋겠지만 **그 두 필드는
- * `NotificationResponse` 에 없다**(엔티티에만 있고 DTO 가 노출하지 않는다). 그래서 목록까지만
- * 보낸다 — 위키가 "`linkUrl` 문자열을 파싱해 라우트 매핑한다"고 못박은 이유다.
+ * `sourceType`/`sourceId` 로 문서 상세까지 바로 열 수 있을 때는 `toNotificationRoute()` 가
+ * 이 함수보다 우선한다 — 이 함수는 그게 없을 때(구버전 캐시, 알 수 없는 타입 등)의 폴백이다.
  */
 export function toAppRoute(linkUrl: string): string {
   if (linkUrl.includes('/storage/posters')) return '/(tabs)/archive/posters';
   if (linkUrl.includes('/storage/tickets')) return '/(tabs)/archive/tickets';
   return '/(tabs)';
+}
+
+/**
+ * 알림 탭 시 이동할 최종 라우트. `sourceType`+`sourceId` 가 둘 다 있고 `sourceType` 이
+ * 아는 문서 타입(`TICKET`/`POSTER`/`BUSINESS_CARD`/`RECEIPT`)이면 문서 상세로 바로 보낸다.
+ * 아니면(구버전 캐시, 알 수 없는 타입 등) `toAppRoute(linkUrl)` 로 폴백한다.
+ * 상세 화면이 없는 문서(삭제됨 등)를 열어도 `app/doc/[type]/[id].tsx` 가 자체적으로
+ * "문서를 찾을 수 없습니다" 상태를 그린다 — 여기서 존재 여부를 미리 확인하지 않는다.
+ */
+export function toNotificationRoute(notification: Notification): string {
+  const { sourceType, sourceId, linkUrl } = notification;
+  if (sourceType && sourceId && isDocumentType(sourceType)) {
+    return `/doc/${DOC_ROUTE_SEGMENT[sourceType]}/${encodeURIComponent(sourceId)}`;
+  }
+  return toAppRoute(linkUrl);
 }
 
 // ───────────────────────────────────────────────────────────── 상대시각
@@ -201,6 +220,8 @@ export function toNotification(raw: unknown): Notification | null {
     message: normalizeNotificationMessage(rawMessage),
     rawMessage,
     linkUrl: str(d.linkUrl),
+    sourceType: str(d.sourceType),
+    sourceId: str(d.sourceId),
     // `read` 를 신뢰하되, 빠져 있으면 `readAt` 존재로 되살린다(서버 파생 규칙과 동일).
     read: typeof d.read === 'boolean' ? d.read : readAt !== '',
     readAt,
