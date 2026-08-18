@@ -9,8 +9,8 @@
 //
 // ── 이 화면이 지키는 서버 사실 3가지 ───────────────────────────────────────────
 //  1. `linkUrl` 은 **웹 경로**(`/dashboard/storage/posters`)라 앱에서 그대로 못 쓴다.
-//     `toAppRoute()` 가 보관함 라우트로 매핑한다. `sourceType`/`sourceId` 는 DTO 에 없어서
-//     문서 상세까지는 못 열고 목록까지만 보낸다 (SCR-08 신설 근거 2).
+//     `toNotificationRoute()` 가 `sourceType`/`sourceId` 가 있으면 문서 상세로, 없으면
+//     `toAppRoute(linkUrl)` 로 보관함 목록으로 보낸다 (SCR-08 신설 근거 2).
 //  2. 서버가 `…남았습니다입니다.` 를 **DB 에 그대로 저장한다**(`formatDDay()` 이중 어미).
 //     정규화는 데이터 계층(`toNotification`)과 표시 계층(`NotificationItem`) 두 곳에서 건다 —
 //     낙관적 갱신으로 만든 임시 객체가 어댑터를 우회하는 경로가 있기 때문이다. 멱등 함수다.
@@ -35,7 +35,7 @@ import {
   markAllReadMessage,
   NOTIFICATION_COPY,
   notificationKeys,
-  toAppRoute,
+  toNotificationRoute,
   useDeleteNotification,
   useInfiniteNotifications,
   useMarkAllNotificationsRead,
@@ -284,13 +284,13 @@ export default function NotificationsScreen() {
     }
   }, [closeSelectionMode, deletingSelected, notifications, remove, selectedIds]);
 
-  /* 행 탭: ① 읽음 낙관적 갱신 ② linkUrl 매핑 라우트로 이동.
+  /* 행 탭: ① 읽음 낙관적 갱신 ② 문서 상세(있으면) 또는 linkUrl 매핑 라우트로 이동.
      **`await` 하지 않는다** — SCR-08 인터랙션 표가 "읽음 실패해도 이동은 진행, 배지 롤백" 이라고
      못박았다. 롤백은 뮤테이션 훅이 스냅샷으로 처리한다. */
   const openNotification = useCallback(
     (item: Notification) => {
       markRead.mutate({ id: item.id, alreadyRead: item.read });
-      router.push(href(toAppRoute(item.linkUrl)));
+      router.push(href(toNotificationRoute(item)));
     },
     [markRead, router],
   );

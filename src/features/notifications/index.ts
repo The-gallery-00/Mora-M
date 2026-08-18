@@ -28,6 +28,7 @@ export {
   toAppRoute,
   toNotification,
   toNotificationPage,
+  toNotificationRoute,
 } from './api';
 
 // ── 네트워크 (특수한 화면만. 보통은 훅을 쓴다) ───────────────────────
