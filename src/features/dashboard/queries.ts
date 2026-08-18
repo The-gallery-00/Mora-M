@@ -231,7 +231,7 @@ export function useCalendarSource(options: { enabled?: boolean } = {}) {
 }
 
 export type UseCalendarMonthResult = {
-  /** 7×6 그리드. 월이 바뀌면 새로 만들어진다(네트워크 없음). */
+  /** 월에 필요한 4~6주 그리드. 월이 바뀌면 새로 만들어진다(네트워크 없음). */
   matrix: CalendarMonth;
   /** `YYYY-MM-DD` → 그 날 걸치는 이벤트. dot 렌더링에 바로 쓴다. */
   eventsByDate: Record<string, CalendarEvent[]>;

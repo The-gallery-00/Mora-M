@@ -110,7 +110,7 @@ MORA 모바일 앱(Expo/APK) 전 화면 정의서 — 31개 화면(제품 30 + �
 | SCR-25 | 설정 | `app/(tabs)/settings/index.tsx` | 필요 | 6 |
 | SCR-26 | 프로필 편집 | `app/settings/profile.tsx` | 필요 | 6 |
 | SCR-27 | 비밀번호 변경 | `app/settings/password.tsx` | 필요 | 6 |
-| SCR-28 | 계정 · 데이터 삭제 | `app/settings/danger.tsx` | 필요 | 6 |
+| SCR-28 | 계정 · 데이터 삭제 | `app/(tabs)/settings/index.tsx` Bottom Sheet | 필요 | 6 |
 | SCR-29 | 알림 설정 | `app/settings/notifications.tsx` | 필요 | 6 |
 | SCR-30 | 약관 / 개인정보 처리방침 | `app/settings/legal/[doc].tsx` | 불필요 | 7 |
 | SCR-31 | 서버 연결 · 진단 (**개발 빌드 전용**) | `app/(dev)/diagnostics.tsx` | 불필요 | 0 |
@@ -3085,14 +3085,14 @@ const text = result.data.answer?.trim() || '관련 문서를 찾았지만 답변
 
 | 항목 | 값 |
 |---|---|
-| 라우트 | `app/settings/danger.tsx` (스택 push) |
+| 라우트 | `app/(tabs)/settings/index.tsx` 내 Bottom Sheet (별도 이동 없음) |
 | 진입 | SCR-25 `내 데이터 전체 삭제` / `회원 탈퇴` |
 | 인증 | 필요 |
 | 원본 | `settings/page.tsx` `ConfirmModal`(데이터 삭제 / 회원 탈퇴) |
 | 페이즈 | Phase 6 |
 | FR | FR-093, FR-094 |
 
-**모바일 변경점**: 확인 문구 입력(`전체삭제` / `탈퇴`)과 비밀번호 입력이 들어가는 파괴적 액션이라 **다이얼로그가 아니라 전용 화면**으로 만든다. 원본의 확인 문구 규칙·경고 카피는 전량 보존한다.
+**모바일 변경점**: 확인 문구 입력(`전체삭제` / `탈퇴`)과 비밀번호 입력이 들어가는 파괴적 액션은 설정 화면 위의 Bottom Sheet에서 처리한다. 원본의 확인 문구 규칙·경고 카피는 전량 보존한다.
 
 **와이어프레임**
 ```

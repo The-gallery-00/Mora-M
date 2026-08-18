@@ -9,7 +9,6 @@
  *
  *   ['search']                       ← 루트 (로그아웃 시 한 방에)
  *   ['search', type, q, topK]        ← 검색 1회. `type` 은 `'ALL'` 포함 5종
- *   ['searchHistory']                ← API-54 (`전체 기록 보기` 전용)
  *
  * 키에 `type` 이 반드시 들어간다 — 같은 `q` 라도 유형이 다르면 전혀 다른 결과다.
  * `topK` 도 넣는다: 앱은 항상 50 을 보내지만 키를 파라미터와 1:1 로 유지해야 값이 바뀔 때
@@ -38,14 +37,13 @@
  * | 액션 | 무효화 대상 |
  * |---|---|
  * | 검색 실행 | **없음.** 자기 키(`['search',…]`)를 무효화하면 재요청 = 검색기록 1건이라 억제 장치를 스스로 깬다 |
- * | 검색기록 전체삭제 | `['searchHistory']` 만 |
+ * | 검색기록 전체삭제 | 검색 결과 캐시는 유지하고 로컬 최근 검색어만 비운다 |
  * | 문서 수정/삭제 | 문서 계층이 `['documents',…]` 만 건드린다. 검색 캐시는 **일부러** 손대지 않는다 |
  */
 
 import {
   useMutation,
   useQuery,
-  useQueryClient,
   type UseMutationResult,
 } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
@@ -68,14 +66,11 @@ import {
   addRecentSearch,
   clearRecentSearches,
   clearSearchHistories,
-  fetchSearchHistories,
   getRecentSearches,
-  mergeSearchHistories,
   removeRecentSearch,
   subscribeRecentSearches,
   writeLastSearchDocType,
   type RecentSearch,
-  type SearchHistoryGroup,
 } from './recent';
 
 // ───────────────────────────────────────────────────────────── 쿼리 키
@@ -85,7 +80,6 @@ export const searchKeys = {
   all: () => ['search'] as const,
   query: (type: SearchDocType, q: string, topK: number) =>
     ['search', type, q, topK] as const,
-  history: () => ['searchHistory'] as const,
 } as const;
 
 // ───────────────────────────────────────────────────────────── 문구
@@ -106,8 +100,6 @@ export const SEARCH_COPY = {
   offline: '오프라인입니다. 검색은 연결 후 가능합니다.',
   recentTitle: '최근 검색어',
   clearAll: '전체 삭제',
-  historyTitle: '전체 기록 보기',
-  historyFailed: '검색 기록을 불러오지 못했습니다.',
   historyClearFailed: '검색 기록 삭제에 실패했습니다.',
   sortRelevance: '관련도순',
   sortRecent: '최신순',
@@ -129,7 +121,7 @@ export const searchHistoryClearedMessage = (n: number): string =>
 
 // ───────────────────────────────────────────────────────────── 에러
 
-export type SearchOperation = 'search' | 'history' | 'clearHistory';
+export type SearchOperation = 'search' | 'clearHistory';
 
 /** `message` 는 이미 완성된 한국어 화면 문구다. 화면은 그대로 에러 박스/토스트에 넣으면 된다. */
 export class SearchError extends Error {
@@ -156,8 +148,6 @@ function searchErrorMessage(operation: SearchOperation, error: AppError): string
   switch (operation) {
     case 'search':
       return SEARCH_COPY.failed;
-    case 'history':
-      return SEARCH_COPY.historyFailed;
     case 'clearHistory':
       return SEARCH_COPY.historyClearFailed;
   }
@@ -297,38 +287,6 @@ export function useRecentSearches(): UseRecentSearchesResult {
   };
 }
 
-// ───────────────────────────────────────────────── 전체 기록 보기 (API-54)
-
-/**
- * 서버 검색기록 (API-54) — `전체 기록 보기` 에서만 호출한다.
- *
- * 기본 `enabled: false` 다. 화면의 최근 검색어는 로컬이 1차 소스이므로 이 훅이 자동으로 도는 순간
- * ST-06 의 "서버 왕복 절감" 결정이 무의미해진다. 기록 보기 시트를 여는 순간에만 켠다.
- *
- * 반환값은 **병합된 그룹**이다 — `전체` 검색 1회가 남긴 서버 4행이 사용자에게 4줄로 보이면 안 된다(ST-13).
- */
-export function useSearchHistories(options: { enabled?: boolean } = {}) {
-  const query = useQuery<SearchHistoryGroup[], SearchError>({
-    queryKey: searchKeys.history(),
-    queryFn: async () => {
-      const res = await fetchSearchHistories();
-      if (!res.ok) throw toSearchError('history', res.error);
-      return mergeSearchHistories(res.data);
-    },
-    enabled: options.enabled === true,
-    // 이 조회는 검색기록을 적립하지 않는다 → 억제할 이유가 없고, 열 때마다 최신이어야 한다.
-    staleTime: 0,
-    gcTime: 5 * 60_000,
-    retry: false,
-  });
-
-  return {
-    ...query,
-    groups: query.data ?? [],
-    isEmpty: query.isSuccess && (query.data?.length ?? 0) === 0,
-  };
-}
-
 // ──────────────────────────────────────────── 검색기록 전체삭제 (API-55)
 
 /**
@@ -343,8 +301,6 @@ export function useSearchHistories(options: { enabled?: boolean } = {}) {
  * 이유가 없고, 그 재요청이 곧 새 기록 1건이다.
  */
 export function useClearSearchHistory(): UseMutationResult<number, SearchError, void> {
-  const queryClient = useQueryClient();
-
   return useMutation<number, SearchError, void>({
     mutationFn: async () => {
       // 오프라인 쓰기 차단. 서버 삭제 건수를 토스트에 써야 하므로 낙관적 처리도 불가능하다.
@@ -356,7 +312,6 @@ export function useClearSearchHistory(): UseMutationResult<number, SearchError, 
     },
     onSuccess: () => {
       clearRecentSearches();
-      void queryClient.invalidateQueries({ queryKey: searchKeys.history() });
     },
   });
 }

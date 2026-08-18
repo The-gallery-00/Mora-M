@@ -96,8 +96,6 @@ export const ko = {
     offline: '오프라인입니다. 검색은 연결 후 가능합니다.',
     recentTitle: '최근 검색어',
     clearAll: '전체 삭제',
-    historyTitle: '전체 기록 보기',
-    historyFailed: '검색 기록을 불러오지 못했습니다.',
     historyClearFailed: '검색 기록 삭제에 실패했습니다.',
     sortRelevance: '관련도순',
     sortRecent: '최신순',
@@ -169,19 +167,13 @@ export const ko = {
 
     /** `DANGER_ZONE_COPY` */
     dangerZone: {
-      screenTitle: '계정 및 데이터',
-      documentsSection: '데이터 삭제',
-      documentsCardTitle: '내 데이터 전체 삭제',
-      documentsCardBody:
-        '저장한 명함, 티켓, 포스터, 영수증과 검색 기록이 삭제됩니다. 구글 캘린더 연동 자체는 유지됩니다.',
       documentsAction: '전체 삭제',
-      documentsSheetTitle: '내 데이터 전체를 삭제할까요?',
+      documentsSheetTitle: '내 데이터를 모두 삭제할까요?',
+      documentsSheetBody:
+        '저장한 모든 문서와 검색 기록이 삭제되며 복구할 수 없습니다. 구글 캘린더 연동은 유지됩니다.',
       documentsConfirmLabel: '확인 문구',
       documentsConfirmHint: '계속하려면 "전체삭제"를 정확히 입력하세요.',
-      accountSection: '회원 탈퇴',
       accountCardTitle: '정말 탈퇴하시겠어요?',
-      accountCardBody: '이 작업은 되돌릴 수 없습니다. 저장된 계정과 서비스 데이터가 삭제됩니다.',
-      accountAction: '회원 탈퇴',
       accountLocalBody: '이 작업은 되돌릴 수 없습니다. 계속하려면 계정 비밀번호를 입력하세요.',
       accountSocialBody: '이 작업은 되돌릴 수 없습니다. 저장된 계정과 서비스 데이터가 삭제됩니다.',
       accountConfirmAction: '탈퇴',
