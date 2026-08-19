@@ -22,7 +22,7 @@ import { CameraView, useCameraPermissions, type CameraCapturedPicture } from 'ex
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -44,7 +44,7 @@ import { radius, spacing } from '@/theme/scale';
 /* ── 아이콘 (lucide 미설치 → react-native-svg 인라인) ───────────────────────── */
 
 /**
- * 카메라 크롬 전경색. Screen Specs SCR-09 다크 예외가 "아이콘·힌트 텍스트·가이드 프레임·셔터는
+ * 카메라 크롬 전경색. Screen Specs SCR-09 다크 예외가 "아이콘·힌트 텍스트·셔터는
  * 흰색 고정" 이라고 못박은 값이라 테마 토큰을 통과시키지 않는다.
  * `IconButton` 은 `color` prop 이 **비어 있을 때만** tone 색을 주입하므로 반드시 명시해서 넘긴다
  * (넘기지 않으면 다크에서 `text.inverse` = 어두운 색이 들어와 아이콘이 사라진다).
@@ -122,38 +122,12 @@ function FlipIcon({ color = '#FFFFFF', size = 24 }: IconProps) {
   );
 }
 
-/* ── 가이드 프레임 (Camera and Scan §4-3) ─────────────────────────────────────
-   비율 정본은 Camera and Scan §4-3 이다. Screen Specs 인터랙션 표의 `명함 5:3 / 영수증 2:5 /
-   포스터 3:4 / 티켓 5:2` 와 값이 다른데, 오버레이 규격을 소유한 문서가 Camera and Scan 이므로
-   그쪽(1.75:1 / 1:2.2 / 1:1.414 / 1.6:1)을 따른다. */
-
 type GuideDocMode = Extract<DocumentType, 'BUSINESS_CARD' | 'POSTER' | 'RECEIPT' | 'TICKET'>;
 type GuideMode = 'auto' | GuideDocMode;
 
-/** 가로:세로 비율. `auto` 는 별도 프레임을 그리지 않는다. */
-const GUIDE_RATIO: Record<GuideMode, number | null> = {
-  auto: null,
-  BUSINESS_CARD: 1.75,
-  RECEIPT: 1 / 2.2,
-  POSTER: 1 / 1.414,
-  TICKET: 1.6,
-};
-
-/** 하단 힌트 1줄. 조사가 종류마다 달라 문자열을 통째로 적는다. */
-const GUIDE_HINT: Record<GuideMode, string> = {
-  auto: '빛 반사가 없도록 정면에서 촬영하세요',
-  BUSINESS_CARD: '명함을 프레임에 맞춰 정면에서 촬영하세요',
-  POSTER: '포스터를 프레임에 맞춰 정면에서 촬영하세요',
-  RECEIPT: '영수증을 프레임에 맞춰 정면에서 촬영하세요',
-  TICKET: '티켓을 프레임에 맞춰 정면에서 촬영하세요',
-};
+const GUIDE_HINT = '문서가 잘 보이도록 정면에서 촬영하세요';
 
 const GUIDE_CHIPS: GuideDocMode[] = ['BUSINESS_CARD', 'POSTER', 'RECEIPT', 'TICKET'];
-
-/** 프레임 기준 폭 = 화면 폭의 88% (§4-3). */
-const FRAME_WIDTH_RATIO = 0.88;
-/** 세로로 긴 영수증 프레임이 컨트롤을 덮지 않도록 하는 상한. */
-const FRAME_MAX_HEIGHT_RATIO = 0.86;
 
 type FlashMode = 'off' | 'on' | 'auto';
 const FLASH_ORDER: FlashMode[] = ['off', 'on', 'auto'];
@@ -200,7 +174,6 @@ export default function ScanCameraScreen() {
   const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
   const [guideMode, setGuideMode] = useState<GuideMode>('auto');
   const [offline, setOffline] = useState(false);
-  const [guideBox, setGuideBox] = useState({ width: 0, height: 0 });
   const [helpSheetOpen, setHelpSheetOpen] = useState(false);
 
   const shutterFlash = useSharedValue(0);
@@ -241,24 +214,6 @@ export default function ScanCameraScreen() {
 
   /* ── 촬영 시 흰 섬광 80ms (Screen Specs 인터랙션 표) ────────────────────── */
   const flashStyle = useAnimatedStyle(() => ({ opacity: shutterFlash.value }));
-
-  const frame = useMemo(() => {
-    const ratio = GUIDE_RATIO[guideMode];
-    if (ratio === null || guideBox.width === 0 || guideBox.height === 0) return null;
-    let width = guideBox.width * FRAME_WIDTH_RATIO;
-    let height = width / ratio;
-    const maxHeight = guideBox.height * FRAME_MAX_HEIGHT_RATIO;
-    if (height > maxHeight) {
-      height = maxHeight;
-      width = height * ratio;
-    }
-    return {
-      width,
-      height,
-      x: (guideBox.width - width) / 2,
-      y: (guideBox.height - height) / 2,
-    };
-  }, [guideMode, guideBox]);
 
   const closeScan = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -360,7 +315,7 @@ export default function ScanCameraScreen() {
       const next: GuideMode = guideMode === mode ? 'auto' : mode;
       setGuideMode(next);
 
-      /* 이 칩은 **프레임 비율 힌트만이 아니다.** 여기서 고른 종류가 그대로
+      /* 이 칩은 **화면 표시만 바꾸는 선택이 아니다.** 여기서 고른 종류가 그대로
          `/api/scan` 의 document_type 이 되어 종류별 파서를 결정한다.
          `auto` 는 null 로 넘긴다 — 그러면 서버가 이미지 분류기로 종류를 정한다
          (실측 정확도 93%). 사용자가 고른 값은 분류기보다 우선한다: 사람이 명시한
@@ -516,68 +471,15 @@ export default function ScanCameraScreen() {
           </View>
         ) : null}
 
-        {/* ── 가이드 프레임 영역 ─────────────────────────────────────────── */}
-        <View
-          className="flex-1"
-          onLayout={(e) =>
-            setGuideBox({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })
-          }
-          pointerEvents="none"
-        >
-          {mountError ? null : frame ? (
-            <>
-              {/* 프레임 밖 마스크 4장 */}
-              <View className="absolute left-0 right-0 top-0 bg-black/40" style={{ height: frame.y }} />
-              <View className="absolute bottom-0 left-0 right-0 bg-black/40" style={{ top: frame.y + frame.height }} />
-              <View
-                className="absolute left-0 bg-black/40"
-                style={{ top: frame.y, height: frame.height, width: frame.x }}
-              />
-              <View
-                className="absolute right-0 bg-black/40"
-                style={{ top: frame.y, height: frame.height, width: frame.x }}
-              />
-              {/* 프레임 라인 2dp + 모서리 L 마커 */}
-              <View
-                className="absolute"
-                style={{
-                  left: frame.x,
-                  top: frame.y,
-                  width: frame.width,
-                  height: frame.height,
-                  borderWidth: 2,
-                  borderColor: t.action.base,
-                  borderRadius: radius.sm,
-                }}
-              />
-              <CornerMarkers
-                x={frame.x}
-                y={frame.y}
-                width={frame.width}
-                height={frame.height}
-                color={t.action.base}
-                length={12}
-                thickness={3}
-              />
-              <Text
-                className="absolute text-center text-body-sm text-white/80"
-                style={{ top: frame.y + frame.height + spacing.md, left: 0, right: 0 }}
-              >
-                {GUIDE_HINT[guideMode]}
-              </Text>
-            </>
-          ) : (
-            // `자동` — 프레임 없이 촬영 힌트만 표시한다.
-            guideBox.width > 0 && (
-              <>
-                <Text
-                  className="absolute text-center text-body-sm text-white/80"
-                  style={{ bottom: spacing.md, left: 0, right: 0 }}
-                >
-                  {GUIDE_HINT.auto}
-                </Text>
-              </>
-            )
+        {/* ── 촬영 안내 영역 ─────────────────────────────────────────────── */}
+        <View className="flex-1" pointerEvents="none">
+          {mountError ? null : (
+            <Text
+              className="absolute text-center text-body-sm text-white/80"
+              style={{ bottom: spacing.md, left: 0, right: 0 }}
+            >
+              {GUIDE_HINT}
+            </Text>
           )}
         </View>
 
@@ -602,7 +504,7 @@ export default function ScanCameraScreen() {
         ) : null}
 
         {/* ── 문서 유형 칩 ────────────────────────────────────────────────
-            프레임 비율·안내문구뿐 아니라 **서버가 어느 파서를 돌릴지**를 정한다
+            안내문구뿐 아니라 **서버가 어느 파서를 돌릴지**를 정한다
             (selectGuide 주석 참조). 고르지 않으면 서버가 분류하므로 선택은
             어디까지나 선택 사항이고, 결과 화면에서 언제든 바꿔 다시 파싱할 수 있다. */}
         <View className="flex-row items-center justify-center gap-2 px-4 pb-3">
@@ -720,66 +622,6 @@ function HelpLine({ text }: { text: string }) {
       <View className="mt-2 h-1 w-1 rounded-full bg-text-muted" />
       <Text className="flex-1 text-base text-text-secondary">{text}</Text>
     </View>
-  );
-}
-
-/** L자 모서리 마커 4개. 프레임 라인과 별개로 화각 기준점을 준다. */
-function CornerMarkers({
-  x,
-  y,
-  width,
-  height,
-  color,
-  length,
-  thickness,
-}: {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: string;
-  length: number;
-  thickness: number;
-}) {
-  // [모서리 위치, 가로 막대가 붙는 변, 세로 막대가 붙는 변]
-  const corners: { left: number; top: number; hTop: boolean; vLeft: boolean }[] = [
-    { left: x, top: y, hTop: true, vLeft: true },
-    { left: x + width - length, top: y, hTop: true, vLeft: false },
-    { left: x, top: y + height - length, hTop: false, vLeft: true },
-    { left: x + width - length, top: y + height - length, hTop: false, vLeft: false },
-  ];
-
-  return (
-    <>
-      {corners.map((c) => (
-        <View
-          key={`${c.left}-${c.top}`}
-          className="absolute"
-          style={{ left: c.left, top: c.top, width: length, height: length }}
-        >
-          <View
-            style={{
-              position: 'absolute',
-              left: 0,
-              width: length,
-              height: thickness,
-              backgroundColor: color,
-              ...(c.hTop ? { top: 0 } : { bottom: 0 }),
-            }}
-          />
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              width: thickness,
-              height: length,
-              backgroundColor: color,
-              ...(c.vLeft ? { left: 0 } : { right: 0 }),
-            }}
-          />
-        </View>
-      ))}
-    </>
   );
 }
 

@@ -10,8 +10,7 @@
 //    분리해 들고, `useSearch` 에는 **`submitted` 만** 넘긴다. 쿼리 키가 제출 시점에만 바뀌므로
 //    구조적으로 타이핑 중 실행이 불가능하다. 서버는 검색 API 호출마다 검색기록을 1건
 //    (`전체` 는 4건) 무조건 적립하며 앱이 끌 수단이 없다.
-// 2. **초기 칩은 MMKV 복원** (`readLastSearchDocType()`, 최초 실행 `명함` — FR-069 · ST-09).
-//    저장은 화면이 하지 않는다 — `useSearch` 가 **실행 성공 시점**에 한다(칩 탭 시점이 아니다).
+// 2. **화면 새 시작의 초기 칩은 `전체`.** 탭 이동 중에는 화면 상태가 유지되므로 현재 선택값을 보존한다.
 // 3. **정렬 토글은 재요청을 만들지 않는다 (FR-073).** `useSearch({ order })` 가 캐시된 결과를
 //    클라이언트에서 다시 정렬할 뿐이다. 재요청 1회 = 검색기록 1건이다.
 // 4. **페이지네이션은 클라이언트 슬라이스**다. 서버 검색은 `topK=50` 한 방에 다 오므로
@@ -22,9 +21,10 @@
 // 새로 만든 파일이라 타입 생성 전까지 리터럴로도 좁혀지지 않는다.
 import NetInfo from '@react-native-community/netinfo';
 import { FlashList, type ListRenderItemInfo } from '@shopify/flash-list';
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  BackHandler,
   Keyboard,
   Modal,
   Pressable,
@@ -47,6 +47,7 @@ import {
 import {
   Button,
   EmptyState,
+  IconButton,
   SegmentedControl,
   Skeleton,
   toast,
@@ -57,7 +58,6 @@ import {
   SEARCH_COPY,
   SEARCH_DOC_TYPES,
   SEARCH_DOC_TYPE_LABELS,
-  readLastSearchDocType,
   searchHistoryClearedMessage,
   useClearSearchHistory,
   useRecentSearches,
@@ -92,6 +92,20 @@ const CLEAR_HISTORY_SHEET_COPY = {
   cancel: '취소',
   confirm: '모두 삭제',
 } as const;
+
+function BackIcon({ color }: { color?: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M15 5L8 12L15 19"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 /** 정렬 트리거의 `⌄` — lucide `chevron-down` 공식 path (Design Tokens §12 매핑 `▾`→ChevronDown).
     lucide-react-native 는 설치하지 않는다 — 다른 아이콘과 같이 react-native-svg 로 그린다. */
@@ -263,7 +277,7 @@ export default function SearchScreen() {
   // `draft` 는 입력창, `submitted` 는 실행된 검색어다. 이 분리가 FR-071 의 구현 자체다.
   const [draft, setDraft] = useState('');
   const [submitted, setSubmitted] = useState('');
-  const [docType, setDocType] = useState<SearchDocType>(readLastSearchDocType);
+  const [docType, setDocType] = useState<SearchDocType>('ALL');
   const [order, setOrder] = useState<SearchSortOrder>('relevance');
   const [sortOpen, setSortOpen] = useState(false);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
@@ -305,12 +319,34 @@ export default function SearchScreen() {
     [draft, submit],
   );
 
-  /** ✕ — 입력과 결과를 함께 비워 초기 상태(최근 검색어 + 안내 카드)로 돌아간다. */
+  /** ✕ — 실행된 검색 상태는 유지하고 입력창만 비운다. */
   const onClear = useCallback(() => {
+    setDraft('');
+  }, []);
+
+  /** 검색 결과에서 뒤로가기 — 라우팅하지 않고 같은 탭의 초기 상태로 돌아간다. */
+  const resetSearch = useCallback(() => {
     setDraft('');
     setSubmitted('');
     setVisible(PAGE_SIZE);
   }, []);
+
+  const handleBack = useCallback(() => {
+    if (submitted !== '') {
+      resetSearch();
+      return true;
+    }
+
+    router.navigate('/(tabs)');
+    return true;
+  }, [resetSearch, router, submitted]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', handleBack);
+      return () => subscription.remove();
+    }, [handleBack]),
+  );
 
   /* ── 최근 검색어 전체 삭제 (CP-38 → API-55) ──────────────────────────────── */
   const confirmClearAll = useCallback(() => setClearHistoryOpen(true), []);
@@ -482,16 +518,28 @@ export default function SearchScreen() {
     <View className="flex-1 bg-bg-base" style={{ paddingTop: insets.top }}>
       {/* ── 검색바 + 유형 세그먼트 (고정) ── */}
       <View className="gap-3 px-4 pb-3 pt-2">
-        <SearchBar
-          ref={inputRef}
-          value={draft}
-          onChangeText={setDraft}
-          onSubmit={onSubmitBar}
-          onClear={onClear}
-          loading={search.isFetching}
-          disabled={offline}
-          testID="search-input"
-        />
+        <View className="flex-row items-center gap-2">
+          {submitted !== '' ? (
+            <IconButton
+              icon={<BackIcon />}
+              onPress={handleBack}
+              accessibilityLabel="뒤로"
+              testID="search-back"
+            />
+          ) : null}
+          <View className="flex-1">
+            <SearchBar
+              ref={inputRef}
+              value={draft}
+              onChangeText={setDraft}
+              onSubmit={onSubmitBar}
+              onClear={onClear}
+              loading={search.isFetching}
+              disabled={offline}
+              testID="search-input"
+            />
+          </View>
+        </View>
         <SegmentedControl
           options={TYPE_OPTIONS}
           value={docType}
