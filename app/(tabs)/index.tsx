@@ -557,6 +557,10 @@ export default function HomeScreen() {
 
   const baseDate = data?.date || todayString();
   const deadlines = data?.upcomingDeadlines ?? EMPTY_DEADLINES;
+  const futureDeadlines = useMemo(
+    () => deadlines.filter((item) => item.dDay > 0),
+    [deadlines],
+  );
   const [upcomingSheetVisible, setUpcomingSheetVisible] = useState(false);
   const [ongoingSheetVisible, setOngoingSheetVisible] = useState(false);
   const [selectedWeekDate, setSelectedWeekDate] = useState(() => todayString());
@@ -579,7 +583,7 @@ export default function HomeScreen() {
       .sort((a, b) => a.endDate.localeCompare(b.endDate));
   }, [currentDate, weekEventsByDate]);
   const upcomingSheetItems = useMemo<UpcomingSheetItem[]>(() => {
-    return deadlines
+    return futureDeadlines
       .map((item) => {
         const calendarEvent = (weekEventsByDate[item.date] ?? []).find(
           (event) => event.key === item.key,
@@ -602,7 +606,7 @@ export default function HomeScreen() {
 
         return a.title.localeCompare(b.title, "ko");
       });
-  }, [deadlines, weekEventsByDate]);
+  }, [futureDeadlines, weekEventsByDate]);
 
   const openCalendarEvent = useCallback(
     (event: CalendarEvent) => {
@@ -739,16 +743,16 @@ export default function HomeScreen() {
           <>
             <SectionHeader
               title="다가오는 일정"
-              {...(deadlines.length > 0
+              {...(futureDeadlines.length > 0
                 ? {
-                    badge: `${deadlines.length}건`,
+                    badge: `${futureDeadlines.length}건`,
                     linkLabel: "전체",
                     onLink: () => setUpcomingSheetVisible(true),
                   }
                 : {})}
             />
 
-            {deadlines.length === 0 ? (
+            {futureDeadlines.length === 0 ? (
               <View className="items-center rounded-card border border-border-subtle bg-bg-elevated py-8">
                 <Text
                   className="text-body-sm text-text-muted"
@@ -769,7 +773,7 @@ export default function HomeScreen() {
                   gap: CARD_GAP,
                 }}
               >
-                {deadlines.map((item) => (
+                {futureDeadlines.map((item) => (
                   <DeadlineCard
                     key={item.key}
                     docType={item.type}
