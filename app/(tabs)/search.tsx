@@ -22,9 +22,10 @@
 // 새로 만든 파일이라 타입 생성 전까지 리터럴로도 좁혀지지 않는다.
 import NetInfo from '@react-native-community/netinfo';
 import { FlashList, type ListRenderItemInfo } from '@shopify/flash-list';
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  BackHandler,
   Keyboard,
   Modal,
   Pressable,
@@ -47,6 +48,7 @@ import {
 import {
   Button,
   EmptyState,
+  IconButton,
   SegmentedControl,
   Skeleton,
   toast,
@@ -92,6 +94,20 @@ const CLEAR_HISTORY_SHEET_COPY = {
   cancel: '취소',
   confirm: '모두 삭제',
 } as const;
+
+function BackIcon({ color }: { color?: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M15 5L8 12L15 19"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 /** 정렬 트리거의 `⌄` — lucide `chevron-down` 공식 path (Design Tokens §12 매핑 `▾`→ChevronDown).
     lucide-react-native 는 설치하지 않는다 — 다른 아이콘과 같이 react-native-svg 로 그린다. */
@@ -305,12 +321,34 @@ export default function SearchScreen() {
     [draft, submit],
   );
 
-  /** ✕ — 입력과 결과를 함께 비워 초기 상태(최근 검색어 + 안내 카드)로 돌아간다. */
+  /** ✕ — 실행된 검색 상태는 유지하고 입력창만 비운다. */
   const onClear = useCallback(() => {
+    setDraft('');
+  }, []);
+
+  /** 검색 결과에서 뒤로가기 — 라우팅하지 않고 같은 탭의 초기 상태로 돌아간다. */
+  const resetSearch = useCallback(() => {
     setDraft('');
     setSubmitted('');
     setVisible(PAGE_SIZE);
   }, []);
+
+  const handleBack = useCallback(() => {
+    if (submitted !== '') {
+      resetSearch();
+      return true;
+    }
+
+    router.navigate('/(tabs)');
+    return true;
+  }, [resetSearch, router, submitted]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', handleBack);
+      return () => subscription.remove();
+    }, [handleBack]),
+  );
 
   /* ── 최근 검색어 전체 삭제 (CP-38 → API-55) ──────────────────────────────── */
   const confirmClearAll = useCallback(() => setClearHistoryOpen(true), []);
@@ -482,16 +520,28 @@ export default function SearchScreen() {
     <View className="flex-1 bg-bg-base" style={{ paddingTop: insets.top }}>
       {/* ── 검색바 + 유형 세그먼트 (고정) ── */}
       <View className="gap-3 px-4 pb-3 pt-2">
-        <SearchBar
-          ref={inputRef}
-          value={draft}
-          onChangeText={setDraft}
-          onSubmit={onSubmitBar}
-          onClear={onClear}
-          loading={search.isFetching}
-          disabled={offline}
-          testID="search-input"
-        />
+        <View className="flex-row items-center gap-2">
+          {submitted !== '' ? (
+            <IconButton
+              icon={<BackIcon />}
+              onPress={handleBack}
+              accessibilityLabel="뒤로"
+              testID="search-back"
+            />
+          ) : null}
+          <View className="flex-1">
+            <SearchBar
+              ref={inputRef}
+              value={draft}
+              onChangeText={setDraft}
+              onSubmit={onSubmitBar}
+              onClear={onClear}
+              loading={search.isFetching}
+              disabled={offline}
+              testID="search-input"
+            />
+          </View>
+        </View>
         <SegmentedControl
           options={TYPE_OPTIONS}
           value={docType}

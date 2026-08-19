@@ -97,22 +97,6 @@ export const SearchBar = forwardRef<TextInput, SearchBarProps>(function SearchBa
         gap: spacing.sm,
       }}
     >
-      {/* 🔍 자체가 제출 버튼이다 — 키보드를 닫은 채로도 재실행할 수단이 필요하다. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="검색"
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        onPress={onSubmit}
-        // 아이콘 20dp — 좌우도 12 를 줘야 실효 44×44 가 된다 (§11-1)
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
-      >
-        <SearchIcon
-          color={disabled ? t.text.disabled : focused ? t.action.base : t.text.muted}
-        />
-      </Pressable>
-
       <TextInput
         ref={ref}
         testID={testID}
@@ -156,6 +140,22 @@ export const SearchBar = forwardRef<TextInput, SearchBarProps>(function SearchBa
           <ClearIcon color={t.text.disabled} glyphColor={t.bg.elevated} />
         </Pressable>
       ) : null}
+
+      {/* 🔍 자체가 제출 버튼이다 — 키보드를 닫은 채로도 재실행할 수단이 필요하다. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="검색"
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        onPress={onSubmit}
+        // 아이콘 20dp — 좌우도 12 를 줘야 실효 44×44 가 된다 (§11-1)
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
+      >
+        <SearchIcon
+          color={disabled ? t.text.disabled : focused ? t.action.base : t.text.muted}
+        />
+      </Pressable>
     </View>
   );
 });

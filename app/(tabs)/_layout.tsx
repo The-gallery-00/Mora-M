@@ -231,6 +231,7 @@ function ScanTabButton({ onPress }: { onPress?: (event: GestureResponderEvent) =
    Mobile UX Guide §4: 홈 탭 루트에서만 "두 번 눌러 종료", 나머지 탭 루트는 홈 탭으로 이동한다.
    보관함 종별 화면처럼 숨겨진 하위 탭은 이 정책이 소비하지 않고 Tabs history 의 기본 뒤로가기에
    맡긴다. 그래야 `/archive/tickets` 에서 직전의 `/archive` 로 돌아갈 수 있다.
+   검색 탭은 실행된 검색 상태에 따라 동작이 달라서 `search.tsx` 의 전용 핸들러에 맡긴다.
    (다른 탭에서 앱이 종료되면 사용자가 데이터를 잃었다고 느낀다 — §4 구현 노트)
 
    `useFocusEffect` 를 쓰는 이유: `/scan` 같은 루트 스택 모달이 위에 올라오면 이 레이아웃은
@@ -242,6 +243,7 @@ function useTabsBackPolicy(): void {
   // 그룹 세그먼트 `(tabs)` 는 경로에 나타나지 않는다.
   const pathname = usePathname();
   const isHomeTab = pathname === '/';
+  const isSearchTab = pathname === '/search';
   const isTabRoot = TAB_ROOT_PATHS.has(pathname);
 
   useFocusEffect(
@@ -252,6 +254,7 @@ function useTabsBackPolicy(): void {
       const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
         // 숨김 하위 화면은 `backBehavior="history"` 가 기록한 실제 직전 탭으로 돌아간다.
         if (!isTabRoot) return false;
+        if (isSearchTab) return false;
 
         if (!isHomeTab) {
           router.navigate('/(tabs)');
@@ -275,7 +278,7 @@ function useTabsBackPolicy(): void {
         subscription.remove();
         if (timer) clearTimeout(timer);
       };
-    }, [isHomeTab, isTabRoot, router]),
+    }, [isHomeTab, isSearchTab, isTabRoot, router]),
   );
 }
 
