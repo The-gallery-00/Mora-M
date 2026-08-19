@@ -10,8 +10,7 @@
 //    분리해 들고, `useSearch` 에는 **`submitted` 만** 넘긴다. 쿼리 키가 제출 시점에만 바뀌므로
 //    구조적으로 타이핑 중 실행이 불가능하다. 서버는 검색 API 호출마다 검색기록을 1건
 //    (`전체` 는 4건) 무조건 적립하며 앱이 끌 수단이 없다.
-// 2. **초기 칩은 MMKV 복원** (`readLastSearchDocType()`, 최초 실행 `명함` — FR-069 · ST-09).
-//    저장은 화면이 하지 않는다 — `useSearch` 가 **실행 성공 시점**에 한다(칩 탭 시점이 아니다).
+// 2. **화면 새 시작의 초기 칩은 `전체`.** 탭 이동 중에는 화면 상태가 유지되므로 현재 선택값을 보존한다.
 // 3. **정렬 토글은 재요청을 만들지 않는다 (FR-073).** `useSearch({ order })` 가 캐시된 결과를
 //    클라이언트에서 다시 정렬할 뿐이다. 재요청 1회 = 검색기록 1건이다.
 // 4. **페이지네이션은 클라이언트 슬라이스**다. 서버 검색은 `topK=50` 한 방에 다 오므로
@@ -59,7 +58,6 @@ import {
   SEARCH_COPY,
   SEARCH_DOC_TYPES,
   SEARCH_DOC_TYPE_LABELS,
-  readLastSearchDocType,
   searchHistoryClearedMessage,
   useClearSearchHistory,
   useRecentSearches,
@@ -279,7 +277,7 @@ export default function SearchScreen() {
   // `draft` 는 입력창, `submitted` 는 실행된 검색어다. 이 분리가 FR-071 의 구현 자체다.
   const [draft, setDraft] = useState('');
   const [submitted, setSubmitted] = useState('');
-  const [docType, setDocType] = useState<SearchDocType>(readLastSearchDocType);
+  const [docType, setDocType] = useState<SearchDocType>('ALL');
   const [order, setOrder] = useState<SearchSortOrder>('relevance');
   const [sortOpen, setSortOpen] = useState(false);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
