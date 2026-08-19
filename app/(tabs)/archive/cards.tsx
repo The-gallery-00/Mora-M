@@ -9,10 +9,10 @@
 //  - 삭제 버튼이 `position:absolute right:8` 로 이메일 컬럼을 덮던 버그 → 좌스와이프 삭제
 //  - 인라인 확인 2버튼 → 확인 다이얼로그
 //  - 날짜 그룹 헤더가 `createdAt.split('T')[0]` 원문(`2026-07-27`) → `2026년 7월 27일` + sticky
-//  - 그룹 라벨 `전체명함`/`전체 명함` 혼용 → `전체 명함` 으로 통일 (GroupChipRail 이 소유)
+//  - 그룹 라벨은 GroupChipRail 이 소유
 //  - onClick 이 없던 유령 버튼 `명함 관리` → 폐기(기능은 SCR-22 가 흡수)
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -21,11 +21,18 @@ import {
   ALL_GROUP_ID,
   GroupChipRail,
   SortSheet,
+  UNGROUPED_GROUP_ID,
   type CardGroupChip,
   type SortOption,
 } from '@/components/documents';
 import { Button, IconButton, toast } from '@/components/ui';
-import { useCardGroups, useMoveCardToGroup, type CardGroupFilter, type DocumentDetail } from '@/features/documents';
+import {
+  useCardGroups,
+  useInfiniteDocuments,
+  useMoveCardToGroup,
+  type CardGroupFilter,
+  type DocumentDetail,
+} from '@/features/documents';
 import {
   ARCHIVE_SORT_LABELS,
   ArchiveHeader,
@@ -83,7 +90,6 @@ export default function ArchiveCardsScreen() {
   );
   const [sort, setSort] = useState<ArchiveSort>('recent');
   const [sortOpen, setSortOpen] = useState(false);
-  const [total, setTotal] = useState(0);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [moveSheetOpen, setMoveSheetOpen] = useState(false);
@@ -98,18 +104,57 @@ export default function ArchiveCardsScreen() {
   }
 
   const groupsQuery = useCardGroups();
+  const allCardsQuery = useInfiniteDocuments('BUSINESS_CARD', { group: ALL_GROUP_ID });
+  const {
+    documents: allCards,
+    total: allCardsTotal,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isPending: areAllCardsPending,
+  } = allCardsQuery;
 
-  /* `onDataChange` 는 목록 컨테이너의 이펙트 의존성이다 — 인라인 화살표를 넘기면 매 렌더
-     새 함수가 되어 이펙트가 계속 재실행된다. 반드시 `useCallback` 으로 고정한다. */
-  const handleData = useCallback(({ total: loaded }: { total: number }) => {
-    setTotal(loaded);
-  }, []);
+  /* 그룹 API에는 수량이 없으므로 전체 명함 목록의 모든 페이지를 한 번만 채운 뒤 집계한다.
+     `전체` 필터의 ArchiveList와 query key가 같아 첫 조회와 캐시는 중복되지 않는다. */
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  const groupCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    allCards.forEach((document) => {
+      if (document.type !== 'BUSINESS_CARD') return;
+      const groupId = document.groupId ?? UNGROUPED_GROUP_ID;
+      counts[groupId] = (counts[groupId] ?? 0) + 1;
+    });
+
+    return counts;
+  }, [allCards]);
 
   const chips = useMemo<CardGroupChip[]>(
-    // 고정 2개(전체 명함 / 미분류)는 GroupChipRail 이 스스로 앞에 붙인다 — 서버 그룹만 넘긴다.
-    () => (groupsQuery.data ?? []).map((group) => ({ id: group.id, name: group.name })),
-    [groupsQuery.data],
+    () => [
+      { id: ALL_GROUP_ID, name: '전체', count: allCardsTotal },
+      {
+        id: UNGROUPED_GROUP_ID,
+        name: '미분류',
+        count: groupCounts[UNGROUPED_GROUP_ID] ?? 0,
+      },
+      ...(groupsQuery.data ?? []).map((group) => ({
+        id: group.id,
+        name: group.name,
+        count: groupCounts[group.id] ?? 0,
+      })),
+    ],
+    [allCardsTotal, groupCounts, groupsQuery.data],
   );
+
+  const countsLoading =
+    areAllCardsPending ||
+    isFetchingNextPage ||
+    hasNextPage === true;
 
   const filteredGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data]);
 
@@ -150,8 +195,7 @@ export default function ArchiveCardsScreen() {
   return (
     <View className="flex-1 bg-bg-base">
       <ArchiveHeader
-        title="명함"
-        count={total}
+        title="명함첩"
         onBack={() => router.replace({ pathname: '/(tabs)/archive', params: { type: 'BUSINESS_CARD' } })}
         onSort={() => setSortOpen(true)}
         view={view}
@@ -197,7 +241,7 @@ export default function ArchiveCardsScreen() {
         onSelect={setGroupFilter}
         onManage={() => router.push(href('/groups'))}
         onAdd={() => router.push(href('/groups?compose=1'))}
-        loading={groupsQuery.isLoading}
+        loading={groupsQuery.isLoading || countsLoading}
         testID="archive-cards-groups"
       />
 
@@ -228,7 +272,6 @@ export default function ArchiveCardsScreen() {
               }
         }
         bottomPadding={tabScrollBottomPadding(insets.bottom)}
-        onDataChange={handleData}
         testID="archive-cards-list"
       />
 

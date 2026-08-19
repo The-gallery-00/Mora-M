@@ -36,10 +36,8 @@ export interface GroupChipRailProps {
 export const ALL_GROUP_ID = 'all';
 export const UNGROUPED_GROUP_ID = 'ungrouped';
 
-/* 원본은 `전체명함`(띄어쓰기 없음)과 `전체 명함`을 섞어 썼다 — 원본 버그이므로 `전체 명함`으로 통일한다
-   (Screen Specs 잔여 이슈 12). */
 const FIXED_NAMES: Record<string, string> = {
-  [ALL_GROUP_ID]: '전체 명함',
+  [ALL_GROUP_ID]: '전체',
   [UNGROUPED_GROUP_ID]: '미분류',
 };
 

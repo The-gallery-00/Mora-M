@@ -134,6 +134,7 @@ export default function ArchiveHubScreen() {
   }
 
   const active = FILTERS.find((f) => f.value === selected) ?? ALL_FILTER;
+  const sectionLinkLabel = selected === 'BUSINESS_CARD' ? '명함첩' : '가계부';
 
   /** `ALL` 이면 4종 전부. 그 외에는 한 종류만 — 그래도 목록 컨테이너는 같은 것을 쓴다. */
   const types = useMemo<readonly DocumentType[]>(
@@ -220,16 +221,16 @@ export default function ArchiveHubScreen() {
         bottomPadding={tabScrollBottomPadding(insets.bottom)}
         onDataChange={handleData}
         header={
-          selected === 'ALL' ? (
-            // 유형 탭의 링크 행과 같은 높이·라벨 구조로 첫 항목의 시작 위치를 통일한다.
+          selected === 'ALL' || selected === 'TICKET' || selected === 'POSTER' ? (
+            // 링크가 없는 유형도 같은 높이·라벨 구조를 유지해 첫 항목의 시작 위치를 통일한다.
             <View className="h-11 justify-center px-4">
-              <Text className="text-body-sm font-w700 text-text-secondary">전체</Text>
+              <Text className="text-body-sm font-w700 text-text-secondary">{active.label}</Text>
             </View>
           ) : (
             // 유형 필터 상태에서만 `전체 >` 링크를 띄운다 (SCR-14 구성 요소 표).
             <Pressable
               accessibilityRole="link"
-              accessibilityLabel={`${active.label} 전체 보기`}
+              accessibilityLabel={`${sectionLinkLabel} 보기`}
               onPress={() => {
                 haptics.selection();
                 goTypeScreen(active);
@@ -239,7 +240,7 @@ export default function ArchiveHubScreen() {
               style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
             >
               <Text className="text-body-sm font-w700 text-text-secondary">{active.label}</Text>
-              <Text className="text-body-sm font-w600 text-action">전체 ›</Text>
+              <Text className="text-body-sm font-w600 text-action">{`${sectionLinkLabel} ›`}</Text>
             </Pressable>
           )
         }
