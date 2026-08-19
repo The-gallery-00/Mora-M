@@ -18,7 +18,7 @@
 // 헤더 벨은 Phase 0 스텁에서 `toast.info('준비 중입니다.')` 로 막혀 있었다 — 목적지(SCR-08)가
 // 생겼으므로 `/notifications` 로 실제 연결하고 미읽음 배지를 붙인다.
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Modal,
   PanResponder,
@@ -50,6 +50,7 @@ import {
 } from "@/components/ui";
 import {
   DASHBOARD_COPY,
+  toLocalDateString,
   todayString,
   useDashboard,
   useWeekStrip,
@@ -57,7 +58,7 @@ import {
   type DashboardDeadline,
 } from "@/features/dashboard";
 import { DOC_ROUTE_SEGMENT } from "@/features/documents";
-import { formatDateShortKo, href } from "@/features/documents/ArchiveList";
+import { ddayLabel, formatDateShortKo, href } from "@/features/documents/ArchiveList";
 import { useUnreadCount } from "@/features/notifications";
 import { haptics } from "@/lib/haptics";
 import { HEADER_HEIGHT, tabScrollBottomPadding } from "@/navigation/shell";
@@ -107,24 +108,19 @@ function formatDayHeading(iso: string): string {
   return `${month}월 ${day}일`;
 }
 
-function dateTime(iso: string, time = "00:00"): Date | null {
-  const value = new Date(`${iso}T${time}:00`);
-  return Number.isNaN(value.getTime()) ? null : value;
+function isOngoingPoster(event: CalendarEvent, today: string): boolean {
+  return (
+    event.type === "POSTER" &&
+    event.hasCompletePosterDateRange === true &&
+    event.startDate < event.endDate &&
+    event.startDate <= today &&
+    today <= event.endDate
+  );
 }
 
-function isOngoingEvent(event: CalendarEvent, now: Date): boolean {
-  const start = dateTime(event.startDate, event.time || "00:00");
-  if (!start || start > now) return false;
-
-  if (event.type === "TICKET") {
-    const arrival = event.arrivalDate
-      ? dateTime(event.arrivalDate, event.arrivalTime || "00:00")
-      : null;
-    return arrival !== null && now < arrival;
-  }
-
-  const end = dateTime(event.endDate, "23:59");
-  return end !== null && now <= end;
+function ongoingEndLabel(endDate: string, today: string): string {
+  const dDay = ddayLabel(endDate, today);
+  return dDay === "D-DAY" ? "오늘 종료" : dDay ? `종료 ${dDay}` : "";
 }
 
 /* ── 문서 4종 바로가기 ─────────────────────────────────────────────
@@ -205,16 +201,20 @@ function SectionHeader({
   );
 }
 
-function UpcomingScheduleSheet({
+function ScheduleSheetFrame({
   visible,
-  items,
+  title,
+  description,
+  count,
   onClose,
-  onOpenItem,
+  children,
 }: {
   visible: boolean;
-  items: readonly UpcomingSheetItem[];
+  title: string;
+  description: string;
+  count: number;
   onClose: () => void;
-  onOpenItem: (item: DashboardDeadline) => void;
+  children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   const t = useTheme();
@@ -249,7 +249,7 @@ function UpcomingScheduleSheet({
         className="flex-1 justify-end"
         style={{ backgroundColor: t.scrim }}
         accessibilityRole="button"
-        accessibilityLabel="다가오는 일정 전체 목록 닫기"
+        accessibilityLabel={`${title} 전체 목록 닫기`}
         onPress={onClose}
       >
         <Pressable
@@ -266,20 +266,20 @@ function UpcomingScheduleSheet({
                 accessibilityRole="header"
                 maxFontSizeMultiplier={1.3}
               >
-                다가오는 일정
+                {title}
               </Text>
               <Text
                 className="text-body-sm font-w700 text-action"
                 maxFontSizeMultiplier={1.2}
               >
-                {`총 ${items.length}건`}
+                {`총 ${count}건`}
               </Text>
             </View>
             <Text
               className="mb-4 mt-1 text-caption text-text-muted"
               maxFontSizeMultiplier={1.2}
             >
-              2주 내 일정을 보여드려요.
+              {description}
             </Text>
           </View>
 
@@ -287,74 +287,175 @@ function UpcomingScheduleSheet({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ gap: spacing.md }}
           >
-              {items.map((item) => {
-                const isTicket = item.type === "TICKET";
-                const label = dDayLabel(item.dDay);
-                const dDayClass = item.dDay <= 3 ? "text-deadline" : "text-action";
-                const badgeBoxClass = isTicket ? "bg-ticket-bg" : "bg-poster-bg";
-                const badgeTextClass = isTicket ? "text-ticket" : "text-poster";
-                const dateAndTime = `${formatDateShortKo(item.date)}${
-                  isTicket && item.time ? ` · ${item.time}` : ""
-                }`;
-
-                return (
-                  <Pressable
-                    key={item.key}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${isTicket ? "티켓" : "포스터"}, ${item.title}, ${dateAndTime}, ${label}`}
-                    onPress={() => {
-                      onClose();
-                      onOpenItem(item);
-                    }}
-                    className="min-h-20 flex-row items-center rounded-card border border-border-subtle bg-bg-elevated px-4 py-3"
-                    style={({ pressed }) => [
-                      t.elevation.raised,
-                      pressed ? { opacity: 0.86 } : null,
-                    ]}
-                    testID={`upcoming-sheet-${item.key}`}
-                  >
-                    <View className="mr-3 flex-1" style={{ minWidth: 0 }}>
-                      <View className="flex-row items-center" style={{ minWidth: 0 }}>
-                        <View className={`mr-2 rounded-xs px-2 py-0.5 ${badgeBoxClass}`}>
-                          <Text
-                            className={`text-caption font-w600 ${badgeTextClass}`}
-                            maxFontSizeMultiplier={1.2}
-                          >
-                            {isTicket ? "티켓" : "포스터"}
-                          </Text>
-                        </View>
-                        <Text
-                          className="flex-1 text-base font-w700 text-text-primary"
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                          maxFontSizeMultiplier={1.2}
-                          style={{ minWidth: 0, flexShrink: 1 }}
-                        >
-                          {item.title}
-                        </Text>
-                      </View>
-                      <Text
-                        className="mt-2 text-label text-text-muted"
-                        numberOfLines={1}
-                        maxFontSizeMultiplier={1.2}
-                      >
-                        {dateAndTime}
-                      </Text>
-                    </View>
-
-                    <Text
-                      className={`text-base font-w800 ${dDayClass}`}
-                      maxFontSizeMultiplier={1.2}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            {children}
           </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+function ScheduleSheetListItem({
+  type,
+  title,
+  meta,
+  statusLabel,
+  statusClass,
+  onPress,
+  testID,
+}: {
+  type: CalendarEvent["type"];
+  title: string;
+  meta: string;
+  statusLabel: string;
+  statusClass: "text-deadline" | "text-action";
+  onPress: () => void;
+  testID: string;
+}) {
+  const t = useTheme();
+  const isTicket = type === "TICKET";
+  const badgeBoxClass = isTicket ? "bg-ticket-bg" : "bg-poster-bg";
+  const badgeTextClass = isTicket ? "text-ticket" : "text-poster";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${isTicket ? "티켓" : "포스터"}, ${title}, ${meta}, ${statusLabel}`}
+      onPress={onPress}
+      className="min-h-20 flex-row items-center rounded-card border border-border-subtle bg-bg-elevated px-4 py-3"
+      style={({ pressed }) => [t.elevation.raised, pressed ? { opacity: 0.86 } : null]}
+      testID={testID}
+    >
+      <View className="mr-3 flex-1" style={{ minWidth: 0 }}>
+        <View className="flex-row items-center" style={{ minWidth: 0 }}>
+          <View className={`mr-2 rounded-xs px-2 py-0.5 ${badgeBoxClass}`}>
+            <Text
+              className={`text-caption font-w600 ${badgeTextClass}`}
+              maxFontSizeMultiplier={1.2}
+            >
+              {isTicket ? "티켓" : "포스터"}
+            </Text>
+          </View>
+          <Text
+            className="flex-1 text-base font-w700 text-text-primary"
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            maxFontSizeMultiplier={1.2}
+            style={{ minWidth: 0, flexShrink: 1 }}
+          >
+            {title}
+          </Text>
+        </View>
+        <Text
+          className="mt-2 text-label text-text-muted"
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.2}
+        >
+          {meta}
+        </Text>
+      </View>
+
+      <Text className={`text-base font-w800 ${statusClass}`} maxFontSizeMultiplier={1.2}>
+        {statusLabel}
+      </Text>
+    </Pressable>
+  );
+}
+
+function UpcomingScheduleSheet({
+  visible,
+  items,
+  onClose,
+  onOpenItem,
+}: {
+  visible: boolean;
+  items: readonly UpcomingSheetItem[];
+  onClose: () => void;
+  onOpenItem: (item: DashboardDeadline) => void;
+}) {
+  if (!visible) return null;
+
+  return (
+    <ScheduleSheetFrame
+      visible
+      title="다가오는 일정"
+      description="2주 내 일정을 보여드려요."
+      count={items.length}
+      onClose={onClose}
+    >
+      {items.map((item) => {
+        const isTicket = item.type === "TICKET";
+        const label = dDayLabel(item.dDay);
+        const dateAndTime = `${formatDateShortKo(item.date)}${
+          isTicket && item.time ? ` · ${item.time}` : ""
+        }`;
+
+        return (
+          <ScheduleSheetListItem
+            key={item.key}
+            type={item.type}
+            title={item.title}
+            meta={dateAndTime}
+            statusLabel={label}
+            statusClass={item.dDay <= 3 ? "text-deadline" : "text-action"}
+            onPress={() => {
+              onClose();
+              onOpenItem(item);
+            }}
+            testID={`upcoming-sheet-${item.key}`}
+          />
+        );
+      })}
+    </ScheduleSheetFrame>
+  );
+}
+
+function OngoingScheduleSheet({
+  visible,
+  items,
+  currentDate,
+  onClose,
+  onOpenItem,
+}: {
+  visible: boolean;
+  items: readonly CalendarEvent[];
+  currentDate: string;
+  onClose: () => void;
+  onOpenItem: (item: CalendarEvent) => void;
+}) {
+  if (!visible) return null;
+
+  return (
+    <ScheduleSheetFrame
+      visible
+      title="진행 중"
+      description="현재 진행 중인 일정을 보여드려요."
+      count={items.length}
+      onClose={onClose}
+    >
+      {items.map((item) => {
+        const endLabel = ongoingEndLabel(item.endDate, currentDate);
+        const dateAndOrganizer = `${formatDateShortKo(item.endDate)}${
+          item.subtitle ? ` · ${item.subtitle}` : ""
+        }`;
+
+        return (
+          <ScheduleSheetListItem
+            key={item.key}
+            type={item.type}
+            title={item.title}
+            meta={dateAndOrganizer}
+            statusLabel={endLabel}
+            statusClass="text-deadline"
+            onPress={() => {
+              onClose();
+              onOpenItem(item);
+            }}
+            testID={`ongoing-sheet-${item.key}`}
+          />
+        );
+      })}
+    </ScheduleSheetFrame>
   );
 }
 
@@ -457,12 +558,14 @@ export default function HomeScreen() {
   const baseDate = data?.date || todayString();
   const deadlines = data?.upcomingDeadlines ?? EMPTY_DEADLINES;
   const [upcomingSheetVisible, setUpcomingSheetVisible] = useState(false);
+  const [ongoingSheetVisible, setOngoingSheetVisible] = useState(false);
   const [selectedWeekDate, setSelectedWeekDate] = useState(() => todayString());
   const [currentTime, setCurrentTime] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 30_000);
     return () => clearInterval(timer);
   }, []);
+  const currentDate = toLocalDateString(currentTime);
   const { days: weekDays, eventsByDate: weekEventsByDate } = useWeekStrip(baseDate);
   const selectedDateEvents = weekEventsByDate[selectedWeekDate] ?? [];
   const selectedScheduleCount = selectedDateEvents.length;
@@ -471,8 +574,10 @@ export default function HomeScreen() {
     for (const events of Object.values(weekEventsByDate)) {
       for (const event of events) uniqueEvents.set(event.key, event);
     }
-    return [...uniqueEvents.values()].filter((event) => isOngoingEvent(event, currentTime));
-  }, [currentTime, weekEventsByDate]);
+    return [...uniqueEvents.values()]
+      .filter((event) => isOngoingPoster(event, currentDate))
+      .sort((a, b) => a.endDate.localeCompare(b.endDate));
+  }, [currentDate, weekEventsByDate]);
   const upcomingSheetItems = useMemo<UpcomingSheetItem[]>(() => {
     return deadlines
       .map((item) => {
@@ -687,7 +792,11 @@ export default function HomeScreen() {
             <SectionHeader
               title="진행 중"
               {...(ongoingEvents.length > 0
-                ? { badge: `${ongoingEvents.length}건` }
+                ? {
+                    badge: `${ongoingEvents.length}건`,
+                    linkLabel: "전체",
+                    onLink: () => setOngoingSheetVisible(true),
+                  }
                 : {})}
             />
             {ongoingEvents.length === 0 ? (
@@ -697,29 +806,34 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              <View className="rounded-card">
-                {ongoingEvents.map((item, index) => (
-                  <View key={item.key}>
-                    {index > 0 ? <View className="h-px bg-bg-base" /> : null}
-                    <ScheduleListItem
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={SNAP_INTERVAL}
+                decelerationRate="fast"
+                style={{ marginHorizontal: -16 }}
+                contentContainerStyle={{
+                  paddingHorizontal: 16,
+                  gap: CARD_GAP,
+                }}
+              >
+                {ongoingEvents.map((item) => {
+                  const endLabel = ongoingEndLabel(item.endDate, currentDate);
+
+                  return (
+                    <DeadlineCard
+                      key={item.key}
                       docType={item.type}
                       title={item.title}
-                      {...(item.time ? { time: item.time } : {})}
                       {...(item.subtitle ? { subtitle: item.subtitle } : {})}
-                      style={{
-                        borderTopLeftRadius: index === 0 ? radius.card : 0,
-                        borderTopRightRadius: index === 0 ? radius.card : 0,
-                        borderBottomLeftRadius:
-                          index === ongoingEvents.length - 1 ? radius.card : 0,
-                        borderBottomRightRadius:
-                          index === ongoingEvents.length - 1 ? radius.card : 0,
-                      }}
+                      dateLabel={formatDateShortKo(item.endDate)}
+                      statusLabel={endLabel}
                       onPress={() => openCalendarEvent(item)}
                       testID={`ongoing-${item.key}`}
                     />
-                  </View>
-                ))}
-              </View>
+                  );
+                })}
+              </ScrollView>
             )}
           </>
         ) : null}
@@ -730,6 +844,13 @@ export default function HomeScreen() {
         items={upcomingSheetItems}
         onClose={() => setUpcomingSheetVisible(false)}
         onOpenItem={openDeadline}
+      />
+      <OngoingScheduleSheet
+        visible={ongoingSheetVisible}
+        items={ongoingEvents}
+        currentDate={currentDate}
+        onClose={() => setOngoingSheetVisible(false)}
+        onOpenItem={openCalendarEvent}
       />
     </View>
   );

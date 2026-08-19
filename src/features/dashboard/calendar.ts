@@ -199,6 +199,8 @@ export type CalendarEvent = {
   endDate: string;
   /** `HH:MM`. 포스터는 항상 빈 문자열. */
   time: string;
+  /** 포스터 원본에 시작일과 종료일이 모두 있었는지. 홈의 진행 중 판정에서만 사용한다. */
+  hasCompletePosterDateRange?: boolean;
   /** 티켓 도착일·시각. 진행 중 티켓 판정에만 사용한다. */
   arrivalDate?: string;
   arrivalTime?: string;
@@ -246,6 +248,7 @@ function posterEvent(poster: PosterDetail): CalendarEvent | null {
     startDate: start <= end ? start : end,
     endDate: start <= end ? end : start,
     time: '',
+    hasCompletePosterDateRange: Boolean(poster.eventStartDate && poster.eventEndDate),
   };
 }
 

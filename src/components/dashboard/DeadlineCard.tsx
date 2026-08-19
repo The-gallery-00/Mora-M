@@ -32,7 +32,9 @@ export interface DeadlineCardProps {
   /** `MM.DD (요일)`. */
   dateLabel: string;
   /** 0 이면 라벨이 `D-Day` 다. */
-  dDay: number;
+  dDay?: number;
+  /** D-Day 대신 표시할 상태 문구. 진행 중 포스터의 종료 라벨에 사용한다. */
+  statusLabel?: string;
   imageUri?: string | null;
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
@@ -73,6 +75,7 @@ function DeadlineCardBase({
   subtitle,
   dateLabel,
   dDay,
+  statusLabel,
   imageUri,
   onPress,
   style,
@@ -84,9 +87,9 @@ function DeadlineCardBase({
   const showImage = uri !== null && !failed;
 
   const badge = BADGE_CLASS[docType];
-  const label = dDayLabel(dDay);
+  const label = statusLabel ?? (dDay === undefined ? "" : dDayLabel(dDay));
   // 임박(3일 이내)은 마감색, 그 밖은 포인트색.
-  const dDayClass = dDay <= 3 ? "text-deadline" : "text-action";
+  const dDayClass = dDay !== undefined && dDay > 3 ? "text-action" : "text-deadline";
 
   return (
     <Pressable
