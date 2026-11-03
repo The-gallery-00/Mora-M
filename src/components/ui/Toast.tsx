@@ -86,8 +86,8 @@ export function ToastHost({ bottomOffset, testID }: ToastHostProps) {
   const animateOut = useCallback(
     (after: () => void) => {
       const duration = reduceMotion ? 0 : OUT_DURATION;
-      opacity.value = withTiming(0, { duration, easing: Easing.bezier(0.4, 0, 1, 1) });
-      translateY.value = withTiming(reduceMotion ? 0 : 8, { duration });
+      opacity.set(withTiming(0, { duration, easing: Easing.bezier(0.4, 0, 1, 1) }));
+      translateY.set(withTiming(reduceMotion ? 0 : 8, { duration }));
       if (swapTimer.current) clearTimeout(swapTimer.current);
       swapTimer.current = setTimeout(after, duration);
     },
@@ -101,8 +101,8 @@ export function ToastHost({ bottomOffset, testID }: ToastHostProps) {
       return;
     }
     if (!shown) {
-      setShown(current);
-      return;
+      const frame = requestAnimationFrame(() => setShown(current));
+      return () => cancelAnimationFrame(frame);
     }
     if (shown.id !== current.id) animateOut(() => setShown(current));
   }, [animateOut, current, shown]);
@@ -112,10 +112,10 @@ export function ToastHost({ bottomOffset, testID }: ToastHostProps) {
     if (!shown) return;
 
     const duration = reduceMotion ? 0 : IN_DURATION;
-    translateY.value = reduceMotion ? 0 : 16;
-    opacity.value = 0;
-    opacity.value = withTiming(1, { duration, easing: Easing.bezier(0.16, 1, 0.3, 1) });
-    translateY.value = withTiming(0, { duration, easing: Easing.bezier(0.16, 1, 0.3, 1) });
+    translateY.set(reduceMotion ? 0 : 16);
+    opacity.set(0);
+    opacity.set(withTiming(1, { duration, easing: Easing.bezier(0.16, 1, 0.3, 1) }));
+    translateY.set(withTiming(0, { duration, easing: Easing.bezier(0.16, 1, 0.3, 1) }));
 
     if (shown.haptic) {
       if (shown.tone === 'success') haptics.success();
@@ -139,8 +139,8 @@ export function ToastHost({ bottomOffset, testID }: ToastHostProps) {
   useEffect(() => clearTimers, [clearTimers]);
 
   const animStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateY: reduceMotion ? 0 : translateY.value }],
+    opacity: opacity.get(),
+    transform: [{ translateY: reduceMotion ? 0 : translateY.get() }],
   }));
 
   if (!shown) return null;

@@ -39,7 +39,6 @@ import {
   ScheduleListItem,
   STAT_TILE_MIN_HEIGHT,
   STAT_TILE_WIDTH,
-  StatTile,
   WeekCalendar,
 } from "@/components/dashboard";
 import {

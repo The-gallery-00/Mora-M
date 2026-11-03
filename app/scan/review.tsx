@@ -18,8 +18,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
   Alert,
   BackHandler,
@@ -122,14 +122,17 @@ export default function ScanReviewScreen() {
   const previewUri = showOriginal && sourceUri ? sourceUri : editedPreviewUri;
 
   // 마운트 시점의 스토어 값을 폼 초기값으로 고정한다(이후 소유권은 폼에 있다).
-  const initialValues = useRef<ParsedFields>(values);
+  const [initialValues] = useState<ParsedFields>(() => values);
 
-  const { control, getValues, reset, handleSubmit, watch } = useForm<ParsedFields>({
-    defaultValues: initialValues.current,
+  const { control, getValues, reset, handleSubmit } = useForm<ParsedFields>({
+    defaultValues: initialValues,
     mode: 'onBlur',
   });
 
-  const watched = watch();
+  const watchedFields = useWatch({ control });
+  const watched = useMemo<ParsedFields>(() => Object.fromEntries(
+    Object.entries(watchedFields).map(([key, value]) => [key, value ?? '']),
+  ), [watchedFields]);
 
   /**
    * 현재 문서 종류의 필드만 추려 스토어로 올릴 값을 만든다.
@@ -190,10 +193,10 @@ export default function ScanReviewScreen() {
 
   /* 스캔 결과 없이 직접 진입한 경우 방어 */
   useEffect(() => {
-    if (!scan && Object.keys(initialValues.current).length === 0 && !previewUri) {
+    if (!scan && Object.keys(initialValues).length === 0 && !previewUri) {
       router.replace('/scan');
     }
-  }, [previewUri, router, scan]);
+  }, [initialValues, previewUri, router, scan]);
 
   /* ── 이탈 가드 ─────────────────────────────────────────────────────── */
 
@@ -272,7 +275,7 @@ export default function ScanReviewScreen() {
   }, [docType, queryClient, router]);
 
   const runSave = useCallback(
-    async (options?: { allowMissingImage?: boolean }) => {
+    async function saveWithRetry(options?: { allowMissingImage?: boolean }) {
       setValues(collect());
       const ok = await save(options);
       if (ok) {
@@ -290,13 +293,13 @@ export default function ScanReviewScreen() {
           {
             text: '다시 시도',
             onPress: () => {
-              void runSave();
+              void saveWithRetry();
             },
           },
           {
             text: '이미지 없이 저장',
             onPress: () => {
-              void runSave({ allowMissingImage: true });
+              void saveWithRetry({ allowMissingImage: true });
             },
           },
         ]);

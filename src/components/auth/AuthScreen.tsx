@@ -17,7 +17,7 @@
 //  - 포커스 스크롤: 필드가 포커스되면 제목~제출 버튼 묶음의 상단으로 스크롤해, 키보드 위에
 //    폼 전체가 남게 한다(규칙 3의 "하단이 키보드 위 16dp 이상" 을 블록 단위로 보장하는 방식).
 import { useRouter } from 'expo-router';
-import { type ReactNode, useCallback, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { variant } from '@/config/env';
@@ -77,12 +77,19 @@ export function AuthScreen({
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const formTopRef = useRef(0);
+  const [focusRequest, setFocusRequest] = useState(0);
 
   const onFieldFocus = useCallback(() => {
-    setTimeout(() => {
+    setFocusRequest((value) => value + 1);
+  }, []);
+
+  useEffect(() => {
+    if (focusRequest === 0) return;
+    const timer = setTimeout(() => {
       scrollRef.current?.scrollTo({ y: Math.max(0, formTopRef.current - 12), animated: true });
     }, FOCUS_SCROLL_DELAY_MS);
-  }, []);
+    return () => clearTimeout(timer);
+  }, [focusRequest]);
 
   return (
     <View className="flex-1 bg-bg-base" style={{ paddingTop: insets.top }} testID={testID}>

@@ -40,6 +40,7 @@ import {
   type UseMutationResult,
 } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { releaseFeatures } from '@/config/releaseFeatures';
 
 import { listDocuments } from '@/features/documents/api';
 import type { DocumentDetail } from '@/features/documents/types';
@@ -320,7 +321,7 @@ export function useCalendarConnection(userId: string | undefined) {
       if (!res.ok) throw toDashboardError('connection', res.error);
       return res.data;
     },
-    enabled: Boolean(userId),
+    enabled: releaseFeatures.googleCalendar && Boolean(userId),
     staleTime: GCAL_STALE_TIME_MS,
   });
 }
@@ -339,7 +340,7 @@ export function useCalendarTokenInfo(userId: string | undefined, connected: bool
       if (!res.ok) throw toDashboardError('connection', res.error);
       return res.data;
     },
-    enabled: Boolean(userId) && connected,
+    enabled: releaseFeatures.googleCalendar && Boolean(userId) && connected,
     retry: false,
     staleTime: GCAL_STALE_TIME_MS,
   });

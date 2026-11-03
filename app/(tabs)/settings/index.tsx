@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, ChevronIcon, SettingsRow, SettingsSection } from '@/components/settings';
 import { Button, Skeleton, toast } from '@/components/ui';
 import { variant } from '@/config/env';
+import { releaseFeatures } from '@/config/releaseFeatures';
 import {
   DANGER_ZONE_COPY,
   NOTIFICATION_SETTINGS_COPY,
@@ -78,7 +79,7 @@ const COPY = {
   dataSection: '데이터',
   deleteAll: '내 데이터 전체 삭제',
   deleteAllDesc:
-    '저장한 모든 문서와 검색 기록이 삭제됩니다. 구글 캘린더 연동은 유지됩니다.',
+    '저장한 모든 문서와 검색 기록이 삭제됩니다.',
 
   supportSection: '지원',
   contact: '문의하기',
@@ -129,7 +130,7 @@ export default function SettingsScreen() {
   const meQuery = useMe();
   const me = meQuery.data ?? user;
 
-  const calendar = useCalendarLink(me?.id);
+  const calendar = useCalendarLink(releaseFeatures.googleCalendar ? me?.id : undefined);
   const deleteAccount = useDeleteAccount();
   const deleteDocuments = useDeleteMyDocuments();
 
@@ -153,6 +154,7 @@ export default function SettingsScreen() {
   // react-query 의 `refetch` 는 안정적인 참조라 이것만 잡는다.
   const refetchCalendar = calendar.refetch;
   useEffect(() => {
+    if (!releaseFeatures.googleCalendar) return;
     const status = params.calendar;
     if (status !== 'connected' && status !== 'failed') return;
     // 값 자체를 기억한다. 불리언으로 두면 두 번째 연동 시도(connected → failed)를 놓친다.
@@ -416,28 +418,29 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
-        <SettingsSection title={COPY.linkSection}>
-          <SettingsRow
-            label={CALENDAR_COPY.rowTitle}
-            description={
-              calendar.available
-                ? calendar.googleEmail || CALENDAR_COPY.rowDescription
-                : CALENDAR_COPY.unavailable
-            }
-            pill={{
-              label: calendar.connected ? CALENDAR_COPY.connected : CALENDAR_COPY.disconnected,
-              tone: calendar.connected ? 'success' : 'neutral',
-            }}
-            toggle={{
-              value: calendar.connected,
-              onValueChange: toggleCalendar,
-              busy: calendar.isBusy,
-              // 착지 불가 환경에서도 탭은 받는다 — 눌러야 `준비 중입니다.` 를 말해 줄 수 있다.
-              disabled: false,
-            }}
-            testID="row-gcal"
-          />
-        </SettingsSection>
+        {releaseFeatures.googleCalendar && (
+          <SettingsSection title={COPY.linkSection}>
+            <SettingsRow
+              label={CALENDAR_COPY.rowTitle}
+              description={
+                calendar.available
+                  ? calendar.googleEmail || CALENDAR_COPY.rowDescription
+                  : CALENDAR_COPY.unavailable
+              }
+              pill={{
+                label: calendar.connected ? CALENDAR_COPY.connected : CALENDAR_COPY.disconnected,
+                tone: calendar.connected ? 'success' : 'neutral',
+              }}
+              toggle={{
+                value: calendar.connected,
+                onValueChange: toggleCalendar,
+                busy: calendar.isBusy,
+                disabled: false,
+              }}
+              testID="row-gcal"
+            />
+          </SettingsSection>
+        )}
 
         <SettingsSection title={COPY.notifSection}>
           <SettingsRow

@@ -8,7 +8,6 @@
 // 원본 우상단 삭제 버튼 + `ConfirmPopover` 는 제거하고 롱프레스 ActionSheet 로 대체한다(CMP-30 결정).
 import { memo, useCallback, useState, type ReactNode } from 'react';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 
 import { resolveImageUrl } from '@/config/env';
 import { TYPE_LABELS, type DocumentType } from '@/features/scan/types';
@@ -43,20 +42,6 @@ export interface DocumentGridCardProps {
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
-}
-
-function CheckIcon({ color }: { color: string }) {
-  return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M6 12l4 4 8-8"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
 }
 
 function DocumentGridCardBase({

@@ -386,20 +386,15 @@ export function useScan() {
    *
    * §12 결정에 따라 `allowsMultipleSelection: false` 고정(1장 = 1문서)이다.
    *
-   * 위키 §13 SCF-02 는 `canceled === true` 도 SCF-02 로 묶어 두었지만, 사용자가 스스로
-   * `취소` 를 누른 상황에 권한 안내 시트를 띄우는 것은 오작동으로 읽힌다.
-   * → **권한 거부만** SCF-02 로 올리고 단순 취소는 `'canceled'` 로 조용히 돌려준다.
+   * 시스템 선택기는 선택한 사진에만 접근하므로 전체 앨범 권한을 선요청하지 않는다.
+   * 단순 취소는 `'canceled'` 로 조용히 돌려준다.
    */
   const pickFromLibrary = useCallback(async (): Promise<PickOutcome> => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync(false);
-    if (!permission.granted) {
-      store.setFailure({ code: 'SCF-02', status: null });
-      return 'denied';
-    }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
+      allowsEditing: false,
+      legacy: false,
       // 최종 압축은 SCAN-04(prepareForUpload)가 담당하므로 여기서 화질을 깎지 않는다.
       quality: 1,
       exif: false, // IMG-07 — GPS/기기정보 제거
