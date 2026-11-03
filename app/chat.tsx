@@ -19,7 +19,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from '@shopify/flash-list';
 import * as Clipboard from 'expo-clipboard';
-import { Stack, useRouter, type Href } from 'expo-router';
+import { Redirect, Stack, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -42,6 +42,7 @@ import {
   TypingBubble,
 } from '@/components/search';
 import { Button, IconButton, toast } from '@/components/ui';
+import { releaseFeatures } from '@/config/releaseFeatures';
 import {
   CHAT_COPY,
   canSendChat,
@@ -156,6 +157,11 @@ function HelpSheet({ visible, onClose }: { visible: boolean; onClose: () => void
 /* ── 화면 ──────────────────────────────────────────────────────────────────── */
 
 export default function ChatScreen() {
+  if (!releaseFeatures.aiChat) return <Redirect href="/(tabs)/search" />;
+  return <EnabledChatScreen />;
+}
+
+function EnabledChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const t = useTheme();

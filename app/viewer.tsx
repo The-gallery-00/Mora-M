@@ -23,11 +23,7 @@
 //
 // ⤓ `사진에 저장`은 `expo-media-library` 가 없어(패키지 설치 금지) 이번 범위에서 제외한다.
 //
-// ── 린트 주의 ────────────────────────────────────────────────────────────────
-// 제스처는 `useMemo` 로 고정한다. 공유값 변형(`scale.value = …`)에 대해 React Compiler 규칙
-// (`react-hooks/immutability`)이 경고를 내지만 Reanimated 의 공식 관용구이며, 이 저장소의 기존
-// 제스처 코드(`app/scan/crop.tsx`, `src/components/documents/SwipeableRow.tsx`)와 같은 형태다.
-// 매 렌더마다 제스처를 새로 만들면 GestureDetector 가 핸들러를 재부착해 줌 중에 튄다.
+// 제스처 참조는 고정하고 공유값은 React Compiler 호환 get/set API 로 접근한다.
 import NetInfo from '@react-native-community/netinfo';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -257,56 +253,56 @@ export default function ImageViewerScreen() {
     const pinch = Gesture.Pinch()
       .onUpdate((event) => {
         // 경계에서 살짝 넘어가게 두고(고무줄) 손을 떼면 스프링으로 되돌린다.
-        const next = savedScale.value * event.scale;
-        scale.value = Math.min(MAX_SCALE * (1 + RUBBER), Math.max(MIN_SCALE * (1 - RUBBER), next));
+        const next = savedScale.get() * event.scale;
+        scale.set(Math.min(MAX_SCALE * (1 + RUBBER), Math.max(MIN_SCALE * (1 - RUBBER), next)));
       })
       .onEnd(() => {
-        const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale.value));
-        scale.value = withSpring(clamped, { damping: 20, stiffness: 200 });
-        savedScale.value = clamped;
+        const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale.get()));
+        scale.set(withSpring(clamped, { damping: 20, stiffness: 200 }));
+        savedScale.set(clamped);
         if (clamped === MIN_SCALE) {
-          translateX.value = withSpring(0);
-          translateY.value = withSpring(0);
-          savedX.value = 0;
-          savedY.value = 0;
+          translateX.set(withSpring(0));
+          translateY.set(withSpring(0));
+          savedX.set(0);
+          savedY.set(0);
         }
       });
 
     const pan = Gesture.Pan()
       .onUpdate((event) => {
-        if (scale.value > MIN_SCALE) {
-          translateX.value = savedX.value + event.translationX;
-          translateY.value = savedY.value + event.translationY;
+        if (scale.get() > MIN_SCALE) {
+          translateX.set(savedX.get() + event.translationX);
+          translateY.set(savedY.get() + event.translationY);
           return;
         }
         // 원배율에서는 세로 이동만 받는다 — 아래로 스와이프해 닫는 제스처다.
-        translateY.value = event.translationY;
+        translateY.set(event.translationY);
       })
       .onEnd((event) => {
-        if (scale.value > MIN_SCALE) {
-          savedX.value = translateX.value;
-          savedY.value = translateY.value;
+        if (scale.get() > MIN_SCALE) {
+          savedX.set(translateX.get());
+          savedY.set(translateY.get());
           return;
         }
-        if (translateY.value > DISMISS_DISTANCE || event.velocityY > 1200) {
+        if (translateY.get() > DISMISS_DISTANCE || event.velocityY > 1200) {
           runOnJS(close)();
           return;
         }
-        translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+        translateY.set(withSpring(0, { damping: 20, stiffness: 200 }));
       });
 
     const doubleTap = Gesture.Tap()
       .numberOfTaps(2)
       .onEnd(() => {
-        const zoomed = scale.value > MIN_SCALE + 0.01;
+        const zoomed = scale.get() > MIN_SCALE + 0.01;
         const next = zoomed ? MIN_SCALE : DOUBLE_TAP_SCALE;
-        scale.value = withTiming(next, { duration: 250 });
-        savedScale.value = next;
+        scale.set(withTiming(next, { duration: 250 }));
+        savedScale.set(next);
         if (!zoomed) return;
-        translateX.value = withTiming(0, { duration: 250 });
-        translateY.value = withTiming(0, { duration: 250 });
-        savedX.value = 0;
-        savedY.value = 0;
+        translateX.set(withTiming(0, { duration: 250 }));
+        translateY.set(withTiming(0, { duration: 250 }));
+        savedX.set(0);
+        savedY.set(0);
       });
 
     const singleTap = Gesture.Tap()
@@ -321,13 +317,13 @@ export default function ImageViewerScreen() {
 
   const contentStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
+      { translateX: translateX.get() },
+      { translateY: translateY.get() },
+      { scale: scale.get() },
     ],
     // 아래로 스와이프하는 동안 배경까지 함께 옅어진다(인터랙션표 `배경 opacity 연동 dismiss`).
     opacity:
-      scale.value > MIN_SCALE ? 1 : Math.max(0.4, 1 - Math.abs(translateY.value) / (DISMISS_DISTANCE * 4)),
+      scale.get() > MIN_SCALE ? 1 : Math.max(0.4, 1 - Math.abs(translateY.get()) / (DISMISS_DISTANCE * 4)),
   }));
 
   /* ── 기하 계산 (contain 렌더 결과 + bbox 스케일) ────────────────────────── */

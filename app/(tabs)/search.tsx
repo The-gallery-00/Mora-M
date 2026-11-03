@@ -54,6 +54,7 @@ import {
   type SegmentedOption,
 } from '@/components/ui';
 import { DOC_ROUTE_SEGMENT } from '@/features/documents';
+import { releaseFeatures } from '@/config/releaseFeatures';
 import {
   SEARCH_COPY,
   SEARCH_DOC_TYPES,
@@ -585,11 +586,13 @@ export default function SearchScreen() {
           **플로우 배치**다(`BottomTabView` 가 screens 컨테이너와 탭바를 세로로 쌓는다). 화면의
           하단 경계가 이미 탭바 위쪽이므로 탭바 높이를 또 더하면 FAB 이 72dp 더 떠 버린다.
           (정본의 `tabBarHeight + 16` 은 탭바가 콘텐츠를 덮는 배치를 전제한 값이다.) */}
-      <ChatFab
-        onPress={() => router.push(href('/chat'))}
-        bottom={spacing.lg}
-        testID="search-chat-fab"
-      />
+      {releaseFeatures.aiChat && (
+        <ChatFab
+          onPress={() => router.push(href('/chat'))}
+          bottom={spacing.lg}
+          testID="search-chat-fab"
+        />
+      )}
 
       <SortSheet
         visible={sortOpen}

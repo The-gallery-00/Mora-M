@@ -99,17 +99,17 @@ export function Button({
   const state = disabled ? 'disabled' : pressed ? 'pressed' : 'base';
 
   const animStyle = useAnimatedStyle(() => ({
-    transform: reduceMotion ? [] : [{ scale: scale.value }],
+    transform: reduceMotion ? [] : [{ scale: scale.get() }],
   }));
 
   const onPressIn = useCallback(() => {
     setPressed(true);
-    scale.value = withTiming(PRESS_SCALE, { duration: 90, easing: Easing.out(Easing.quad) });
+    scale.set(withTiming(PRESS_SCALE, { duration: 90, easing: Easing.out(Easing.quad) }));
   }, [scale]);
 
   const onPressOut = useCallback(() => {
     setPressed(false);
-    scale.value = withTiming(1, { duration: 140, easing: Easing.bezier(0.16, 1, 0.3, 1) });
+    scale.set(withTiming(1, { duration: 140, easing: Easing.bezier(0.16, 1, 0.3, 1) }));
   }, [scale]);
 
   const handlePress = useCallback(() => {

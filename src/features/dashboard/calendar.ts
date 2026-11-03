@@ -68,6 +68,7 @@
 
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import { releaseFeatures } from '@/config/releaseFeatures';
 
 import { oauthRedirectUri } from '@/features/auth/oauth';
 import type { DocumentDetail, PosterDetail, TicketDetail } from '@/features/documents/types';
@@ -491,6 +492,7 @@ const APP_SCHEME = 'mora';
  * 거짓이면 UI 는 토글을 **비활성**으로 두고 `CALENDAR_COPY.unavailable` 을 안내한다.
  */
 export function isCalendarConnectEnabled(): boolean {
+  if (!releaseFeatures.googleCalendar) return false;
   const flag = (process.env.EXPO_PUBLIC_CALENDAR_DEEPLINK ?? '').trim();
   return flag === '1' && oauthRedirectUri.startsWith(`${APP_SCHEME}://`);
 }

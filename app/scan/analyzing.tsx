@@ -27,6 +27,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { Button, ProgressBar, toast } from '@/components/ui';
 import { variant } from '@/config/env';
 import { SCR11_STEP_LABELS, useScan, useScanStore } from '@/features/scan';
+import type { UploadPhase } from '@/features/scan/types';
 import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing } from '@/theme/scale';
@@ -98,6 +99,18 @@ const BACKGROUND_LIMIT_MS = 30_000;
 const BACK_CONFIRM_MS = 2500;
 /** 연출용 스텝 점등 간격 (Screen Specs SCR-11 각주). */
 const STAGE_INTERVAL_MS = 1600;
+
+function StageLabel({ phase }: { phase: UploadPhase | null }) {
+  const [index, setIndex] = useState(phase === null || phase === 'sending' ? 0 : 1);
+  useEffect(() => {
+    if (phase === null || phase === 'sending') return;
+    const timer = setInterval(() => {
+      setIndex((previous) => Math.min(STEP_ICONS.length - 1, previous + 1));
+    }, STAGE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [phase]);
+  return <Text className="mt-8 text-h3 font-w700 text-brand">{SCR11_STEP_LABELS[index]}</Text>;
+}
 
 /**
  * 스캔 흐름을 완전히 벗어날 때의 착지점.
@@ -179,7 +192,6 @@ export default function ScanAnalyzingScreen() {
   } = useScan();
 
   const previewUri = adjustedUri ?? sourceUri;
-  const [stageIndex, setStageIndex] = useState(0);
   // 성공 직후 `router.replace` 전 1프레임 동안 SCF-10 배너가 번쩍이는 것을 막는다.
   const [leaving, setLeaving] = useState(false);
   const startedRef = useRef(false);
@@ -191,15 +203,10 @@ export default function ScanAnalyzingScreen() {
   /* ── 진입 즉시 압축 → 업로드 → OCR ───────────────────────────────────── */
 
   const start = useCallback(async () => {
-    setStageIndex(0);
     const prepared = await prepare();
-    if (!prepared) return; // SCF-03 / SCF-04 가 failure 로 올라간다
-    const ok = await runScan();
-    if (!ok) return; // 실패 또는 사용자 취소. 아래 에러 블록이 처리한다
-    setLeaving(true);
-    haptics.success();
-    router.replace('/scan/review');
-  }, [prepare, router, runScan]);
+    if (!prepared) return false;
+    return runScan();
+  }, [prepare, runScan]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -208,36 +215,29 @@ export default function ScanAnalyzingScreen() {
       router.replace('/scan');
       return;
     }
-    void start();
+    void start().then((ok) => {
+      if (!ok) return;
+      setLeaving(true);
+      haptics.success();
+      router.replace('/scan/review');
+    });
   }, [router, sourceUri, start]);
-
-  /* ── 스텝 연출: 업로드가 끝난 뒤부터 1.6초 간격으로 순차 점등 ──────────── */
-  useEffect(() => {
-    if (uploadPhase === 'sending') {
-      setStageIndex(0);
-      return;
-    }
-    if (uploadPhase === null) return;
-    setStageIndex(1);
-    const timer = setInterval(() => {
-      setStageIndex((prev) => Math.min(STEP_ICONS.length - 1, prev + 1));
-    }, STAGE_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [uploadPhase]);
 
   /* ── 스캔 라인 상하 왕복 1.2s ───────────────────────────────────────── */
   useEffect(() => {
     if (reduceMotion || !running) return;
-    scanLine.value = 0;
-    scanLine.value = withRepeat(
-      withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.quad) }),
-      -1,
-      true,
+    scanLine.set(0);
+    scanLine.set(
+      withRepeat(
+        withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.quad) }),
+        -1,
+        true,
+      ),
     );
   }, [reduceMotion, running, scanLine]);
 
   const scanLineStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: scanLine.value * (PREVIEW_HEIGHT - 2) }],
+    transform: [{ translateY: scanLine.get() * (PREVIEW_HEIGHT - 2) }],
   }));
 
   /* ── 이탈 경로 두 가지 ────────────────────────────────────────────────
@@ -318,13 +318,8 @@ export default function ScanAnalyzingScreen() {
   /* ── 실패 액션 ─────────────────────────────────────────────────────── */
 
   const handleRetry = useCallback(async () => {
-    setStageIndex(0);
     // 파일은 파기하지 않는다(§13 공통 규칙). prepared 가 없으면 압축부터 다시.
-    if (!useScanStore.getState().prepared) {
-      void start();
-      return;
-    }
-    const ok = await retryScan();
+    const ok = await (useScanStore.getState().prepared ? retryScan() : start());
     if (!ok) return;
     setLeaving(true);
     haptics.success();
@@ -523,7 +518,6 @@ export default function ScanAnalyzingScreen() {
   /* ── 렌더 ──────────────────────────────────────────────────────────── */
 
   const determinate = uploadPhase === 'sending';
-  const stageLabel = SCR11_STEP_LABELS[stageIndex] ?? SCR11_STEP_LABELS[0];
 
   return (
     <View
@@ -576,7 +570,7 @@ export default function ScanAnalyzingScreen() {
 
         {running ? (
           <>
-            <Text className="mt-8 text-h3 font-w700 text-brand">{stageLabel}</Text>
+            <StageLabel key={uploadPhase} phase={uploadPhase} />
             <Text className="mt-1 text-body-sm text-text-muted">잠시만 기다려 주세요</Text>
 
             {/* determinate 는 실측 업로드 구간에서만. 그 뒤는 indeterminate. */}

@@ -213,7 +213,7 @@ export default function ScanCameraScreen() {
   }, [ready, pictureSize]);
 
   /* ── 촬영 시 흰 섬광 80ms (Screen Specs 인터랙션 표) ────────────────────── */
-  const flashStyle = useAnimatedStyle(() => ({ opacity: shutterFlash.value }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: shutterFlash.get() }));
 
   const closeScan = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -227,9 +227,11 @@ export default function ScanCameraScreen() {
     setCapturing(true);
     haptics.impact('medium');
     if (!reduceMotion) {
-      shutterFlash.value = withSequence(
-        withTiming(1, { duration: 0 }),
-        withTiming(0, { duration: 80, easing: Easing.out(Easing.quad) }),
+      shutterFlash.set(
+        withSequence(
+          withTiming(1, { duration: 0 }),
+          withTiming(0, { duration: 80, easing: Easing.out(Easing.quad) }),
+        ),
       );
     }
 

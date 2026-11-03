@@ -73,7 +73,6 @@ module.exports = ({ config }) => ({
       'android.permission.INTERNET',
       'android.permission.ACCESS_NETWORK_STATE',
       'android.permission.CAMERA',
-      'android.permission.READ_MEDIA_IMAGES',
       'android.permission.POST_NOTIFICATIONS',
       'android.permission.VIBRATE',
     ],
@@ -82,6 +81,11 @@ module.exports = ({ config }) => ({
     //  - SYSTEM_ALERT_WINDOW: expo-dev-client 의 개발 메뉴용. 개발 빌드에서만 남긴다.
     blockedPermissions: [
       'android.permission.RECORD_AUDIO',
+      'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.READ_MEDIA_VIDEO',
+      'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
       ...(IS_DEV ? [] : ['android.permission.SYSTEM_ALERT_WINDOW']),
     ],
   },
@@ -117,6 +121,7 @@ module.exports = ({ config }) => ({
       'expo-image-picker',
       {
         photosPermission: '갤러리에 있는 문서 사진을 불러오려면 사진 접근 권한이 필요합니다.',
+        microphonePermission: false,
       },
     ],
     [

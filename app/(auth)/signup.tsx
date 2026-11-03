@@ -17,7 +17,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
   BackHandler,
   Keyboard,
@@ -288,7 +288,6 @@ function NicknameStep({ initialName, onDone }: { initialName: string; onDone: ()
   const {
     control,
     handleSubmit,
-    watch,
     formState: { errors, isValid },
   } = useForm<NicknameFormValues>({
     resolver: zodResolver(nicknameSchema),
@@ -296,7 +295,7 @@ function NicknameStep({ initialName, onDone }: { initialName: string; onDone: ()
     mode: 'onChange',
   });
 
-  const current = watch('name');
+  const current = useWatch({ control, name: 'name' });
   // 서버가 만들어 준 이름 그대로면 왕복할 이유가 없다 (SCR-26: 미변경이면 저장 disabled).
   const unchanged = current.trim() === initialName.trim();
 

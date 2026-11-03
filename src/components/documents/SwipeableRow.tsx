@@ -124,8 +124,8 @@ export const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
     const canFullSwipe = enableFullSwipe && firstRight?.tone === 'danger';
 
     const close = useCallback(() => {
-      translateX.value = withSpring(0, SPRING);
-      armed.value = false;
+      translateX.set(withSpring(0, SPRING));
+      armed.set(false);
     }, [armed, translateX]);
 
     useImperativeHandle(ref, () => ({ close }), [close]);
@@ -145,56 +145,54 @@ export const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
       firstRight?.onPress();
     }, [firstRight]);
 
-    /* 제스처는 `useMemo` 로 고정한다 — 보관함 행은 FlashList 셀이라 렌더가 잦다.
-       공유값 변형에 대해 `react-hooks/immutability`(React Compiler)가 경고를 내지만,
-       Reanimated 의 공식 관용구이고 이 저장소의 기존 제스처 코드(`app/scan/crop.tsx`)와 같은 형태다. */
+    // FlashList 셀의 제스처 참조는 고정하고 공유값은 get/set API 로 접근한다.
     const pan = useMemo(() => {
       const gesture = Gesture.Pan()
         // 세로 스크롤이 주인이다 — 수평 12dp 를 넘겨야 행 스와이프가 가져간다
         .activeOffsetX([-12, 12])
         .failOffsetY([-12, 12])
         .onBegin(() => {
-          startX.value = translateX.value;
-          armed.value = false;
+          startX.set(translateX.get());
+          armed.set(false);
         })
         .onUpdate((e) => {
-          const next = startX.value + e.translationX;
+          const next = startX.get() + e.translationX;
           const min = rightWidth > 0 ? -(rightWidth + OVERSHOOT) : 0;
           const max = leftWidth > 0 ? leftWidth + OVERSHOOT : 0;
-          translateX.value = Math.min(max, Math.max(min, next));
+          translateX.set(Math.min(max, Math.max(min, next)));
 
           if (!canFullSwipe) return;
-          const passed = translateX.value <= -FULL_SWIPE_DISTANCE;
-          if (passed && !armed.value) {
-            armed.value = true;
+          const passed = translateX.get() <= -FULL_SWIPE_DISTANCE;
+          if (passed && !armed.get()) {
+            armed.set(true);
             runOnJS(hapticThreshold)();
-          } else if (!passed && armed.value) {
-            armed.value = false;
+          } else if (!passed && armed.get()) {
+            armed.set(false);
           }
         })
         .onEnd(() => {
-          const x = translateX.value;
+          const x = translateX.get();
 
           // ① 풀스와이프 — 행은 제자리로 돌아가고 화면이 확인 다이얼로그를 띄운다
           if (canFullSwipe && x <= -FULL_SWIPE_DISTANCE) {
-            translateX.value = withTiming(0, { duration: 220 });
-            armed.value = false;
+            translateX.set(withTiming(0, { duration: 220 }));
+            armed.set(false);
             runOnJS(runFirstRight)();
             return;
           }
           // ② 임계값(40%) 초과 — 열린 채 스냅
           if (rightWidth > 0 && x < -rightWidth * OPEN_RATIO) {
-            translateX.value = withSpring(-rightWidth, SPRING);
+            translateX.set(withSpring(-rightWidth, SPRING));
             runOnJS(hapticOpen)();
             return;
           }
           if (leftWidth > 0 && x > leftWidth * OPEN_RATIO) {
-            translateX.value = withSpring(leftWidth, SPRING);
+            translateX.set(withSpring(leftWidth, SPRING));
             runOnJS(hapticOpen)();
             return;
           }
           // ③ 미달 — 복귀
-          translateX.value = withSpring(0, SPRING);
+          translateX.set(withSpring(0, SPRING));
         });
 
       // 안드로이드 뒤로가기 제스처와 충돌하지 않게 좌측 가장자리 판정을 잘라낸다(음수 hitSlop = 축소)
@@ -212,7 +210,7 @@ export const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
     ]);
 
     const contentStyle = useAnimatedStyle(() => ({
-      transform: [{ translateX: translateX.value }],
+      transform: [{ translateX: translateX.get() }],
     }));
 
     const handleActionDone = useCallback(() => {

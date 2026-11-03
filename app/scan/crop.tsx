@@ -19,6 +19,7 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  useTimestamp,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -125,7 +126,8 @@ export default function ScanCropScreen() {
   const boundsW = useSharedValue(0);
   const boundsH = useSharedValue(0);
   const minSize = useSharedValue(MIN_DISPLAY_DP);
-  const lastHapticAt = useSharedValue(0);
+  const lastHapticAt = useSharedValue(-150);
+  const timestamp = useTimestamp();
 
   /* 촬영/선택 결과 없이 직접 들어온 경우 — 카메라로 되돌린다.
      `취소` 가 스토어를 비울 때 다시 발화하지 않도록 마운트 1회로 제한한다. */
@@ -177,13 +179,13 @@ export default function ScanCropScreen() {
   /** 크롭 박스를 이미지 전체로 되돌린다 (초기값 · `비율맞춤` · 회전 직후). */
   const resetRect = useCallback(() => {
     if (!layout) return;
-    rect.x.value = 0;
-    rect.y.value = 0;
-    rect.w.value = layout.dispW;
-    rect.h.value = layout.dispH;
-    boundsW.value = layout.dispW;
-    boundsH.value = layout.dispH;
-    minSize.value = Math.max(MIN_DISPLAY_DP, MIN_SOURCE_PX * layout.scale);
+    rect.x.set(0);
+    rect.y.set(0);
+    rect.w.set(layout.dispW);
+    rect.h.set(layout.dispH);
+    boundsW.set(layout.dispW);
+    boundsH.set(layout.dispH);
+    minSize.set(Math.max(MIN_DISPLAY_DP, MIN_SOURCE_PX * layout.scale));
   }, [layout, rect.x, rect.y, rect.w, rect.h, boundsW, boundsH, minSize]);
 
   // 레이아웃(캔버스 크기·회전)이 바뀌면 크롭 박스를 다시 맞춘다.
@@ -219,10 +221,10 @@ export default function ScanCropScreen() {
   const toSourceRect = useCallback((): CropRect | null => {
     if (!layout) return null;
     const { scale, dispW, dispH } = layout;
-    const x = rect.x.value;
-    const y = rect.y.value;
-    const w = rect.w.value;
-    const h = rect.h.value;
+    const x = rect.x.get();
+    const y = rect.y.get();
+    const w = rect.w.get();
+    const h = rect.h.get();
     const full = x <= 0.5 && y <= 0.5 && w >= dispW - 0.5 && h >= dispH - 0.5;
     if (full) return null;
     return {
@@ -262,45 +264,45 @@ export default function ScanCropScreen() {
     () =>
       Gesture.Pan()
         .onBegin(() => {
-          moveStartX.value = rect.x.value;
-          moveStartY.value = rect.y.value;
+          moveStartX.set(rect.x.get());
+          moveStartY.set(rect.y.get());
         })
         .onUpdate((e) => {
-          const maxX = boundsW.value - rect.w.value;
-          const maxY = boundsH.value - rect.h.value;
-          const nx = Math.min(Math.max(0, moveStartX.value + e.translationX), Math.max(0, maxX));
-          const ny = Math.min(Math.max(0, moveStartY.value + e.translationY), Math.max(0, maxY));
-          if (nx !== rect.x.value && (nx <= 0 || nx >= maxX)) {
-            const now = Date.now();
-            if (now - lastHapticAt.value > 150) {
-              lastHapticAt.value = now;
+          const maxX = boundsW.get() - rect.w.get();
+          const maxY = boundsH.get() - rect.h.get();
+          const nx = Math.min(Math.max(0, moveStartX.get() + e.translationX), Math.max(0, maxX));
+          const ny = Math.min(Math.max(0, moveStartY.get() + e.translationY), Math.max(0, maxY));
+          if (nx !== rect.x.get() && (nx <= 0 || nx >= maxX)) {
+            const now = timestamp.get();
+            if (now - lastHapticAt.get() > 150) {
+              lastHapticAt.set(now);
               runOnJS(fireBoundaryHaptic)();
             }
           }
-          rect.x.value = nx;
-          rect.y.value = ny;
+          rect.x.set(nx);
+          rect.y.set(ny);
         }),
-    [boundsW, boundsH, fireBoundaryHaptic, lastHapticAt, moveStartX, moveStartY, rect.h, rect.w, rect.x, rect.y],
+    [boundsW, boundsH, fireBoundaryHaptic, lastHapticAt, moveStartX, moveStartY, rect.h, rect.w, rect.x, rect.y, timestamp],
   );
 
   const boxStyle = useAnimatedStyle(() => ({
-    left: rect.x.value,
-    top: rect.y.value,
-    width: rect.w.value,
-    height: rect.h.value,
+    left: rect.x.get(),
+    top: rect.y.get(),
+    width: rect.w.get(),
+    height: rect.h.get(),
   }));
 
-  const dimTopStyle = useAnimatedStyle(() => ({ height: rect.y.value }));
-  const dimBottomStyle = useAnimatedStyle(() => ({ top: rect.y.value + rect.h.value }));
+  const dimTopStyle = useAnimatedStyle(() => ({ height: rect.y.get() }));
+  const dimBottomStyle = useAnimatedStyle(() => ({ top: rect.y.get() + rect.h.get() }));
   const dimLeftStyle = useAnimatedStyle(() => ({
-    top: rect.y.value,
-    height: rect.h.value,
-    width: rect.x.value,
+    top: rect.y.get(),
+    height: rect.h.get(),
+    width: rect.x.get(),
   }));
   const dimRightStyle = useAnimatedStyle(() => ({
-    top: rect.y.value,
-    height: rect.h.value,
-    left: rect.x.value + rect.w.value,
+    top: rect.y.get(),
+    height: rect.h.get(),
+    left: rect.x.get() + rect.w.get(),
   }));
 
   const handleProps = {
@@ -309,6 +311,7 @@ export default function ScanCropScreen() {
     boundsH,
     minSize,
     lastHapticAt,
+    timestamp,
     onBoundary: fireBoundaryHaptic,
   };
 
@@ -477,6 +480,7 @@ function CropHandle({
   boundsH,
   minSize,
   lastHapticAt,
+  timestamp,
   onBoundary,
 }: {
   dx: -1 | 0 | 1;
@@ -487,6 +491,7 @@ function CropHandle({
   boundsH: SharedValue<number>;
   minSize: SharedValue<number>;
   lastHapticAt: SharedValue<number>;
+  timestamp: SharedValue<number>;
   onBoundary: () => void;
 }) {
   const sx = useSharedValue(0);
@@ -498,61 +503,61 @@ function CropHandle({
     () =>
       Gesture.Pan()
         .onBegin(() => {
-          sx.value = rect.x.value;
-          sy.value = rect.y.value;
-          sw.value = rect.w.value;
-          sh.value = rect.h.value;
+          sx.set(rect.x.get());
+          sy.set(rect.y.get());
+          sw.set(rect.w.get());
+          sh.set(rect.h.get());
         })
         .onUpdate((e) => {
-          let nx = sx.value;
-          let ny = sy.value;
-          let nw = sw.value;
-          let nh = sh.value;
+          let nx = sx.get();
+          let ny = sy.get();
+          let nw = sw.get();
+          let nh = sh.get();
           let clamped = false;
 
           if (dx === -1) {
-            const right = sx.value + sw.value;
-            const candidate = sx.value + e.translationX;
-            nx = Math.min(Math.max(0, candidate), right - minSize.value);
+            const right = sx.get() + sw.get();
+            const candidate = sx.get() + e.translationX;
+            nx = Math.min(Math.max(0, candidate), right - minSize.get());
             nw = right - nx;
-            if (candidate < 0 || candidate > right - minSize.value) clamped = true;
+            if (candidate < 0 || candidate > right - minSize.get()) clamped = true;
           } else if (dx === 1) {
-            const candidate = sw.value + e.translationX;
-            nw = Math.min(Math.max(minSize.value, candidate), boundsW.value - sx.value);
-            if (candidate < minSize.value || candidate > boundsW.value - sx.value) clamped = true;
+            const candidate = sw.get() + e.translationX;
+            nw = Math.min(Math.max(minSize.get(), candidate), boundsW.get() - sx.get());
+            if (candidate < minSize.get() || candidate > boundsW.get() - sx.get()) clamped = true;
           }
 
           if (dy === -1) {
-            const bottom = sy.value + sh.value;
-            const candidate = sy.value + e.translationY;
-            ny = Math.min(Math.max(0, candidate), bottom - minSize.value);
+            const bottom = sy.get() + sh.get();
+            const candidate = sy.get() + e.translationY;
+            ny = Math.min(Math.max(0, candidate), bottom - minSize.get());
             nh = bottom - ny;
-            if (candidate < 0 || candidate > bottom - minSize.value) clamped = true;
+            if (candidate < 0 || candidate > bottom - minSize.get()) clamped = true;
           } else if (dy === 1) {
-            const candidate = sh.value + e.translationY;
-            nh = Math.min(Math.max(minSize.value, candidate), boundsH.value - sy.value);
-            if (candidate < minSize.value || candidate > boundsH.value - sy.value) clamped = true;
+            const candidate = sh.get() + e.translationY;
+            nh = Math.min(Math.max(minSize.get(), candidate), boundsH.get() - sy.get());
+            if (candidate < minSize.get() || candidate > boundsH.get() - sy.get()) clamped = true;
           }
 
-          rect.x.value = nx;
-          rect.y.value = ny;
-          rect.w.value = nw;
-          rect.h.value = nh;
+          rect.x.set(nx);
+          rect.y.set(ny);
+          rect.w.set(nw);
+          rect.h.set(nh);
 
           if (clamped) {
-            const now = Date.now();
-            if (now - lastHapticAt.value > 150) {
-              lastHapticAt.value = now;
+            const now = timestamp.get();
+            if (now - lastHapticAt.get() > 150) {
+              lastHapticAt.set(now);
               runOnJS(onBoundary)();
             }
           }
         }),
-    [boundsH, boundsW, dx, dy, lastHapticAt, minSize, onBoundary, rect.h, rect.w, rect.x, rect.y, sh, sw, sx, sy],
+    [boundsH, boundsW, dx, dy, lastHapticAt, minSize, onBoundary, rect.h, rect.w, rect.x, rect.y, sh, sw, sx, sy, timestamp],
   );
 
   const style = useAnimatedStyle(() => ({
-    left: rect.x.value + ((dx + 1) / 2) * rect.w.value - HANDLE_SIZE / 2,
-    top: rect.y.value + ((dy + 1) / 2) * rect.h.value - HANDLE_SIZE / 2,
+    left: rect.x.get() + ((dx + 1) / 2) * rect.w.get() - HANDLE_SIZE / 2,
+    top: rect.y.get() + ((dy + 1) / 2) * rect.h.get() - HANDLE_SIZE / 2,
   }));
 
   return (

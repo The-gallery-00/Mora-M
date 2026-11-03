@@ -211,31 +211,26 @@ function MonthCalendarBase({
 
   const dx = useSharedValue(0);
 
-  /* 좌우 스와이프로 월 이동. 세로 스크롤이 주인이므로 수평 16dp 를 넘겨야 제스처가 활성화되고,
-     세로로 20dp 이상 움직이면 실패시킨다(부모 ScrollView 에 양보).
-
-     공유값 변형에 대해 `react-hooks/immutability`(React Compiler)가 오류를 낸다. Reanimated 의
-     공식 관용구이고 이 저장소의 기존 제스처 코드(`components/documents/SwipeableRow.tsx`,
-     `app/scan/crop.tsx`)와 **같은 형태**다 — 규칙을 우회하려고 제스처를 매 렌더 새로 만들면
-     FlashList 셀 재활용과 충돌한다. 같은 판정을 여기서도 유지한다. */
+  /* 좌우 스와이프로 월 이동. 수평 16dp 를 넘겨야 활성화되고,
+     세로로 20dp 이상 움직이면 부모 ScrollView 에 양보한다. */
   const pan = useMemo(
     () =>
       Gesture.Pan()
         .activeOffsetX([-16, 16])
         .failOffsetY([-20, 20])
         .onUpdate((e) => {
-          dx.value = e.translationX;
+          dx.set(e.translationX);
         })
         .onEnd((e) => {
           if (e.translationX <= -SWIPE_THRESHOLD) runOnJS(change)(1);
           else if (e.translationX >= SWIPE_THRESHOLD) runOnJS(change)(-1);
           // 월이 바뀌면 새 그리드가 제자리로 미끄러져 들어오는 인상을 준다 (SCR-07: 슬라이드 250ms).
-          dx.value = withTiming(0, { duration: 250 });
+          dx.set(withTiming(0, { duration: 250 }));
         }),
     [change, dx],
   );
 
-  const gridStyle = useAnimatedStyle(() => ({ transform: [{ translateX: dx.value }] }));
+  const gridStyle = useAnimatedStyle(() => ({ transform: [{ translateX: dx.get() }] }));
 
   return (
     <View
