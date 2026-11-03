@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -46,6 +47,8 @@ public class ReceiptController {
             UUID userId = getUserId(request);
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             return ResponseEntity.ok(ApiResponse.ok(receiptService.save(userId, body)));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }
@@ -88,6 +91,8 @@ public class ReceiptController {
             UUID userId = getUserId(request);
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             return ResponseEntity.ok(ApiResponse.ok(receiptService.update(userId, id, body)));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }
@@ -100,6 +105,8 @@ public class ReceiptController {
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             receiptService.delete(userId, id);
             return ResponseEntity.ok(ApiResponse.ok(null));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }

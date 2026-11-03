@@ -29,6 +29,7 @@ phonenumbers
 fastapi
 uvicorn
 python-multipart
+PyJWT==2.15.1
 
 # ── Config ──
 python-dotenv

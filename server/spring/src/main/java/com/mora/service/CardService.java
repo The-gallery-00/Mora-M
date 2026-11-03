@@ -9,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -28,17 +29,20 @@ public class CardService {
     private final BusinessCardRepository cardRepository;
     private final CardGroupRepository groupRepository;
     private final EmbeddingService embeddingService;
-    private final OcrService ocrService;
+    private final StoredImageService storedImageService;
 
     public CardService(BusinessCardRepository cardRepository, CardGroupRepository groupRepository,
-                       EmbeddingService embeddingService, OcrService ocrService) {
+                       EmbeddingService embeddingService, StoredImageService storedImageService) {
         this.cardRepository = cardRepository;
         this.groupRepository = groupRepository;
         this.embeddingService = embeddingService;
-        this.ocrService = ocrService;
+        this.storedImageService = storedImageService;
     }
 
+    @Transactional
     public CardResponse save(UUID userId, CardSaveRequest request) {
+        storedImageService.lockOwner(userId);
+        String imageUrl = storedImageService.normalizeOwnedReference(userId, request.getImageUrl());
         String textForEmbedding = buildEmbeddingText(
                 request.getName(), request.getCompany(), request.getPosition(),
                 request.getPhone(), request.getEmail(), request.getRawOcrText()
@@ -53,7 +57,7 @@ public class CardService {
         card.setPhone(request.getPhone());
         card.setEmail(request.getEmail());
         card.setRawOcrText(request.getRawOcrText());
-        card.setImageUrl(request.getImageUrl());
+        card.setImageUrl(imageUrl);
         setGroupIfOwned(card, userId, request.getGroupId());
         card.setEmbedding(embedding);
 
@@ -81,7 +85,9 @@ public class CardService {
         return cardRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable).map(CardResponse::from);
     }
 
+    @Transactional
     public CardResponse update(UUID userId, UUID cardId, CardSaveRequest request) {
+        storedImageService.lockOwner(userId);
         BusinessCard card = cardRepository.findById(cardId)
                 .orElseThrow(() -> new RuntimeException("Card not found"));
 
@@ -89,6 +95,9 @@ public class CardService {
             throw new RuntimeException("Unauthorized");
         }
 
+        String oldImageUrl = card.getImageUrl();
+        String imageUrl = storedImageService.normalizeOwnedReference(userId,
+                request.getImageUrl() != null ? request.getImageUrl() : oldImageUrl);
         card.setName(request.getName());
         card.setCompany(request.getCompany());
         card.setPosition(request.getPosition());
@@ -97,9 +106,7 @@ public class CardService {
         if (request.getRawOcrText() != null) {
             card.setRawOcrText(request.getRawOcrText());
         }
-        if (request.getImageUrl() != null) {
-            card.setImageUrl(request.getImageUrl());
-        }
+        card.setImageUrl(imageUrl);
         if (request.getGroupId() != null) {
             setGroupIfOwned(card, userId, request.getGroupId());
         }
@@ -111,10 +118,16 @@ public class CardService {
         card.setEmbedding(embeddingService.getEmbedding(textForEmbedding));
 
         card = cardRepository.save(card);
+        cardRepository.flush();
+        if (!Objects.equals(oldImageUrl, card.getImageUrl())) {
+            storedImageService.deleteIfUnreferenced(userId, oldImageUrl);
+        }
         return CardResponse.from(card);
     }
 
+    @Transactional
     public void delete(UUID userId, UUID cardId) {
+        storedImageService.lockOwner(userId);
         BusinessCard card = cardRepository.findById(cardId)
                 .orElseThrow(() -> new RuntimeException("Card not found"));
 
@@ -122,11 +135,14 @@ public class CardService {
             throw new RuntimeException("Unauthorized");
         }
 
-        deleteImageIfUploaded(card.getImageUrl());
         cardRepository.delete(card);
+        cardRepository.flush();
+        storedImageService.deleteIfUnreferenced(userId, card.getImageUrl());
     }
 
+    @Transactional
     public CardResponse moveGroup(UUID userId, UUID cardId, UUID groupId) {
+        storedImageService.lockOwner(userId);
         BusinessCard card = cardRepository.findById(cardId)
                 .orElseThrow(() -> new RuntimeException("Card not found"));
 
@@ -233,12 +249,6 @@ public class CardService {
         if (email != null) sb.append(email).append(" ");
         if (rawOcrText != null) sb.append(rawOcrText);
         return sb.toString().trim();
-    }
-
-    private void deleteImageIfUploaded(String imageUrl) {
-        if (imageUrl != null && imageUrl.startsWith("/uploads/")) {
-            ocrService.deleteImage(imageUrl.substring("/uploads/".length()));
-        }
     }
 
     private void setGroupIfOwned(BusinessCard card, UUID userId, UUID groupId) {

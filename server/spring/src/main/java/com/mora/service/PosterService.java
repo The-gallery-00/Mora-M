@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -34,16 +35,23 @@ public class PosterService {
 
     private final PosterRepository posterRepository;
     private final EmbeddingService embeddingService;
+    private final StoredImageService storedImageService;
 
-    public PosterService(PosterRepository posterRepository, EmbeddingService embeddingService) {
+    public PosterService(PosterRepository posterRepository, EmbeddingService embeddingService,
+                         StoredImageService storedImageService) {
         this.posterRepository = posterRepository;
         this.embeddingService = embeddingService;
+        this.storedImageService = storedImageService;
     }
 
+    @Transactional
     public PosterResponse save(UUID userId, PosterRequest request) {
+        storedImageService.lockOwner(userId);
         LocalDate eventStartDate = parseDate(request.getEventStartDate());
         LocalDate eventEndDate = parseDate(request.getEventEndDate());
         validateDateOrder(eventStartDate, eventEndDate);
+        String parsedJson = storedImageService.normalizeOwnedJson(userId, request.getParsedJson());
+        String rawJson = storedImageService.normalizeOwnedJson(userId, request.getRawJson());
         String rawTextJoined = joinRawText(request.getRawText());
         String embedding = embeddingService.getEmbedding(rawTextJoined);
 
@@ -62,8 +70,8 @@ public class PosterService {
         poster.setWebsiteUrl(request.getWebsiteUrl());
         poster.setDescription(request.getDescription());
         poster.setRawText(rawTextJoined);
-        poster.setParsedJson(request.getParsedJson());
-        poster.setRawJson(request.getRawJson());
+        poster.setParsedJson(parsedJson);
+        poster.setRawJson(rawJson);
         poster.setEmbedding(embedding);
 
         poster = posterRepository.save(poster);
@@ -82,7 +90,9 @@ public class PosterService {
                 .map(PosterResponse::from);
     }
 
+    @Transactional
     public PosterResponse update(UUID userId, Integer posterId, PosterRequest request) {
+        storedImageService.lockOwner(userId);
         Poster poster = posterRepository.findByIdAndUserId(posterId, userId)
                 .orElseThrow(() -> new RuntimeException("Poster not found or unauthorized"));
 
@@ -91,6 +101,11 @@ public class PosterService {
         LocalDate eventEndDate = request.getEventEndDate() != null
                 ? parseDate(request.getEventEndDate()) : poster.getEventEndDate();
         validateDateOrder(eventStartDate, eventEndDate);
+        Set<String> oldImages = storedImageService.referencesInJson(poster.getParsedJson(), poster.getRawJson());
+        String parsedJson = storedImageService.normalizeOwnedJson(userId,
+                request.getParsedJson() != null ? request.getParsedJson() : poster.getParsedJson());
+        String rawJson = storedImageService.normalizeOwnedJson(userId,
+                request.getRawJson() != null ? request.getRawJson() : poster.getRawJson());
 
         if (request.getDocType() != null) poster.setDocType(request.getDocType());
         if (request.getClassificationConfidence() != null) poster.setClassificationConfidence(request.getClassificationConfidence());
@@ -104,8 +119,8 @@ public class PosterService {
         if (request.getFee() != null) poster.setFee(request.getFee());
         if (request.getWebsiteUrl() != null) poster.setWebsiteUrl(request.getWebsiteUrl());
         if (request.getDescription() != null) poster.setDescription(request.getDescription());
-        if (request.getParsedJson() != null) poster.setParsedJson(request.getParsedJson());
-        if (request.getRawJson() != null) poster.setRawJson(request.getRawJson());
+        poster.setParsedJson(parsedJson);
+        poster.setRawJson(rawJson);
 
         if (request.getRawText() != null && !request.getRawText().isEmpty()) {
             String rawTextJoined = joinRawText(request.getRawText());
@@ -114,13 +129,20 @@ public class PosterService {
         }
 
         poster = posterRepository.save(poster);
+        posterRepository.flush();
+        for (String image : oldImages) storedImageService.deleteIfUnreferenced(userId, image);
         return PosterResponse.from(poster);
     }
 
+    @Transactional
     public void delete(UUID userId, Integer posterId) {
+        storedImageService.lockOwner(userId);
         Poster poster = posterRepository.findByIdAndUserId(posterId, userId)
                 .orElseThrow(() -> new RuntimeException("Poster not found or unauthorized"));
+        Set<String> images = storedImageService.referencesInJson(poster.getParsedJson(), poster.getRawJson());
         posterRepository.delete(poster);
+        posterRepository.flush();
+        for (String image : images) storedImageService.deleteIfUnreferenced(userId, image);
     }
 
     // 하이브리드 검색: fuzzy(pg_trgm)*0.6 + vector(pgvector)*0.4, 결합점수 0.4 미만 제외

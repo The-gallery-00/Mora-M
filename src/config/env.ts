@@ -81,8 +81,8 @@ export function getOcrBaseUrl(): string {
  * 별개 DB/시크릿이라(JWT 서명키가 다르다) 기존 토큰은 어차피 그 서버에서 무효다.
  *
  * 기준은 **API 주소가 실제로 바뀌는가** 하나다. OCR 주소만 바뀌면 세션을 건드리지 않는다 —
- * OCR 로 나가는 두 요청 모두 토큰을 싣지 않기 때문이다(`/health` 무인증,
- * `/api/commit` 은 `authorize: false` — `src/features/scan/api.ts:551-554`).
+ * 앱에서 OCR 로 직접 나가는 요청은 무인증 `/health` 뿐이다.
+ * 스캔·커밋·문서 이미지는 모두 인증된 Spring 게이트웨이를 쓴다.
  * 근거 없이 로그아웃시키면 다음 사람이 이 규칙을 우회할 방법을 찾는다.
  *
  * 여기서는 **토큰 정본(SecureStore)만** 지운다. zustand 스토어 상태·React Query 캐시·이미지
@@ -139,16 +139,42 @@ export function hasServerOverride(): boolean {
   return storage.contains(StorageKey.serverApiUrl);
 }
 
-/**
- * OCR 서버가 돌려주는 image_url 은 `/uploads/...` 상대경로다.
- * 정적 파일은 Spring(:8080) 이 아니라 OCR(:8000) 이 서브하므로 OCR base 로 조립해야 한다.
- * 원본: `server/ocr/app.py` 의 `@app.get("/uploads/{image_name}")`.
- * (`app.mount("/uploads", StaticFiles(...))` 가 아니다 — 배포 환경은 GCS 에서 스트리밍하고
- *  LAN 개발에서만 디스크를 읽으므로 핸들러가 그 분기를 직접 한다.)
- */
+/** Match the parsed origin AND uploads path, never a hostname/string prefix. */
+function uploadPathAtBase(imageUrl: string, baseUrl: string): string | null {
+  try {
+    const image = new URL(imageUrl);
+    const base = new URL(baseUrl);
+    const basePath = base.pathname.replace(/\/+$/, '');
+    if (
+      !['http:', 'https:'].includes(image.protocol) ||
+      image.username ||
+      image.password ||
+      image.origin !== base.origin ||
+      !image.pathname.startsWith(`${basePath}/uploads/`)
+    ) return null;
+    return `${image.pathname.slice(basePath.length)}${image.search}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Only this URL class may receive the app's bearer token for an image request. */
+export function isTrustedDocumentImageUrl(imageUrl: string): boolean {
+  return uploadPathAtBase(imageUrl, getApiBaseUrl()) !== null;
+}
+
+/** Relative and legacy OCR uploads now go through the authenticated Spring gateway. */
 export function resolveImageUrl(imageUrl: string | null | undefined): string | null {
   if (!imageUrl) return null;
-  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
-  const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
-  return `${getOcrBaseUrl()}${path}`;
+  if (/^\/?uploads\//.test(imageUrl)) {
+    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    const resolved = `${getApiBaseUrl()}${path}`;
+    return isTrustedDocumentImageUrl(resolved) ? resolved : null;
+  }
+  for (const base of [getOcrBaseUrl(), buildOcrBaseUrl(), FALLBACK_OCR]) {
+    const path = uploadPathAtBase(imageUrl, base);
+    if (path) return `${getApiBaseUrl()}${path}`;
+  }
+  // Public/external images and local scan URIs keep their original destination.
+  return imageUrl;
 }

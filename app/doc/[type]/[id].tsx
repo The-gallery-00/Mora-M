@@ -10,7 +10,6 @@
 // 이번 범위에서 제외한다. `공유`는 RN 내장 `Share` 로 구현했다.
 import NetInfo from '@react-native-community/netinfo';
 import * as Clipboard from 'expo-clipboard';
-import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import {
@@ -24,6 +23,8 @@ import {
 import { Alert, Linking, Modal, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
+
+import { DocumentImage } from '@/components/documents/DocumentImage';
 
 import { DocPlaceholderIcon, FieldRow, type FieldAction } from '@/components/documents';
 import { Button, IconButton, Skeleton, toast } from '@/components/ui';
@@ -340,8 +341,8 @@ function DetailContent({
         >
           {imageUri ? (
             <>
-              <Image
-                source={{ uri: imageUri }}
+              <DocumentImage
+                uri={imageUri}
                 contentFit="contain"
                 transition={160}
                 style={{ width: '100%', height: '100%' }}

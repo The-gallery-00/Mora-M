@@ -6,12 +6,13 @@ the current local /uploads behavior for LAN development.
 """
 import mimetypes
 import os
-import shutil
+import re
 from io import BytesIO
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from PIL import Image, UnidentifiedImageError
 
 try:
     from google.cloud import storage as gcs_storage
@@ -29,6 +30,8 @@ DEFAULT_LOCAL_DIR = (
 )
 UPLOAD_DIR = Path(os.getenv("MORA_UPLOAD_DIR", str(DEFAULT_LOCAL_DIR)))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_PIXELS = 24_000_000
 
 
 def is_gcs_enabled() -> bool:
@@ -36,7 +39,7 @@ def is_gcs_enabled() -> bool:
 
 
 def _safe_image_name(image_name: str) -> str:
-    if Path(image_name).name != image_name or image_name in {"", ".", ".."}:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}", image_name):
         raise HTTPException(status_code=404, detail="Image not found")
     return image_name
 
@@ -55,10 +58,30 @@ def _bucket():
 
 
 def save_upload_file(file: UploadFile, image_name: str) -> Path:
-    """Save the upload to a local path so the OCR pipeline can read it."""
+    """Bound disk/memory use and verify an actual supported image before OCR."""
     local_path = UPLOAD_DIR / _safe_image_name(image_name)
-    with open(local_path, "wb") as output:
-        shutil.copyfileobj(file.file, output)
+    if Path(image_name).suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
+        raise HTTPException(status_code=415, detail="Unsupported image format")
+    size = 0
+    try:
+        with open(local_path, "wb") as output:
+            while chunk := file.file.read(64 * 1024):
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="Image too large")
+                output.write(chunk)
+        with Image.open(local_path) as image:
+            if image.format not in {"JPEG", "PNG", "WEBP"}:
+                raise HTTPException(status_code=415, detail="Unsupported image format")
+            if image.width * image.height > MAX_IMAGE_PIXELS:
+                raise HTTPException(status_code=413, detail="Image dimensions too large")
+            image.verify()
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        local_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail="Invalid image") from None
+    except Exception:
+        local_path.unlink(missing_ok=True)
+        raise
     return local_path
 
 

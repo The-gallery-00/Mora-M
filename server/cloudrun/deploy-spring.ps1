@@ -10,6 +10,8 @@ param(
     [string] $OpenAiSecretVersion = "1",
     [string] $JwtSecret = "mora-jwt-secret",
     [string] $JwtSecretVersion = "1",
+    [string] $OcrSharedSecret = "mora-ocr-service-secret",
+    [Parameter(Mandatory = $true)] [string] $OcrSharedSecretVersion,
     [string] $DatabasePasswordSecret = "mora-database-password",
     [string] $DatabasePasswordSecretVersion = "1",
     # 기본값에 의존하지 않고 명시한다. 리소스를 콘솔에서 손으로 바꾸면
@@ -29,14 +31,14 @@ $ErrorActionPreference = "Stop"
 
 # Secret values are deliberately never accepted as script parameters. The
 # Cloud Run revision receives them directly from Secret Manager at runtime.
-$secretNames = @($OpenAiSecret, $JwtSecret, $DatabasePasswordSecret)
+$secretNames = @($OpenAiSecret, $JwtSecret, $DatabasePasswordSecret, $OcrSharedSecret)
 foreach ($secretName in $secretNames) {
     gcloud secrets describe $secretName --project $ProjectId --quiet | Out-Null
 }
 
 $databaseUrl = "jdbc:postgresql:///mora?cloudSqlInstance=$CloudSqlInstance&socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlRefreshStrategy=lazy&stringtype=unspecified"
 $environment = "DATABASE_URL=$databaseUrl,DATABASE_USERNAME=mora,OCR_SERVICE_URL=$OcrServiceUrl,JWT_EXPIRATION=1209600000,DB_MAX_POOL_SIZE=3,DB_MIN_IDLE=0"
-$secrets = "OPENAI_API_KEY=${OpenAiSecret}:${OpenAiSecretVersion},JWT_SECRET=${JwtSecret}:${JwtSecretVersion},DATABASE_PASSWORD=${DatabasePasswordSecret}:${DatabasePasswordSecretVersion}"
+$secrets = "OPENAI_API_KEY=${OpenAiSecret}:${OpenAiSecretVersion},JWT_SECRET=${JwtSecret}:${JwtSecretVersion},DATABASE_PASSWORD=${DatabasePasswordSecret}:${DatabasePasswordSecretVersion},OCR_SHARED_SECRET=${OcrSharedSecret}:${OcrSharedSecretVersion}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ⚠️ 미해결: Spring 에는 HTTP probe 를 걸 대상이 없다 (2026-08-05)
@@ -59,8 +61,8 @@ $deployArgs = @(
     "--image", $Image,
     "--service-account", $ServiceAccount,
     "--add-cloudsql-instances", $CloudSqlInstance,
-    "--set-env-vars", $environment,
-    "--set-secrets", $secrets,
+    "--update-env-vars", $environment,
+    "--update-secrets", $secrets,
     "--memory", $Memory,
     "--cpu", $Cpu,
     "--max-instances", 3,

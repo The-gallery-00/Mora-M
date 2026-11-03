@@ -10,7 +10,7 @@
 // 반대로 **bbox 색만 테마를 따른다**(§10-5): 어두운 스캔 이미지 위에서 라이트 `action` 은 경계가 사라진다.
 //
 // ── 파라미터 계약 ────────────────────────────────────────────────────────────
-//   uri          (필수) 절대 URL. 호출자가 `resolveImageUrl()` 로 이미 조립한 값이다.
+//   uri          (필수) 로컬 스캔 URI 또는 문서 이미지 경로. 인증·서버 해석은 DocumentImage 가 맡는다.
 //   title        접근성 라벨용 이름
 //   docType      `TICKET` 이면 bbox 색이 티켓 색으로 바뀐다(원본 티켓 화면의 색 관계 보존)
 //   blocks       `RawBlock[]` JSON 문자열. 없으면 bbox 레이어를 못 그린다
@@ -30,7 +30,6 @@
 // 매 렌더마다 제스처를 새로 만들면 GestureDetector 가 핸들러를 재부착해 줌 중에 튄다.
 import NetInfo from '@react-native-community/netinfo';
 import * as Clipboard from 'expo-clipboard';
-import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -46,6 +45,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
+import { DocumentImage } from '@/components/documents/DocumentImage';
 import { toast } from '@/components/ui';
 import { isDocumentType } from '@/features/documents';
 import type { RawBlock } from '@/features/scan';
@@ -404,9 +404,9 @@ export default function ImageViewerScreen() {
         <Animated.View style={[{ flex: 1 }, contentStyle]} onLayout={onLayout}>
           {failed ? null : (
             <>
-              <Image
+              <DocumentImage
                 key={reloadKey}
-                source={{ uri }}
+                uri={uri}
                 contentFit="contain"
                 // 저해상 캐시 → 원본 crossfade (상태표 `로딩`)
                 transition={200}

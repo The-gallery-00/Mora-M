@@ -1,4 +1,4 @@
-import { getApiBaseUrl, getOcrBaseUrl } from '@/config/env';
+import { getApiBaseUrl } from '@/config/env';
 import { isMockEnabled } from '@/mocks/config';
 import { mockCommitDocument, mockScanImage } from '@/mocks/scan';
 import { request } from '@/services/http';
@@ -30,8 +30,7 @@ import {
  *       §4-4(이중 래핑) · §5-5(XHR 업로더) · §5-6(언랩)
  *       wiki/tech/Camera and Scan.md §7(멀티파트·타임아웃) · §11(저장 시퀀스·보상 규칙)
  *
- * 서버 base URL 이 2개다: Spring `:8080`(스캔·저장) / OCR FastAPI `:8000`(커밋).
- * 커밋은 Spring 을 우회하므로 방화벽 포트도 2개를 열어야 한다.
+ * 스캔·커밋·저장은 모두 인증된 Spring 게이트웨이를 쓴다.
  */
 
 // ───────────────────────────────────────────────────────────── 타임아웃 (§7-4)
@@ -58,11 +57,7 @@ export const SCAN_TIMEOUT_MS = 120_000;
 /**
  * 이미지 저장 + 라벨 파일 쓰기만 하고 OCR 추론이 없다.
  *
- * 45s → 90s 상향(2026-08-05). 커밋은 Spring 을 거치지 않고 `getOcrBaseUrl()` 로 OCR 을 직접 친다
- * → 스캔이 깨운 인스턴스와 **별개 인스턴스의 콜드스타트를 그대로 맞는다**. 실측 콜드스타트가
- * 18~33s 라 45s 는 여유가 12s 뿐이었고, 추론이 없는 요청이 SCF-08(시간 초과)로 튕겼다.
- * (API Contract §9 표는 60s, 파이프라인 정본인 Camera and Scan §7-4 는 45s 로 적혀 있다 —
- *  둘 다 Cloud Run 이전에 정해진 값이다.)
+ * Spring 게이트웨이 뒤 OCR 인스턴스의 콜드스타트도 포함하도록 90초를 유지한다.
  */
 export const COMMIT_TIMEOUT_MS = 90_000;
 /** OpenAI 임베딩 호출을 포함하지만 실패해도 서버가 부분성공으로 200 을 준다. */
@@ -163,7 +158,7 @@ type UploadArgs<T> = {
   file: PreparedImage;
   /** 추가 폼 필드. 값은 **전부 문자열**이어야 한다 (FastAPI `Form(str)`). */
   fields?: Record<string, string>;
-  /** Authorization 헤더를 붙일지. `/api/commit` 은 인증을 검사하지 않으므로 false. */
+  /** 인증된 Spring 게이트웨이 요청에 Authorization 헤더를 붙인다. */
   authorize: boolean;
   timeoutMs: number;
   /** 0~1. **실측값**이다 (아래 주석 참조). */
@@ -314,7 +309,7 @@ const isSpringDefaultError = (body: unknown): boolean => {
  *
  * 그럼에도 **되돌리지 않는다.** 같은 라운드에서 SCR-12 가 `detail` 한 줄을 그리도록 고쳐졌고
  * (B6 — 목록에만 있고 도달하지 않는 코드를 없애기 위해), 그 순간부터 위 시나리오가 **실재하는
- * 위험**이 된다. `/api/commit` 은 Spring 을 우회해 FastAPI 를 직접 치므로 파트명이 어긋나면
+ * 위험**이 된다. 업스트림 FastAPI 에서 파트명이 어긋나면
  * `{"detail":[{"type":"missing","loc":["body","file"],...,"url":"https://errors.pydantic.dev/…"}]}`
  * 가 그대로 오고, `detail` 이 **배열**이라 문자열 검사에서 미끄러져 raw 가 채택된다.
  * 프록시가 HTML 에러 페이지를 주면 `<html><head><title>502 …` 가 채택된다.
@@ -424,8 +419,7 @@ function summarizeDetail(body: unknown, raw: string, status: number | null): str
  * 마커 문구가 바뀌어 매칭이 실패하면 상태코드 폴백(SCF-08/09)으로 떨어진다 — 조용히 나빠질 뿐
  * 깨지지는 않는다. 상세 한 줄에는 원문이 그대로 남으므로 진단은 여전히 가능하다.
  *
- * 커밋(`/api/commit`)은 Spring 을 우회해 FastAPI 를 직접 치므로 이 마커가 실릴 수 없다.
- * 그래서 코드로 게이트하지 않아도 오탐이 나지 않는다.
+ * 커밋(`/api/commit`)도 같은 Spring 게이트웨이를 사용한다.
  */
 export type SpringUpstreamKind = 'server' | 'contract' | 'unreachable' | 'timeout';
 
@@ -475,7 +469,7 @@ export type ScanImageOptions = {
 /**
  * API-41 `POST {API_BASE}/api/scan` — multipart 파트 `file` + 선택적 `document_type`.
  *
- * 인증은 서버가 검사하지 않지만 웹과 동일하게 헤더를 붙인다(무해).
+ * 인증된 세션의 Authorization 헤더가 필요하다.
  * **부작용 없음**: 서버가 임시파일로 처리하고 `finally` 에서 삭제한다 → 취소·재시도가 안전하다.
  * 종류를 바꿔 다시 부르는 것도 같은 이유로 안전하다(고아 이미지가 생기지 않는다 —
  * 부작용이 있는 것은 `/api/commit` 쪽이다).
@@ -548,7 +542,7 @@ export type CommitOptions = {
 };
 
 /**
- * API-63 `POST {OCR_BASE}/api/commit` — Spring 우회, 인증 없음.
+ * API-63 `POST {API_BASE}/api/commit` — 인증된 Spring 게이트웨이.
  *
  * **이 앱에서 부작용이 있는 유일한 OCR 호출이다.** 이미지를 `ocr/uploads/{TYPE}/` 에 영구 저장하고
  * `ner_dataset` 에 학습 라벨을 누적한다. 따라서
@@ -572,10 +566,9 @@ export function commitDocument(
   }
 
   return uploadMultipart<CommitResult>({
-    url: `${getOcrBaseUrl()}/api/commit`,
+    url: `${getApiBaseUrl()}/api/commit`,
     file,
-    // 인증 헤더 없음: /api/commit 은 인증을 검사하지 않는다.
-    authorize: false,
+    authorize: true,
     timeoutMs: COMMIT_TIMEOUT_MS,
     onProgress: options.onProgress,
     signal: options.signal,
@@ -588,9 +581,7 @@ export function commitDocument(
     mapFailure: (kind, status, body, raw) => {
       if (kind === 'timeout') return { code: 'SCF-08', status: null };
       if (kind === 'network') return { code: 'SCF-07', status: null };
-      // 커밋은 Spring 을 우회하므로 502/504 는 오지 않는다. 대신 OCR 이 낸 500 + JSON `detail`,
-      // 파트명이 어긋났을 때의 **422 + pydantic 배열 detail**, 인스턴스 사망 시의 text/plain 503 이
-      // 그대로 온다 → `summarizeDetail` 이 셋 다 평문 한 줄로 접는다(배열은 `loc: msg` 로).
+      // 게이트웨이·업스트림 실패 모두 기존 커밋 실패 UI 로 보낸다.
       return { code: 'SCF-11', status, detail: summarizeDetail(body, raw, status) };
     },
   });

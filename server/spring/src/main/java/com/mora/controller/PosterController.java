@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -48,6 +49,8 @@ public class PosterController {
             return ResponseEntity.ok(ApiResponse.ok(posterService.save(userId, body)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }
@@ -92,6 +95,8 @@ public class PosterController {
             return ResponseEntity.ok(ApiResponse.ok(posterService.update(userId, id, body)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.fail(e.getMessage()));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }
@@ -104,6 +109,8 @@ public class PosterController {
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             posterService.delete(userId, id);
             return ResponseEntity.ok(ApiResponse.ok(null));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail(e.getMessage()));
         }

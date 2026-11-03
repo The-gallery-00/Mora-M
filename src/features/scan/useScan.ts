@@ -198,14 +198,14 @@ function failureCopy(failure: ScanFailure | null): ScanFailureMessage | null {
       };
 
     /* SCF-07 = **연결 자체가 성립하지 않은 실패**. 두 경로가 여기로 온다.
-       ① 커밋(`/api/commit`) 네트워크 오류 — 기기가 OCR 서버(:8000)에 직접 못 붙은 경우. status null.
+       ① 커밋(`/api/commit`) 네트워크 오류 — 기기가 Spring 게이트웨이에 못 붙은 경우. status null.
        ② 스캔 **503 `OCR upstream unreachable`** — Spring 이 OCR 주소에 못 붙은 경우 (2026-08-05 3차).
 
        ②를 새로 받는 대신 **스캔 502 를 여기서 뺐다.** 502 는 "업스트림이 5xx 로 *응답했다*" 는
        뜻이라 연결은 성공한 것이다. 거기에 `OCR 서버에 연결할 수 없습니다` 를 붙이면 배지에서
        지운 것과 같은 종류의 거짓 신호가 된다 → 502 는 아래 SCF-09 의 `server` 갈래로 간다.
 
-       ①과 ②는 같은 제목(§13 원문)을 쓰되 **액션이 갈린다**: ①은 일시적 네트워크 문제일 수 있어
+       ①과 ②는 연결 대상에 맞는 제목을 쓰고 **액션도 갈린다**: ①은 일시적 네트워크 문제일 수 있어
        재시도가 의미 있고 저장 단계라 `이미지 없이 저장` 이라는 탈출구도 있다. ②는 배포/설정 오류
        (주소가 틀렸거나 OCR 이 떠 있지 않다)라 재시도로 절대 풀리지 않는다. */
     case 'SCF-07': {
@@ -220,7 +220,7 @@ function failureCopy(failure: ScanFailure | null): ScanFailureMessage | null {
       // `이미지 없이 저장` 은 저장 단계 전용 액션이라 스캔 화면에서는 해석되지 않고 조용히 빠진다.
       return {
         code,
-        title: 'OCR 서버에 연결할 수 없습니다.', // 원문
+        title: '백엔드 서버에 연결할 수 없습니다.',
         actions: ['이미지 없이 저장', '다시 시도', '취소'],
       };
     }

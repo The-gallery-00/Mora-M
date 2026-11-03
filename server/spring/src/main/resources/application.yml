@@ -43,6 +43,7 @@ app:
   jwt-secret: ${JWT_SECRET}
   jwt-expiration: ${JWT_EXPIRATION:1209600000}
   ocr-service-url: ${OCR_SERVICE_URL:http://localhost:8000}
+  ocr-shared-secret: ${OCR_SHARED_SECRET}
   openai-api-key: ${OPENAI_API_KEY:}
   frontend-url: ${FRONTEND_URL:mora://auth}
   oauth:
