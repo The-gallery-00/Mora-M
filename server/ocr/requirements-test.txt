@@ -1,0 +1,7 @@
+# Security/HTTP tests replace the OCR engine, so PaddleOCR is not required here.
+fastapi
+PyJWT==2.15.1
+Pillow
+httpx
+python-multipart
+python-dotenv

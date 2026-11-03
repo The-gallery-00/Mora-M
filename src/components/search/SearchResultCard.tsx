@@ -9,12 +9,12 @@
 //
 // 하이라이트 색은 원본 `#2563EB` = 라이트 `info` 토큰이다(다크는 `#7FB0EF` 로 자동 치환).
 // HEX 를 되돌려 놓지 마라 — 다크에서 대비가 무너진다(Design Tokens §10-5).
-import { Image } from 'expo-image';
 import { memo, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { DocPlaceholderIcon, DocTypeBadge } from '@/components/documents';
 import { resolveImageUrl } from '@/config/env';
+import { DocumentImage } from '@/components/documents/DocumentImage';
 import { DOCUMENT_TYPE_LABELS, type DocumentDetail, type DocumentType } from '@/features/documents';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -29,7 +29,7 @@ export interface SearchResultCardProps {
   docType: DocumentType;
   title: string;
   subtitle?: string;
-  /** 서버 상대경로여도 된다 — 내부에서 `resolveImageUrl` 로 OCR 베이스에 붙인다. */
+  /** 서버 상대경로여도 된다 — 인증된 Spring 이미지 경로로 조립한다. */
   imageUri?: string | null;
   facts?: SearchFact[];
   preview?: string;
@@ -178,12 +178,11 @@ function SearchResultCardBase({
       {/* 이미지가 없으면 자리를 비운다 — 빈 회색 블록 150dp 는 목록 스캔을 방해한다. */}
       {uri ? (
         <View className="bg-surface-alt" style={{ height: IMAGE_HEIGHT }}>
-          <Image
-            source={{ uri }}
+          <DocumentImage
+            uri={uri}
             style={{ width: '100%', height: '100%' }}
             contentFit="cover"
             transition={200}
-            cachePolicy="memory-disk"
             accessibilityIgnoresInvertColors
           />
         </View>

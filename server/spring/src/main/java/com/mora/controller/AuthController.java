@@ -4,6 +4,8 @@ import com.mora.dto.*;
 import com.mora.entity.User;
 import com.mora.security.JwtUtil;
 import com.mora.security.PasswordChangeRateLimiter;
+import com.mora.security.OAuthStateService;
+import com.mora.security.OAuthStateService.Provider;
 import com.mora.service.AuthService;
 import com.mora.service.GoogleOAuthService;
 import com.mora.service.KakaoOAuthService;
@@ -18,6 +20,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -84,6 +88,7 @@ public class AuthController {
     private final NaverOAuthService naverOAuthService;
     private final JwtUtil jwtUtil;
     private final PasswordChangeRateLimiter passwordChangeRateLimiter;
+    private final OAuthStateService oauthStateService;
     private final String frontendUrl;
 
     public AuthController(AuthService authService,
@@ -92,6 +97,7 @@ public class AuthController {
                           NaverOAuthService naverOAuthService,
                           JwtUtil jwtUtil,
                           PasswordChangeRateLimiter passwordChangeRateLimiter,
+                          OAuthStateService oauthStateService,
                           @Value("${app.frontend-url:mora://auth}") String frontendUrl) {
         this.authService = authService;
         this.googleOAuthService = googleOAuthService;
@@ -99,6 +105,7 @@ public class AuthController {
         this.naverOAuthService = naverOAuthService;
         this.jwtUtil = jwtUtil;
         this.passwordChangeRateLimiter = passwordChangeRateLimiter;
+        this.oauthStateService = oauthStateService;
         this.frontendUrl = frontendUrl;
     }
 
@@ -132,48 +139,62 @@ public class AuthController {
 
     @GetMapping("/google/login")
     public ResponseEntity<Void> googleLogin() {
-        return redirect(googleOAuthService.authorizationUrl());
+        return oauthLogin(Provider.GOOGLE, googleOAuthService::authorizationUrl);
     }
 
     @GetMapping("/google/callback")
-    public ResponseEntity<Void> googleCallback(@RequestParam("code") String code) {
-        try {
-            AuthResponse response = authService.loginWithOAuth(googleOAuthService.profile(code));
-            return redirect(oauthSuccessUrl(response, "google"));
-        } catch (RuntimeException e) {
-            return redirect(oauthFailureUrl("google"));
-        }
+    public ResponseEntity<Void> googleCallback(@RequestParam(value = "code", required = false) String code,
+                                              @RequestParam(value = "state", required = false) String state,
+                                              HttpServletRequest request) {
+        return oauthCallback(Provider.GOOGLE, code, state, request, () -> googleOAuthService.profile(code));
     }
 
     @GetMapping("/kakao/login")
     public ResponseEntity<Void> kakaoLogin() {
-        return redirect(kakaoOAuthService.authorizationUrl());
+        return oauthLogin(Provider.KAKAO, kakaoOAuthService::authorizationUrl);
     }
 
     @GetMapping("/kakao/callback")
-    public ResponseEntity<Void> kakaoCallback(@RequestParam("code") String code) {
-        try {
-            AuthResponse response = authService.loginWithOAuth(kakaoOAuthService.profile(code));
-            return redirect(oauthSuccessUrl(response, "kakao"));
-        } catch (RuntimeException e) {
-            return redirect(oauthFailureUrl("kakao"));
-        }
+    public ResponseEntity<Void> kakaoCallback(@RequestParam(value = "code", required = false) String code,
+                                             @RequestParam(value = "state", required = false) String state,
+                                             HttpServletRequest request) {
+        return oauthCallback(Provider.KAKAO, code, state, request, () -> kakaoOAuthService.profile(code));
     }
 
     @GetMapping("/naver/login")
     public ResponseEntity<Void> naverLogin() {
-        return redirect(naverOAuthService.authorizationUrl());
+        return oauthLogin(Provider.NAVER, naverOAuthService::authorizationUrl);
     }
 
     @GetMapping("/naver/callback")
-    public ResponseEntity<Void> naverCallback(@RequestParam("code") String code,
-                                              @RequestParam("state") String state) {
+    public ResponseEntity<Void> naverCallback(@RequestParam(value = "code", required = false) String code,
+                                             @RequestParam(value = "state", required = false) String state,
+                                             HttpServletRequest request) {
+        return oauthCallback(Provider.NAVER, code, state, request, () -> naverOAuthService.profile(code, state));
+    }
+
+    private ResponseEntity<Void> oauthLogin(Provider provider, Function<String, String> authorizationUrl) {
+        OAuthStateService.IssuedState issued = oauthStateService.issue(provider);
+        return oauthRedirect(authorizationUrl.apply(issued.state()), issued.cookie().toString());
+    }
+
+    private ResponseEntity<Void> oauthCallback(Provider provider, String code, String state,
+                                              HttpServletRequest request, Supplier<OAuthProfile> profile) {
+        String url;
+        boolean verified = false;
         try {
-            AuthResponse response = authService.loginWithOAuth(naverOAuthService.profile(code, state));
-            return redirect(oauthSuccessUrl(response, "naver"));
+            oauthStateService.verifyAndConsume(provider, state, request);
+            verified = true;
+            if (code == null || code.isBlank() || request.getParameter("error") != null) {
+                throw new IllegalArgumentException("OAuth authorization failed");
+            }
+            AuthResponse response = authService.loginWithOAuth(profile.get());
+            url = oauthSuccessUrl(response, provider.value());
         } catch (RuntimeException e) {
-            return redirect(oauthFailureUrl("naver"));
+            url = oauthFailureUrl(provider.value());
         }
+        // A stale callback must not clear the cookie belonging to a newer login attempt.
+        return oauthRedirect(url, verified ? oauthStateService.clearCookie(provider).toString() : null);
     }
 
     /**
@@ -270,9 +291,12 @@ public class AuthController {
         }
     }
 
-    private ResponseEntity<Void> redirect(String url) {
+    private ResponseEntity<Void> oauthRedirect(String url, String cookie) {
         HttpHeaders headers = new HttpHeaders();
         headers.setLocation(URI.create(url));
+        if (cookie != null) headers.add(HttpHeaders.SET_COOKIE, cookie);
+        headers.setCacheControl("no-store");
+        headers.set("Referrer-Policy", "no-referrer");
         return new ResponseEntity<>(headers, HttpStatus.FOUND);
     }
 

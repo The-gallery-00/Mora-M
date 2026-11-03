@@ -6,6 +6,8 @@ param(
     [string] $Region = "asia-northeast3",
     [string] $ServiceName = "mora-mobile-ocr",
     [string] $UploadPrefix = "uploads",
+    [string] $SharedSecretName = "mora-ocr-service-secret",
+    [Parameter(Mandatory = $true)] [string] $SharedSecretVersion,
     # 메모리 상한. **실측치의 정본은 ADR-002 §0 이다 — 여기에 숫자를 복제하지 않는다.**
     # (숫자를 여러 파일에 복제한 것이 이번 조사에서 같은 입력의 값이 셋으로 갈리게 만든 원인이다.
     #  Risks.md §5 규칙 8 과 ADR-002 §0 의 정본 선언이 같은 취지다.)
@@ -149,7 +151,8 @@ $deployArgs = @(
     "--project", $ProjectId,
     "--region", $Region,
     "--image", $Image,
-    "--set-env-vars", $environment,
+    "--update-env-vars", $environment,
+    "--update-secrets", "OCR_SHARED_SECRET=${SharedSecretName}:$SharedSecretVersion",
     "--memory", $Memory,
     "--cpu", $Cpu,
     "--timeout", $TimeoutSeconds,

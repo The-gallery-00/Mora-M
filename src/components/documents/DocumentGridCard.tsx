@@ -6,7 +6,6 @@
 // 원본은 구 다크 오렌지 테마(`bg-white/[0.02]`, `text-white`, `#FF8A3D`)라 색을 의미론적 토큰으로
 // 전면 교체했다. 구조(썸네일 + 제목 + 부제)와 제목 정규화 규칙은 그대로 계승한다.
 // 원본 우상단 삭제 버튼 + `ConfirmPopover` 는 제거하고 롱프레스 ActionSheet 로 대체한다(CMP-30 결정).
-import { Image } from 'expo-image';
 import { memo, useCallback, useState, type ReactNode } from 'react';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -16,6 +15,7 @@ import { TYPE_LABELS, type DocumentType } from '@/features/scan/types';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fontScale } from '@/theme/scale';
 
+import { DocumentImage } from './DocumentImage';
 import {
   DocPlaceholderIcon,
   DocTypeBadge,
@@ -24,7 +24,7 @@ import {
 
 export interface DocumentGridCardProps {
   docType: DocumentType;
-  /** 서버 상대경로면 `resolveImageUrl` 이 OCR 베이스로 조립한다 */
+  /** 서버 상대경로면 인증된 Spring 이미지 경로로 조립한다 */
   imageUri?: string | null;
   title: string;
   subtitle?: string;
@@ -119,16 +119,13 @@ function DocumentGridCardBase({
           style={{ aspectRatio }}
         >
           {showImage ? (
-            <Image
-              source={{ uri }}
+            <DocumentImage
+              uri={uri}
               style={{ width: '100%', height: '100%' }}
               // 비율은 컨테이너가 잡고 이미지는 cover — 원본 `object-cover` 대응
               contentFit="cover"
               // Networking §4-4 / Offline and State §7-1 — 150ms 페이드
               transition={150}
-              cachePolicy="memory-disk"
-              // FlashList 셀 재활용 시 이전 카드 이미지가 남는 것을 막는다 (§7-2 "필수 조합")
-              recyclingKey={uri}
               onError={() => setFailedUri(uri)}
               accessibilityIgnoresInvertColors
             />

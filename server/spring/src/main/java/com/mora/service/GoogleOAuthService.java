@@ -38,12 +38,13 @@ public class GoogleOAuthService {
         this.redirectUri = redirectUri;
     }
 
-    public String authorizationUrl() {
+    public String authorizationUrl(String state) {
         validateConfigured();
         return UriComponentsBuilder.fromUriString(AUTH_URL)
                 .queryParam("client_id", clientId)
                 .queryParam("redirect_uri", redirectUri)
                 .queryParam("response_type", "code")
+                .queryParam("state", state)
                 .queryParam("scope", "openid email profile")
                 .queryParam("prompt", "select_account")
                 .build()

@@ -41,14 +41,20 @@ public class ReceiptService {
 
     private final ReceiptRepository receiptRepository;
     private final EmbeddingService embeddingService;
+    private final StoredImageService storedImageService;
 
-    public ReceiptService(ReceiptRepository receiptRepository, EmbeddingService embeddingService) {
+    public ReceiptService(ReceiptRepository receiptRepository, EmbeddingService embeddingService,
+                          StoredImageService storedImageService) {
         this.receiptRepository = receiptRepository;
         this.embeddingService = embeddingService;
+        this.storedImageService = storedImageService;
     }
 
     @Transactional
     public ReceiptResponse save(UUID userId, ReceiptSaveRequest request) {
+        storedImageService.lockOwner(userId);
+        String parsedJson = storedImageService.normalizeOwnedJson(userId, request.getParsedJson());
+        String rawJson = storedImageService.normalizeOwnedJson(userId, request.getRawJson());
         String rawTextJoined = joinRawText(request.getRawText());
 
         Receipt receipt = new Receipt();
@@ -56,8 +62,8 @@ public class ReceiptService {
         receipt.setDocType(defaultIfBlank(request.getDocType(), "RECEIPT"));
         applyFields(receipt, request);
         receipt.setRawText(rawTextJoined);
-        receipt.setParsedJson(request.getParsedJson());
-        receipt.setRawJson(request.getRawJson());
+        receipt.setParsedJson(parsedJson);
+        receipt.setRawJson(rawJson);
         receipt.replaceItems(toItems(request.getItems()));
         receipt.setEmbedding(embeddingService.getEmbedding(rawTextJoined));
 
@@ -78,13 +84,19 @@ public class ReceiptService {
 
     @Transactional
     public ReceiptResponse update(UUID userId, Integer receiptId, ReceiptSaveRequest request) {
+        storedImageService.lockOwner(userId);
         Receipt receipt = receiptRepository.findByIdAndUserId(receiptId, userId)
                 .orElseThrow(() -> new RuntimeException("Receipt not found or unauthorized"));
 
+        Set<String> oldImages = storedImageService.referencesInJson(receipt.getParsedJson(), receipt.getRawJson());
+        String parsedJson = storedImageService.normalizeOwnedJson(userId,
+                request.getParsedJson() != null ? request.getParsedJson() : receipt.getParsedJson());
+        String rawJson = storedImageService.normalizeOwnedJson(userId,
+                request.getRawJson() != null ? request.getRawJson() : receipt.getRawJson());
         if (request.getDocType() != null) receipt.setDocType(defaultIfBlank(request.getDocType(), "RECEIPT"));
         applyFields(receipt, request);
-        if (request.getParsedJson() != null) receipt.setParsedJson(request.getParsedJson());
-        if (request.getRawJson() != null) receipt.setRawJson(request.getRawJson());
+        receipt.setParsedJson(parsedJson);
+        receipt.setRawJson(rawJson);
         if (request.getItems() != null) receipt.replaceItems(toItems(request.getItems()));
 
         if (request.getRawText() != null && !request.getRawText().isEmpty()) {
@@ -93,14 +105,21 @@ public class ReceiptService {
             receipt.setEmbedding(embeddingService.getEmbedding(rawTextJoined));
         }
 
-        return ReceiptResponse.from(receiptRepository.save(receipt));
+        receipt = receiptRepository.save(receipt);
+        receiptRepository.flush();
+        for (String image : oldImages) storedImageService.deleteIfUnreferenced(userId, image);
+        return ReceiptResponse.from(receipt);
     }
 
     @Transactional
     public void delete(UUID userId, Integer receiptId) {
+        storedImageService.lockOwner(userId);
         Receipt receipt = receiptRepository.findByIdAndUserId(receiptId, userId)
                 .orElseThrow(() -> new RuntimeException("Receipt not found or unauthorized"));
+        Set<String> images = storedImageService.referencesInJson(receipt.getParsedJson(), receipt.getRawJson());
         receiptRepository.delete(receipt);
+        receiptRepository.flush();
+        for (String image : images) storedImageService.deleteIfUnreferenced(userId, image);
     }
 
     // 하이브리드 검색: fuzzy(pg_trgm)*0.6 + vector(pgvector)*0.4, 결합점수 0.4 미만 제외

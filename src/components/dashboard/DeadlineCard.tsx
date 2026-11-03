@@ -8,7 +8,6 @@
 //
 // 색 규칙(SCR-06 구성 요소 표): D-day 는 `dDay <= 3` 이면 마감색, 아니면 포인트색.
 // 정본 HEX `#DC8540` / `#0077B6` 는 각각 `deadline` / `action` 토큰이다 — HEX 를 적지 않는다.
-import { Image } from "expo-image";
 import { memo, useState } from "react";
 import {
   Pressable,
@@ -19,6 +18,7 @@ import {
 } from "react-native";
 
 import { resolveImageUrl } from "@/config/env";
+import { DocumentImage } from "@/components/documents/DocumentImage";
 import { useTheme } from "@/theme/ThemeProvider";
 
 /** 마감 대상은 티켓·포스터 2종뿐이다 (서버 `DeadlineNotificationScheduler` 기준). */
@@ -178,12 +178,11 @@ function DeadlineCardBase({
         }}
       >
         {showImage ? (
-          <Image
-            source={{ uri }}
+          <DocumentImage
+            uri={uri}
             style={{ width: "100%", height: "100%" }}
             contentFit="cover"
             transition={200}
-            cachePolicy="memory-disk"
             onError={() => setFailed(true)}
             accessibilityIgnoresInvertColors
           />

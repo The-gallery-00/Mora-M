@@ -24,7 +24,6 @@
 // 라벨·순서가 상세 화면과 어긋나는 위험은 이 파일의 `EDITABLE` 표 하나로 막는다.
 import { zodResolver } from '@hookform/resolvers/zod';
 import NetInfo from '@react-native-community/netinfo';
-import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, type Resolver } from 'react-hook-form';
@@ -39,6 +38,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { DocumentImage } from '@/components/documents/DocumentImage';
 import { z } from 'zod';
 
 import { DocPlaceholderIcon } from '@/components/documents';
@@ -592,8 +593,8 @@ export default function DocumentEditScreen() {
           style={{ height: IMAGE_HEIGHT, borderRadius: radius.card }}
         >
           {imageUrl && !imageFailed ? (
-            <Image
-              source={{ uri: imageUrl }}
+            <DocumentImage
+              uri={imageUrl}
               contentFit="contain"
               transition={160}
               style={{ width: '100%', height: '100%' }}

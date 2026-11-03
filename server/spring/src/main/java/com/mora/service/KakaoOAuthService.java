@@ -38,12 +38,13 @@ public class KakaoOAuthService {
         this.redirectUri = redirectUri;
     }
 
-    public String authorizationUrl() {
+    public String authorizationUrl(String state) {
         validateConfigured();
         return UriComponentsBuilder.fromUriString(AUTH_URL)
                 .queryParam("client_id", clientId)
                 .queryParam("redirect_uri", redirectUri)
                 .queryParam("response_type", "code")
+                .queryParam("state", state)
                 .queryParam("scope", "account_email,profile_nickname,profile_image")
                 .build()
                 .encode()

@@ -24,7 +24,7 @@ class DocumentDateOrderValidationTest {
     @Test
     void ticketUpdateRejectsArrivalDateBeforeDepartureDate() {
         TicketRepository repository = mock(TicketRepository.class);
-        TicketService service = new TicketService(repository, mock(EmbeddingService.class));
+        TicketService service = new TicketService(repository, mock(EmbeddingService.class), mock(StoredImageService.class));
         UUID userId = UUID.randomUUID();
         Ticket ticket = new Ticket();
         ticket.setId(1);
@@ -47,7 +47,7 @@ class DocumentDateOrderValidationTest {
     @Test
     void posterUpdateRejectsEndDateBeforeStartDate() {
         PosterRepository repository = mock(PosterRepository.class);
-        PosterService service = new PosterService(repository, mock(EmbeddingService.class));
+        PosterService service = new PosterService(repository, mock(EmbeddingService.class), mock(StoredImageService.class));
         UUID userId = UUID.randomUUID();
         Poster poster = new Poster();
         poster.setId(1);

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
 import java.time.format.DateTimeFormatter;
@@ -33,16 +34,23 @@ public class TicketService {
 
     private final TicketRepository ticketRepository;
     private final EmbeddingService embeddingService;
+    private final StoredImageService storedImageService;
 
-    public TicketService(TicketRepository ticketRepository, EmbeddingService embeddingService) {
+    public TicketService(TicketRepository ticketRepository, EmbeddingService embeddingService,
+                         StoredImageService storedImageService) {
         this.ticketRepository = ticketRepository;
         this.embeddingService = embeddingService;
+        this.storedImageService = storedImageService;
     }
 
+    @Transactional
     public TicketResponse save(UUID userId, TicketRequest request) {
+        storedImageService.lockOwner(userId);
         LocalDate departureDate = parseDate(request.getDepartureDate());
         LocalDate arrivalDate = parseDate(request.getArrivalDate());
         validateDateOrder(departureDate, arrivalDate);
+        String parsedJson = storedImageService.normalizeOwnedJson(userId, request.getParsedJson());
+        String rawJson = storedImageService.normalizeOwnedJson(userId, request.getRawJson());
         String rawTextJoined = joinRawText(request.getRawText());
         String embedding = embeddingService.getEmbedding(rawTextJoined);
 
@@ -58,8 +66,8 @@ public class TicketService {
         ticket.setArrivalDate(arrivalDate);
         ticket.setArrivalTime(parseTime(request.getArrivalTime()));
         ticket.setRawText(rawTextJoined);
-        ticket.setParsedJson(request.getParsedJson());
-        ticket.setRawJson(request.getRawJson());
+        ticket.setParsedJson(parsedJson);
+        ticket.setRawJson(rawJson);
         ticket.setEmbedding(embedding);
 
         ticket = ticketRepository.save(ticket);
@@ -78,7 +86,9 @@ public class TicketService {
                 .map(TicketResponse::from);
     }
 
+    @Transactional
     public TicketResponse update(UUID userId, Integer ticketId, TicketRequest request) {
+        storedImageService.lockOwner(userId);
         Ticket ticket = ticketRepository.findByIdAndUserId(ticketId, userId)
                 .orElseThrow(() -> new RuntimeException("Ticket not found or unauthorized"));
 
@@ -87,6 +97,11 @@ public class TicketService {
         LocalDate arrivalDate = request.getArrivalDate() != null
                 ? parseDate(request.getArrivalDate()) : ticket.getArrivalDate();
         validateDateOrder(departureDate, arrivalDate);
+        Set<String> oldImages = storedImageService.referencesInJson(ticket.getParsedJson(), ticket.getRawJson());
+        String parsedJson = storedImageService.normalizeOwnedJson(userId,
+                request.getParsedJson() != null ? request.getParsedJson() : ticket.getParsedJson());
+        String rawJson = storedImageService.normalizeOwnedJson(userId,
+                request.getRawJson() != null ? request.getRawJson() : ticket.getRawJson());
 
         if (request.getDocType() != null) ticket.setDocType(request.getDocType());
         if (request.getClassificationConfidence() != null) ticket.setClassificationConfidence(request.getClassificationConfidence());
@@ -97,8 +112,8 @@ public class TicketService {
         if (request.getArrivalLocation() != null) ticket.setArrivalLocation(request.getArrivalLocation());
         if (request.getArrivalDate() != null) ticket.setArrivalDate(arrivalDate);
         if (request.getArrivalTime() != null) ticket.setArrivalTime(parseTime(request.getArrivalTime()));
-        if (request.getParsedJson() != null) ticket.setParsedJson(request.getParsedJson());
-        if (request.getRawJson() != null) ticket.setRawJson(request.getRawJson());
+        ticket.setParsedJson(parsedJson);
+        ticket.setRawJson(rawJson);
 
         if (request.getRawText() != null && !request.getRawText().isEmpty()) {
             String rawTextJoined = joinRawText(request.getRawText());
@@ -107,13 +122,20 @@ public class TicketService {
         }
 
         ticket = ticketRepository.save(ticket);
+        ticketRepository.flush();
+        for (String image : oldImages) storedImageService.deleteIfUnreferenced(userId, image);
         return TicketResponse.from(ticket);
     }
 
+    @Transactional
     public void delete(UUID userId, Integer ticketId) {
+        storedImageService.lockOwner(userId);
         Ticket ticket = ticketRepository.findByIdAndUserId(ticketId, userId)
                 .orElseThrow(() -> new RuntimeException("Ticket not found or unauthorized"));
+        Set<String> images = storedImageService.referencesInJson(ticket.getParsedJson(), ticket.getRawJson());
         ticketRepository.delete(ticket);
+        ticketRepository.flush();
+        for (String image : images) storedImageService.deleteIfUnreferenced(userId, image);
     }
 
     // 하이브리드 검색: fuzzy(pg_trgm)*0.6 + vector(pgvector)*0.4, 결합점수 0.4 미만 제외

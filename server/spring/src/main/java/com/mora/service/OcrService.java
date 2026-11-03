@@ -75,25 +75,8 @@ import java.util.Map;
  * 같은 이미지를 재전송하면 갓 살아난 인스턴스를 다시 죽여 다운타임을 증폭시킬 뿐이다.
  * 재시도 판단은 사용자가(앱의 재시도 버튼으로) 내린다.
  *
- * [로깅 정책 — 서버 로그에는 스택트레이스를 남긴다]
- * ───────────────────────────────────────────
- * 한때 이 클래스는 `log.error("... (type={})", e.getClass().getSimpleName())` 처럼
- * **예외 타입명 한 단어만** 남기고 예외 객체를 버렸다. 그 결과 `file.getBytes()`가
- * IOException을 던져도 "어느 줄에서 무엇을 읽다 실패했는지" 알 방법이 아예 없어졌다.
- *
- * 그 판단은 틀렸다. **정보 은닉의 대상은 클라이언트 응답 본문이지 서버 로그가 아니다.**
- * Cloud Run 로그는 클라이언트에게 노출되지 않으며, 이 브랜치의 목표는 "장애 원인이
- * 서버로 곧장 좁혀지게" 하는 것이다. 스택트레이스를 지우면 그 목표를 스스로 깬다.
- *
- * 그래서 지금은:
- *  - 서버 로그  : `log.error(형식, 인자..., e)` 로 예외 객체를 마지막 인자에 넘겨
- *                 slf4j가 스택트레이스 전문을 찍게 한다. 업스트림 응답 본문이 예외
- *                 메시지에 섞여 들어와도 그대로 둔다 — 진단에 필요한 바로 그 정보다.
- *                 I/O 실패에는 판정된 Kind와 cause 타입명까지 같이 찍는다. 로그만 보고
- *                 "왜 503이 나갔나 / 왜 504가 나갔나"를 되짚을 수 있어야 하기 때문이다.
- *  - 응답 본문  : CardController가 손으로 조립한 문자열(상태코드 숫자 정도)만 나간다.
- *                 예외 메시지·본문·URL·파일명은 절대 실리지 않는다.
- *                 `application.yml`의 `server.error.include-*: never`(3efa5b7)가 2차 방어다.
+ * Logs retain only status and exception type. HTTP exceptions may contain image
+ * paths, request bodies or credentials, so never log the exception itself.
  *
  * [메서드 목록]
  * - scan(MultipartFile file): 이미지를 OCR 서버에 보내고 인식 결과를 Map으로 반환한다.
@@ -189,6 +172,7 @@ public class OcrService {
 
     /** OCR 이미지 삭제 전용 (connect 5초 / read 10초). 앱의 DEFAULT_TIMEOUT_MS(15초)보다 짧다. */
     private final RestTemplate deleteRestTemplate;
+    private final com.mora.security.OcrAccessTokens accessTokens;
 
     @Value("${app.ocr-service-url}")
     private String ocrServiceUrl;
@@ -196,9 +180,11 @@ public class OcrService {
     // 스캔과 삭제는 같은 업스트림이지만 **앱이 기다려 주는 시간이 다르다** → 빈도 다르다.
     // 근거는 위 [RestTemplate 두 개를 주입받는 이유]와 RestTemplateConfig의 [타임아웃 표] 참조.
     public OcrService(@Qualifier("ocrScanRestTemplate") RestTemplate scanRestTemplate,
-                      @Qualifier("ocrDeleteRestTemplate") RestTemplate deleteRestTemplate) {
+                      @Qualifier("ocrDeleteRestTemplate") RestTemplate deleteRestTemplate,
+                      com.mora.security.OcrAccessTokens accessTokens) {
         this.scanRestTemplate = scanRestTemplate;
         this.deleteRestTemplate = deleteRestTemplate;
+        this.accessTokens = accessTokens;
     }
 
     /**
@@ -217,6 +203,7 @@ public class OcrService {
             // 외부 OCR 서버로 보낼 HTTP 헤더 설정 (multipart/form-data)
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            headers.setBearerAuth(accessTokens.issue("scan", null));
 
             // MultipartFile → ByteArrayResource 변환 (RestTemplate이 전송할 수 있는 형태)
             // getFilename()을 오버라이드해야 파일명이 multipart 파트에 포함된다
@@ -264,23 +251,20 @@ public class OcrService {
             // 500이면 FastAPI 추론 실패, 422면 multipart 계약 위반이다.
             // 이 숫자를 잃으면 원인 구분이 불가능해진다.
             //
-            // 로그에 e를 넘겨 스택트레이스와 함께 업스트림 응답 본문까지 남긴다.
-            // FastAPI의 422 본문에는 "어느 파트가 없다"가 그대로 적혀 있어 계약 위반을 즉시 특정할 수 있다.
+            // Keep upstream status without logging response bodies or credentials.
             int status = e.getStatusCode().value();
-            log.error("OCR scan upstream returned {} (type={})", status, e.getClass().getSimpleName(), e);
+            log.error("OCR scan upstream returned {} (type={})", status, e.getClass().getSimpleName());
             throw OcrUpstreamException.ofStatus(status, e);
         } catch (ResourceAccessException e) {
             // 응답 자체를 받지 못했다. "못 붙었다(UNREACHABLE)"와 "느렸다(TIMEOUT)"는
             // 사용자에게 정반대의 안내가 나가야 하므로 cause로 갈라낸다.
             OcrUpstreamException mapped = classifyIoFailure(e);
             log.error("OCR scan upstream I/O failure kind={} (type={}, cause={})",
-                    mapped.getKind(), e.getClass().getSimpleName(), causeTypeName(e), e);
+                    mapped.getKind(), e.getClass().getSimpleName(), causeTypeName(e));
             throw mapped;
         } catch (Exception e) {
-            // 파일 읽기(IOException) 등 업스트림 이전 단계의 실패.
-            // 타입명만 남기면 "어느 줄에서 무엇을 읽다 실패했는지"를 알 방법이 없다 → e를 그대로 넘긴다.
-            // 클라이언트에게는 CardController가 조립한 "OCR processing failed"만 나가므로 유출이 아니다.
-            log.error("OCR scan failed before upstream (type={})", e.getClass().getSimpleName(), e);
+            // File or serialization failures must not disclose the uploaded document.
+            log.error("OCR scan failed before upstream (type={})", e.getClass().getSimpleName());
             throw new RuntimeException("OCR service call failed", e);
         }
     }
@@ -294,6 +278,47 @@ public class OcrService {
         headers.setContentType(MediaType.parseMediaType(
                 file.getContentType() != null ? file.getContentType() : "application/octet-stream"));
         return headers;
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> commit(MultipartFile file, String documentType,
+                                      String rawBlocks, String correctedFields) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            headers.setBearerAuth(accessTokens.issue("commit", null));
+            ByteArrayResource resource = new ByteArrayResource(file.getBytes()) {
+                @Override
+                public String getFilename() { return file.getOriginalFilename(); }
+            };
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new HttpEntity<>(resource, createFileHeaders(file)));
+            body.add("document_type", documentType);
+            body.add("raw_blocks", rawBlocks);
+            body.add("corrected_fields", correctedFields);
+            return scanRestTemplate.exchange(ocrServiceUrl + "/api/commit", HttpMethod.POST,
+                    new HttpEntity<>(body, headers), Map.class).getBody();
+        } catch (RestClientResponseException e) {
+            throw OcrUpstreamException.ofStatus(e.getStatusCode().value(), e);
+        } catch (ResourceAccessException e) {
+            throw classifyIoFailure(e);
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("OCR upload could not be read", e);
+        }
+    }
+
+    public ResponseEntity<byte[]> fetchImage(String imageName) {
+        validateImageName(imageName);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessTokens.issue("read", imageName));
+        return deleteRestTemplate.exchange(ocrServiceUrl + "/uploads/" + imageName,
+                HttpMethod.GET, new HttpEntity<>(headers), byte[].class);
+    }
+
+    private void validateImageName(String name) {
+        if (name == null || !name.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,199}")) {
+            throw new IllegalArgumentException("Invalid image reference");
+        }
     }
 
     /**
@@ -314,22 +339,24 @@ public class OcrService {
      * @throws RuntimeException 그 외 예기치 못한 실패
      */
     public void deleteImage(String imageName) {
+        validateImageName(imageName);
         try {
-            deleteRestTemplate.delete(ocrServiceUrl + "/uploads/" + imageName);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessTokens.issue("delete", imageName));
+            deleteRestTemplate.exchange(ocrServiceUrl + "/uploads/" + imageName,
+                    HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
         } catch (RestClientResponseException e) {
-            // scan()과 같은 이유로 e를 로그에 넘긴다 (위 [로깅 정책] 참조).
-            // 삭제 실패는 AuthService.deleteAccount()의 트랜잭션을 롤백시켜 유저 row를 남기므로,
-            // 왜 실패했는지가 로그에 없으면 "계정이 안 지워진다"는 신고를 추적할 수 없다.
+            // Failure leaves database ownership in place for a retry.
             int status = e.getStatusCode().value();
-            log.error("OCR image delete upstream returned {} (type={})", status, e.getClass().getSimpleName(), e);
+            log.error("OCR image delete upstream returned {} (type={})", status, e.getClass().getSimpleName());
             throw OcrUpstreamException.ofStatus(status, e);
         } catch (ResourceAccessException e) {
             OcrUpstreamException mapped = classifyIoFailure(e);
             log.error("OCR image delete upstream I/O failure kind={} (type={}, cause={})",
-                    mapped.getKind(), e.getClass().getSimpleName(), causeTypeName(e), e);
+                    mapped.getKind(), e.getClass().getSimpleName(), causeTypeName(e));
             throw mapped;
         } catch (Exception e) {
-            log.error("OCR image delete failed (type={})", e.getClass().getSimpleName(), e);
+            log.error("OCR image delete failed (type={})", e.getClass().getSimpleName());
             throw new RuntimeException("OCR image delete failed", e);
         }
     }

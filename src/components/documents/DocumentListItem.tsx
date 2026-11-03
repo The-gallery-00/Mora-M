@@ -8,7 +8,6 @@
 //
 // 색은 전부 NativeWind 토큰 클래스다. `card/ticket/poster/receipt` 는 tailwind.config.js 의
 // 문서 4종 그룹(§10-4)이고, `-bg` 접미사가 배경, 접미사 없는 쪽이 전경(fg)이다.
-import { Image } from 'expo-image';
 import { memo, useState, type ReactNode } from 'react';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
@@ -16,6 +15,8 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { resolveImageUrl } from '@/config/env';
 import { TYPE_LABELS, type DocumentType } from '@/features/scan/types';
 import { useTheme } from '@/theme/ThemeProvider';
+
+import { DocumentImage } from './DocumentImage';
 
 import { SwipeableRow, type SwipeAction } from './SwipeableRow';
 
@@ -132,7 +133,7 @@ export function normalizeDocumentTitle(title: string): string {
 
 export interface DocumentListItemProps {
   docType: DocumentType;
-  /** 서버 상대경로면 `resolveImageUrl` 이 OCR 베이스로 조립한다(Spring 이 아니다) */
+  /** 서버 상대경로면 인증된 Spring 이미지 경로로 조립한다 */
   imageUri?: string | null;
   title: string;
   subtitle?: string;
@@ -212,16 +213,12 @@ function DocumentListItemBase({
         style={{ width: THUMB_WIDTH, height: THUMB_HEIGHT }}
       >
         {showImage ? (
-          <Image
-            source={{ uri }}
+          <DocumentImage
+            uri={uri}
             style={{ width: '100%', height: '100%' }}
             contentFit="cover"
             // Networking §4-4 / Offline and State §7-1 — 150ms 페이드
             transition={150}
-            // 파일명이 uuid4 hex 라 URL 이 불변이다 → 디스크 캐시가 순이득이고 무효화 고민이 없다
-            cachePolicy="memory-disk"
-            // FlashList 셀 재활용 시 이전 이미지 잔상을 막는다 (Offline and State §7-2 "필수 조합")
-            recyclingKey={uri}
             onError={() => setFailedUri(uri)}
             // OS '색상 반전' 이 문서 이미지를 뒤집는 것을 막는다 (앱 테마와 무관한 별개 기능)
             accessibilityIgnoresInvertColors

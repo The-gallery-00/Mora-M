@@ -27,10 +27,15 @@ Implemented today:
 - Search-history recording, listing, and full deletion for all four document searches
 - Flyway-managed schema and Cloud Run Secret Manager deployment script
 
-Still required for the final mobile app:
+The release security branch adds authenticated image access through Spring,
+image ownership validation for all four document types, full image deletion,
+and browser-bound, single-use OAuth state checks. These changes require the
+coordinated app/server rollout in
+[`RELEASE_SECURITY.md`](RELEASE_SECURITY.md); code presence does not mean they
+are already active in production.
 
-- GCS-backed image storage instead of local `/uploads`
-- Actual Google Cloud secret creation/deployment and production OAuth redirect verification
+Still required for the final mobile app: actual Google Calendar integration,
+the chat API, production OAuth end-to-end verification, and release QA.
 
 ## Local Development
 
@@ -61,7 +66,8 @@ For store-ready mobile deployment:
 - Image storage: Google Cloud Storage
 - App build: EAS production AAB
 
-Do not deploy the current local `/uploads` storage model to production. Cloud Run instances are stateless, so local images can disappear when instances are replaced.
+Production uses GCS when `GCS_BUCKET_NAME` is configured. Never use local-only
+uploads in production: Cloud Run instance files are temporary.
 
 ## Production Environment Variables
 
@@ -71,12 +77,14 @@ Do not deploy the current local `/uploads` storage model to production. Cloud Ru
 GCS_BUCKET_NAME=mora-mobile-uploads
 GCS_UPLOAD_PREFIX=uploads
 MORA_UPLOAD_DIR=/tmp/mora-uploads
+OCR_SHARED_SECRET=...  # Secret Manager; same dedicated service secret as Spring
 ```
 
 `GCS_BUCKET_NAME` enables durable image storage. The OCR service still uses a
 temporary local file so PaddleOCR can read the image, then uploads the original
 to GCS. App-facing image URLs remain `/uploads/{file}` and are served back by
-the OCR service, so the GCS bucket can stay private.
+the OCR service to the authenticated Spring gateway, so the GCS bucket can stay
+private. The app must not load originals directly from the OCR service.
 
 ### Spring Cloud Run
 
@@ -87,6 +95,7 @@ DATABASE_PASSWORD=...
 JWT_SECRET=...
 JWT_EXPIRATION=1209600000
 OCR_SERVICE_URL=https://mora-mobile-ocr-xxxxx.a.run.app
+OCR_SHARED_SECRET=...  # required, separate from JWT_SECRET; Secret Manager in production
 OPENAI_API_KEY=...  # local development only; production uses Secret Manager
 ```
 

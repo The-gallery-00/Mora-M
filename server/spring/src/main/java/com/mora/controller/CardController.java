@@ -9,12 +9,15 @@ import com.mora.service.CardService;
 import com.mora.service.OcrService;
 import com.mora.service.OcrUpstreamException;
 import com.mora.service.SearchHistoryService;
+import com.mora.service.StoredImageService;
+import com.mora.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -28,25 +31,33 @@ public class CardController {
     private final OcrService ocrService;
     private final JwtUtil jwtUtil;
     private final SearchHistoryService searchHistoryService;
+    private final StoredImageService images;
+    private final UserRepository users;
 
-    public CardController(CardService cardService, OcrService ocrService, JwtUtil jwtUtil, SearchHistoryService searchHistoryService) {
+    public CardController(CardService cardService, OcrService ocrService, JwtUtil jwtUtil,
+                          SearchHistoryService searchHistoryService, StoredImageService images,
+                          UserRepository users) {
         this.cardService = cardService;
         this.ocrService = ocrService;
         this.jwtUtil = jwtUtil;
         this.searchHistoryService = searchHistoryService;
+        this.images = images;
+        this.users = users;
     }
 
     private UUID getUserId(HttpServletRequest request) {
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) return null;
+        UUID userId;
         try {
-            return jwtUtil.getUserId(header.substring(7));
+            userId = jwtUtil.getUserId(header.substring(7));
         } catch (Exception e) {
             return null;
         }
+        return users.existsById(userId) ? userId : null;
     }
 
-    // 비회원도 OCR 스캔 가능
+    // OCR requests require an active authenticated account.
     //
     // 업스트림(Python OCR) 실패는 500으로 뭉개지 않는다. 예전에는 전부 500 "OCR processing failed"
     // 였고, 앱은 SCF-09 "서버 에러 (500)" 만 띄웠다 — OCR 인스턴스가 죽어 503이 나던 실제 원인이
@@ -93,10 +104,19 @@ public class CardController {
     // OCR 의 Form("BUSINESS_CARD") 한 곳이다. 여기에 defaultValue 를 적으면 두 곳이 갈라진다.
     @PostMapping("/scan")
     public ResponseEntity<ApiResponse<Map<String, Object>>> scan(
+            HttpServletRequest request,
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "document_type", required = false) String documentType) {
+        UUID userId = getUserId(request);
+        if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
         try {
             Map<String, Object> result = ocrService.scan(file, documentType);
+            if (result == null || !Boolean.TRUE.equals(result.get("success"))
+                    || !(result.get("data") instanceof Map<?, ?> data)
+                    || !(data.get("image_url") instanceof String imageUrl) || imageUrl.isBlank()) {
+                return ResponseEntity.status(502).body(ApiResponse.fail("Invalid OCR response"));
+            }
+            images.registerUpload(userId, imageUrl);
             return ResponseEntity.ok(ApiResponse.ok(result));
         } catch (OcrUpstreamException e) {
             // if 사슬 대신 **switch 식**을 쓴다. 갈래를 하나 빠뜨리면 조용히 마지막 else 로
@@ -118,6 +138,8 @@ public class CardController {
                 case TIMEOUT -> ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
                         .body(ApiResponse.<Map<String, Object>>fail("OCR upstream timeout"));
             };
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Request not permitted"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail("OCR processing failed"));
         }
@@ -132,6 +154,8 @@ public class CardController {
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             CardResponse response = cardService.save(userId, body);
             return ResponseEntity.ok(ApiResponse.ok(response));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
         }
@@ -178,6 +202,8 @@ public class CardController {
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             CardResponse response = cardService.update(userId, id, body);
             return ResponseEntity.ok(ApiResponse.ok(response));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
         }
@@ -206,6 +232,8 @@ public class CardController {
             if (userId == null) return ResponseEntity.status(401).body(ApiResponse.fail("Login required"));
             cardService.delete(userId, id);
             return ResponseEntity.ok(ApiResponse.ok(null));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.fail("Invalid image reference"));
         } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().body(ApiResponse.fail("Request failed"));
         }

@@ -101,7 +101,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image, ImageDraw, ImageFont
 
@@ -110,8 +110,9 @@ from services import pipeline, parsing_skill
 from src.classifier.doc_type import classify_document
 from src.classifier.field_schema import DOCUMENT_FIELDS, FIELD_LABELS_KO
 from storage import is_gcs_enabled, persist_image, save_upload_file
+from access import is_auth_configured, require_ocr_access
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_ocr_access)])
 
 # /health 는 /api prefix 아래가 아니라 루트여야 한다 (앱 진단 화면 계약).
 # 그래서 scan/commit 용 router 와 분리된 라우터로 두고 app.py 에서 prefix 없이 등록한다.
@@ -529,6 +530,12 @@ async def health():
     로그에도 type(exc).__name__ 만 남긴다.
     """
     global _health_cache, _health_cache_at, _health_cache_status
+
+    if not is_auth_configured():
+        return JSONResponse(status_code=503, content={
+            "status": "degraded", "service": SERVICE_NAME, "version": SERVICE_VERSION,
+            "ocr": "not-run", "error": "OCR authentication is not configured",
+        })
 
     # TTL 안이면 추론을 다시 돌리지 않고 캐시된 값을 즉시 반환한다.
     # 성공/실패에 서로 다른 TTL 을 적용한다 (상수 정의부의 근거 참조).

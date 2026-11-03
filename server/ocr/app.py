@@ -97,7 +97,7 @@ os.environ["FLAGS_enable_pir_in_executor"] = "0"
 os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
 os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # ── Path Setup ──
@@ -107,6 +107,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from routers import ocr  # noqa: E402
 from storage import get_upload_response, delete_image  # noqa: E402
+from access import require_ocr_access  # noqa: E402
 
 # ── App Setup ──
 # FastAPI 인스턴스 생성 (Swagger UI에서 title/version 표시됨).
@@ -131,13 +132,13 @@ app.include_router(ocr.router, prefix="/api", tags=["OCR"])
 # 앱 진단 화면·Cloud Run 헬스체크가 보는 경로가 이것이다 (예전에는 404였다).
 app.include_router(ocr.health_router, tags=["Health"])
 
-@app.get("/uploads/{image_name}")
+@app.get("/uploads/{image_name}", dependencies=[Depends(require_ocr_access)])
 def uploaded_image(image_name: str):
     """Serve uploaded originals from GCS in production or disk in local dev."""
     return get_upload_response(image_name)
 
 
-@app.delete("/uploads/{image_name}")
+@app.delete("/uploads/{image_name}", dependencies=[Depends(require_ocr_access)])
 def delete_uploaded_image(image_name: str):
     # Spring 계정 삭제 로직이 명함 이미지를 지울 때 호출한다
     delete_image(image_name)

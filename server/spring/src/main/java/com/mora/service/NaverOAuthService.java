@@ -11,7 +11,6 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 public class NaverOAuthService {
@@ -36,13 +35,13 @@ public class NaverOAuthService {
         this.redirectUri = redirectUri;
     }
 
-    public String authorizationUrl() {
+    public String authorizationUrl(String state) {
         validateConfigured();
         return UriComponentsBuilder.fromUriString(AUTH_URL)
                 .queryParam("response_type", "code")
                 .queryParam("client_id", clientId)
                 .queryParam("redirect_uri", redirectUri)
-                .queryParam("state", UUID.randomUUID().toString())
+                .queryParam("state", state)
                 .build()
                 .encode()
                 .toUriString();

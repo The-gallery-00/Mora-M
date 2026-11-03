@@ -16,6 +16,8 @@ services:
       context: ./ocr
     ports:
       - "8000:8000"
+    environment:
+      OCR_SHARED_SECRET: ${MORA_OCR_SHARED_SECRET:-local-only-ocr-service-secret-change-me}
     volumes:
       - mora_uploads:/uploads
 
@@ -29,7 +31,8 @@ services:
       DATABASE_URL: jdbc:postgresql://db:5432/mora?stringtype=unspecified
       DATABASE_USERNAME: mora
       DATABASE_PASSWORD: mora1234
-      JWT_SECRET: change-this-to-a-long-random-secret
+      JWT_SECRET: ${MORA_JWT_SECRET:-change-this-to-a-long-random-secret}
+      OCR_SHARED_SECRET: ${MORA_OCR_SHARED_SECRET:-local-only-ocr-service-secret-change-me}
       JWT_EXPIRATION: 1209600000
       OCR_SERVICE_URL: http://ocr:8000
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
