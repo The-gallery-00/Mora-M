@@ -83,9 +83,42 @@ CLI 소스 중 `/build/metro-require/require.js`는 번들 로더로 포함되�
 - 새 테스트: 한글·OAuth 쿼리, 중복 파라미터, 잘못된 UTF-8, 두 DoS 재현 입력의 제한 시간 내 처리,
   공식 디코더 알고리즘 일치, 실제 Metro 에셋 처리, 실제 인증 폼과 React Hook Form resolver.
 - EAS 임시 폴더의 `npm ci --include=dev`와 Expo 검사도 통과했다.
+- 해당 임시 폴더에서 회귀 테스트 29개와 타입 검사도 다시 통과했다.
 
 실기기에서 실제 소셜 로그인·촬영·사진 선택·알림을 다시 검증한 것은 아니다.
 내부 테스트의 새 버전을 설치한 후 이 항목을 확인해야 한다.
+
+## 앱 산출물 (2026-11-05 완료)
+
+| 항목 | 결과 |
+|---|---|
+| 패키지 | `com.thegallery.mora` |
+| versionName / versionCode | `0.1.0` / `10` |
+| AAB | `mora-mobile-security-v10-20261105.aab`, 100,401,333 bytes |
+| APK | `mora-mobile-security-v10-20261105.apk`, 151,806,082 bytes |
+| AAB SHA-256 | `4e6ecaefa3c7c6413f1fa7b22e887ed06b0ea6a8df910f3e0cad10bb24b2bf70` |
+| APK SHA-256 | `dc2d1c4f765941cbf0cbc2ed570ee897cf582e5fce63e70888239bd1921a4946` |
+| 서명 | 기존 versionCode 9 AAB와 동일한 업로드 인증서, jarsigner / apksigner 통과 |
+| 번들 일치 | AAB와 APK의 JS 번들 SHA-256 `a6af5919897239e249431d771caf9164bd56cfa8dd9d4e1ccdbb155f1f542842` |
+| Android | 최소 API 26 / target API 36, production cleartext 차단 |
+| 권한 | 최종 AAB에서도 광범위 사진·동영상·저장소·마이크·개발 오버레이 권한 없음 |
+| 16 KB | AAB `PAGE_ALIGNMENT_16K`, arm64·x86_64 각 31개 ELF 정렬 검사 통과, APK zipalign 통과 |
+| 기타 검증 | bundletool validate 통과, 두 운영 서버 URL 포함 확인 |
+
+빌드 내용은 소스 커밋 `54876ca`와 일치한다. 변경된 앱 관련 파일 8개의 해시를 임시 빌드
+폴더와 비교했다. 빌드 전 마지막으로 확인한 `origin/dev`는 여전히 `4a19265`였다.
+
+로컬 EAS가 versionCode를 9에서 10으로 올리고 동일 업로드 키로 임시 프로젝트를 준비했다.
+처음 실행한 EAS 빌드는 React Native 대용량 다운로드 지연으로 중단했고, 오프라인 재시도는
+아티팩트 캐시 인덱스 부재로 실패했다. 공식 아티팩트를 검증해 캐시에 추가한 후 온라인
+메타데이터 확인을 허용한 동일 프로젝트에서 `:app:bundleRelease :app:assembleRelease`가
+3분 30초에 성공했다. 버전 번호를 두 번 증가시키거나 서명 키를 새로 만들지 않았다.
+
+검증한 공식 `react-android-0.86.3-release.aar`의 SHA-256은
+`59b66e453d8775a54df66a321c0d5002b98716d68c4bd9edb8e64d7110ff8d28`이며 Maven의
+공식 `.sha256` 응답 및 Gradle module 메타데이터와 일치한다. 임의 빌드 바이너리로 대체하지 않았다.
+빌드 후 임시 keystore 사본과 비밀번호가 담긴 `credentials.json`은 삭제했다.
+Play 업로드·내부 테스트 출시·프로덕션 제출은 수행하지 않았다.
 
 ## 내부 테스트 인계
 
