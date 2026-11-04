@@ -17,3 +17,15 @@ wiki/
 # 로컬 환경값 (LAN IP). 빌드 환경변수는 eas.json 의 profile.env 로 주입한다.
 .env
 .env.local
+.env.*
+
+# 모바일 빌드에 서버 소스·모델과 기존 배포 산출물·서명 정보를 포함하지 않는다.
+/server/
+*.apk
+*.aab
+*.apks
+*.jks
+*.keystore
+keystore-*
+credentials.json
+*.log
