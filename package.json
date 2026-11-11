@@ -8,7 +8,7 @@
     "android": "expo run:android",
     "prebuild": "expo prebuild --platform android --clean",
     "typecheck": "tsc --noEmit",
-    "test:release": "node --test scripts/test-document-security.cjs scripts/test-release-readiness.cjs scripts/test-dependency-security.cjs",
+    "test:release": "node --test scripts/test-document-security.cjs scripts/test-release-readiness.cjs scripts/test-dependency-security.cjs scripts/test-scan-navigation.cjs",
     "theme:css": "node scripts/gen-theme-css.ts",
     "theme:css:check": "node scripts/gen-theme-css.ts --check",
     "gen:icons": "node scripts/gen-icons.mjs",

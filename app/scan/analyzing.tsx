@@ -10,7 +10,7 @@
 // 4개 스텝 인디케이터의 2~4번째 점등은 "진행률"이 아니라 대기 체감을 관리하는 **연출**이고,
 // 그래서 퍼센트 숫자와 연결하지 않는다 (Screen Specs SCR-11 각주 · Mobile UX Guide).
 import { Image } from 'expo-image';
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, BackHandler, Pressable, Text, View } from 'react-native';
 import Animated, {
@@ -28,6 +28,7 @@ import { Button, ProgressBar, toast } from '@/components/ui';
 import { variant } from '@/config/env';
 import { SCR11_STEP_LABELS, useScan, useScanStore } from '@/features/scan';
 import type { UploadPhase } from '@/features/scan/types';
+import { useScanNavigation } from '@/features/scan/useScanNavigation';
 import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing } from '@/theme/scale';
@@ -113,16 +114,6 @@ function StageLabel({ phase }: { phase: UploadPhase | null }) {
 }
 
 /**
- * 스캔 흐름을 완전히 벗어날 때의 착지점.
- *
- * `/scan` 스택은 `fullScreenModal` 이고 이 화면은 크롭에서 `replace` 로 들어오므로 스택이
- * `[/scan, /scan/analyzing]` 이다 → `router.back()` 은 **카메라로 되돌아갈 뿐** 흐름을 끝내지 않는다.
- * SCR-13 의 `완료` 버튼(`done.tsx goHome`)과 같은 방식으로 탭 루트로 replace 해서 스택째 벗어난다.
- * 스토어 비우기는 `app/scan/_layout.tsx` 의 언마운트 이펙트가 담당한다.
- */
-const HOME_HREF = '/(tabs)' as Href;
-
-/**
  * `(dev)` 그룹(진단 화면 SCR-31)이 이 빌드에 존재하는가.
  *
  * **production 에서는 액션 자체를 그리지 않는다.** `app/(dev)/_layout.tsx` 에 이미
@@ -168,6 +159,7 @@ type FailureAction = { label: string; kind: FailureActionKind; onPress: () => vo
 
 export default function ScanAnalyzingScreen() {
   const router = useRouter();
+  const { toCamera, close } = useScanNavigation();
   const insets = useSafeAreaInsets();
   const t = useTheme();
   const reduceMotion = useReducedMotion();
@@ -212,7 +204,7 @@ export default function ScanAnalyzingScreen() {
     if (startedRef.current) return;
     startedRef.current = true;
     if (!sourceUri) {
-      router.replace('/scan');
+      toCamera();
       return;
     }
     void start().then((ok) => {
@@ -221,7 +213,7 @@ export default function ScanAnalyzingScreen() {
       haptics.success();
       router.replace('/scan/review');
     });
-  }, [router, sourceUri, start]);
+  }, [router, sourceUri, start, toCamera]);
 
   /* ── 스캔 라인 상하 왕복 1.2s ───────────────────────────────────────── */
   useEffect(() => {
@@ -255,8 +247,8 @@ export default function ScanAnalyzingScreen() {
   const abortToCamera = useCallback(() => {
     cancelScan();
     resetForNextScan();
-    router.replace('/scan');
-  }, [cancelScan, resetForNextScan, router]);
+    toCamera();
+  }, [cancelScan, resetForNextScan, toCamera]);
 
   /**
    * **스캔 흐름 자체를 끝낸다.** 실패 블록의 `취소` / `닫기` 가 여기로 온다.
@@ -270,11 +262,12 @@ export default function ScanAnalyzingScreen() {
   const dismissScan = useCallback(() => {
     cancelScan();
     resetForNextScan();
-    router.replace(HOME_HREF);
-  }, [cancelScan, resetForNextScan, router]);
+    close();
+  }, [cancelScan, close, resetForNextScan]);
 
   /* ── Android 백: 진행 중 이탈 차단, 두 번 누르면 취소 ─────────────────── */
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    backPressedAt.current = 0;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (!running) {
         // 에러 블록 상태에서는 백이 곧 `다른 사진 선택` 과 같다(한 단계 뒤 = 촬영 화면).
@@ -292,7 +285,7 @@ export default function ScanAnalyzingScreen() {
       return true;
     });
     return () => sub.remove();
-  }, [abortToCamera, running]);
+  }, [abortToCamera, running]));
 
   /* ── 백그라운드 30초 초과 → 태스크 폐기 후 SCF-08 (§8) ────────────────── */
   useEffect(() => {

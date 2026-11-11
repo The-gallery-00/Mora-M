@@ -4,7 +4,7 @@
 //       wiki/tech/Camera and Scan.md §12 (연속 스캔 루프 — 카메라로 직행한다. 탭 루트로 돌아가지 않는다)
 //
 // 버튼 3분기는 Screen Specs 문구를 그대로 쓴다: `저장한 문서 보기` · `계속 스캔하기` · `완료`.
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo } from 'react';
 import { BackHandler, Text, View } from 'react-native';
 import Animated, {
@@ -18,6 +18,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { Button, toast } from '@/components/ui';
 import { TYPE_LABELS, useScan } from '@/features/scan';
+import { useScanNavigation } from '@/features/scan/useScanNavigation';
 import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { spacing } from '@/theme/scale';
@@ -47,6 +48,7 @@ function CheckIcon({ color, size = 28 }: { color: string; size?: number }) {
 
 export default function ScanDoneScreen() {
   const router = useRouter();
+  const { toCamera } = useScanNavigation();
   const insets = useSafeAreaInsets();
   const t = useTheme();
   const reduceMotion = useReducedMotion();
@@ -88,28 +90,28 @@ export default function ScanDoneScreen() {
   }, [docType, values]);
 
   const goHome = useCallback(() => {
-    router.replace(HOME_HREF);
+    router.dismissTo(HOME_HREF);
   }, [router]);
 
   const goArchive = useCallback(() => {
-    router.replace(ARCHIVE_HREF);
+    router.dismissTo(ARCHIVE_HREF);
   }, [router]);
 
   const scanAgain = useCallback(() => {
     haptics.impact('light');
     // §12 연속 스캔 — 세션 카운터만 남기고 초기화한 뒤 카메라로 직행한다.
     resetForNextScan();
-    router.replace('/scan');
-  }, [resetForNextScan, router]);
+    toCamera();
+  }, [resetForNextScan, toCamera]);
 
   /* Android 백 = `완료` (Screen Specs 인터랙션 표) */
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       goHome();
       return true;
     });
     return () => sub.remove();
-  }, [goHome]);
+  }, [goHome]));
 
   return (
     <View

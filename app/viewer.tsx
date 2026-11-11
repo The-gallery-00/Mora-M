@@ -26,10 +26,10 @@
 // 제스처 참조는 고정하고 공유값은 React Compiler 호환 get/set API 로 접근한다.
 import NetInfo from '@react-native-community/netinfo';
 import * as Clipboard from 'expo-clipboard';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { BackHandler, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -202,6 +202,7 @@ export default function ImageViewerScreen() {
   const [selected, setSelected] = useState<RawBlock | null>(null);
   /** 닫는 중 — `✕` 연타로 두 번 pop 되는 것을 막는다(스와이프 닫기는 제스처가 1회만 끝난다). */
   const [dismissing, setDismissing] = useState(false);
+  const closing = useSharedValue(false);
   const [offline, setOffline] = useState(false);
 
   // 실패 문구가 갈린다: 디스크 캐시 미스(오프라인)와 404 는 사용자가 할 수 있는 일이 다르다(상태표).
@@ -216,10 +217,22 @@ export default function ImageViewerScreen() {
 
   /* ── 닫기 ───────────────────────────────────────────────────────────────── */
   const close = useCallback(() => {
+    if (closing.get()) return;
+    closing.set(true);
     setDismissing(true);
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)/archive');
-  }, [router, setDismissing]);
+  }, [closing, router, setDismissing]);
+
+  useFocusEffect(useCallback(() => {
+    closing.set(false);
+    setDismissing(false);
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      close();
+      return true;
+    });
+    return () => sub.remove();
+  }, [close, closing, setDismissing]));
 
   /* ── 컨트롤 자동 숨김 ─────────────────────────────────────────────────────
      실패 상태에서는 숨기지 않는다 — 볼 이미지가 없는 화면에서 `✕` 까지 사라지면

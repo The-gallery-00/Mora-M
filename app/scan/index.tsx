@@ -20,10 +20,10 @@ import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/botto
 import NetInfo from '@react-native-community/netinfo';
 import { CameraView, useCameraPermissions, type CameraCapturedPicture } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -36,7 +36,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { Button, IconButton, toast } from '@/components/ui';
-import { TYPE_LABELS, useScan, type DocumentType } from '@/features/scan';
+import { TYPE_LABELS, useScan, useScanStore, type DocumentType } from '@/features/scan';
+import { useScanNavigation } from '@/features/scan/useScanNavigation';
 import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing } from '@/theme/scale';
@@ -157,6 +158,8 @@ function pickPictureSize(sizes: readonly string[]): string | undefined {
 
 export default function ScanCameraScreen() {
   const router = useRouter();
+  const { close } = useScanNavigation();
+  const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const t = useTheme();
   const reduceMotion = useReducedMotion();
@@ -181,6 +184,8 @@ export default function ScanCameraScreen() {
   /* ── 권한 재조회: 설정에서 허용하고 돌아온 경우를 잡는다 (UX 가이드 §10 세부 4) ── */
   useFocusEffect(
     useCallback(() => {
+      setReady(false);
+      setMountError(false);
       void getPermission();
     }, [getPermission]),
   );
@@ -216,9 +221,26 @@ export default function ScanCameraScreen() {
   const flashStyle = useAnimatedStyle(() => ({ opacity: shutterFlash.get() }));
 
   const closeScan = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/');
-  }, [router]);
+    if (capturing) return;
+    if (!useScanStore.getState().sourceUri) {
+      close();
+      return;
+    }
+    haptics.warning();
+    Alert.alert('촬영한 사진을 버릴까요?', undefined, [
+      { text: '계속', style: 'cancel' },
+      { text: '버리기', style: 'destructive', onPress: close },
+    ]);
+  }, [capturing, close]);
+
+  useFocusEffect(useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (helpSheetOpen) setHelpSheetOpen(false);
+      else closeScan();
+      return true;
+    });
+    return () => sub.remove();
+  }, [closeScan, helpSheetOpen]));
 
   const handleShutter = useCallback(async () => {
     const camera = cameraRef.current;
@@ -405,7 +427,7 @@ export default function ScanCameraScreen() {
     <View className="flex-1 bg-black">
       <StatusBar style="light" />
 
-      {mountError ? null : (
+      {!focused || mountError ? null : (
         <CameraView
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
