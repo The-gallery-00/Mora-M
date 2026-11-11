@@ -10,10 +10,10 @@
 // (imagePipeline: rotate → crop). 그래서 이 화면은 회전된 이미지를 그대로 화면에 그리고,
 // 크롭 사각형도 "회전된 이미지 픽셀" 좌표로 환산해 넘긴다. 화면에 보이는 것 = 잘리는 것.
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -35,6 +35,7 @@ import {
   type CropRect,
 } from '@/features/scan';
 import { haptics } from '@/lib/haptics';
+import { useScanNavigation } from '@/features/scan/useScanNavigation';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, spacing } from '@/theme/scale';
 
@@ -105,6 +106,7 @@ function ResetIcon({ color = '#FFFFFF', size = 24 }: IconProps) {
 
 export default function ScanCropScreen() {
   const router = useRouter();
+  const { toCamera } = useScanNavigation();
   const insets = useSafeAreaInsets();
   const t = useTheme();
 
@@ -135,8 +137,8 @@ export default function ScanCropScreen() {
   useEffect(() => {
     if (bootChecked.current) return;
     bootChecked.current = true;
-    if (!sourceUri) router.replace('/scan');
-  }, [sourceUri, router]);
+    if (!sourceUri) toCamera();
+  }, [sourceUri, toCamera]);
 
   /* 피커가 크기를 주지 않은 예외 경로 보강 (디코드 1회 추가). */
   useEffect(() => {
@@ -211,11 +213,20 @@ export default function ScanCropScreen() {
   }, [resetRect]);
 
   const handleCancel = useCallback(() => {
+    if (processing) return;
     // 촬영본 폐기 후 SCR-09 복귀 (Screen Specs 인터랙션 표).
     // 세션 카운터(`이번 세션 n장 저장됨`)는 유지해야 하므로 reset 이 아니라 resetForNextScan 이다.
     resetForNextScan();
-    router.replace('/scan');
-  }, [resetForNextScan, router]);
+    toCamera();
+  }, [processing, resetForNextScan, toCamera]);
+
+  useFocusEffect(useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleCancel();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handleCancel]));
 
   /** 표시 좌표 → 회전된 이미지의 픽셀 좌표. 전체 선택이면 null(크롭 생략). */
   const toSourceRect = useCallback((): CropRect | null => {
@@ -324,6 +335,8 @@ export default function ScanCropScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="크롭 취소"
+          accessibilityState={{ disabled: processing }}
+          disabled={processing}
           onPress={handleCancel}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >

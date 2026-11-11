@@ -192,22 +192,30 @@ const initialState: ScanState = {
   cancelUpload: null,
 };
 
+// A canceled or replaced image must not be revived by a late compression/OCR result.
+let scanGeneration = 0;
+
 export const useScanStore = create<ScanStore>((set, get) => ({
   ...initialState,
 
   reset: () => {
+    scanGeneration++;
     get().cancelUpload?.();
     set({ ...initialState });
   },
 
   // §12 연속 스캔: 세션 카운터만 유지하고 나머지를 초기화한다.
   resetForNextScan: () => {
+    scanGeneration++;
     get().cancelUpload?.();
     set({ ...initialState, sessionSavedCount: get().sessionSavedCount });
   },
 
-  setSource: (uri, size = null) =>
+  setSource: (uri, size = null) => {
+    scanGeneration++;
+    get().cancelUpload?.();
     set({
+      cancelUpload: null,
       sourceUri: uri,
       sourceSize: size,
       adjustedUri: null,
@@ -217,13 +225,19 @@ export const useScanStore = create<ScanStore>((set, get) => ({
       uploadProgress: 0,
       uploadPhase: null,
       scanAttempts: 0,
-    }),
+    });
+  },
 
-  setAdjusted: (uri) => set({ adjustedUri: uri, prepared: null, step: 'cropped', failure: null }),
+  setAdjusted: (uri) => {
+    scanGeneration++;
+    get().cancelUpload?.();
+    set({ cancelUpload: null, adjustedUri: uri, prepared: null, step: 'cropped', failure: null });
+  },
 
   clearAdjusted: () => set({ adjustedUri: null, prepared: null }),
 
   prepare: async (options = {}) => {
+    const generation = scanGeneration;
     const { sourceUri, sourceSize, adjustedUri } = get();
     // 크롭 화면이 `cropAndRotate` 로 이미 결과 파일을 만들었다면 그것을 입력으로 쓴다.
     // 그 경우 crop/rotate 를 **다시 넘기지 말 것** — 이중 적용된다.
@@ -236,9 +250,11 @@ export const useScanStore = create<ScanStore>((set, get) => ({
         rotate: options.rotate,
         crop: options.crop,
       });
+      if (generation !== scanGeneration) return false;
       set({ prepared, step: 'cropped', failure: null });
       return true;
     } catch (e) {
+      if (generation !== scanGeneration) return false;
       const code = e instanceof ScanPipelineError ? e.code : 'SCF-03';
       const detail = e instanceof Error ? e.message : String(e);
       set({ failure: { code, status: null, detail }, prepared: null });
@@ -249,6 +265,8 @@ export const useScanStore = create<ScanStore>((set, get) => ({
   setRequestedDocType: (next) => set({ requestedDocType: next }),
 
   runScan: async (options = {}) => {
+    const generation = ++scanGeneration;
+    get().cancelUpload?.();
     const { prepared } = get();
     if (!prepared) {
       // 압축 결과가 없으면 업로드할 것이 없다. 크롭 화면으로 되돌린다.
@@ -283,6 +301,7 @@ export const useScanStore = create<ScanStore>((set, get) => ({
     const handle = scanImage(prepared, {
       ...(documentType ? { documentType } : {}),
       onProgress: (ratio) => {
+        if (generation !== scanGeneration) return;
         // 실측 진행률. 100% 도달 후 서버 추론 구간은 인디터미네이트로 전환한다 (§8).
         set({
           uploadProgress: ratio,
@@ -293,6 +312,7 @@ export const useScanStore = create<ScanStore>((set, get) => ({
     set({ cancelUpload: handle.cancel });
 
     const result = await handle.promise;
+    if (generation !== scanGeneration) return false;
     set({ cancelUpload: null });
 
     if (!result.ok) {
@@ -357,8 +377,12 @@ export const useScanStore = create<ScanStore>((set, get) => ({
   },
 
   cancelScan: () => {
+    scanGeneration++;
     get().cancelUpload?.();
-    set({ cancelUpload: null, uploadProgress: 0, uploadPhase: null });
+    set({
+      cancelUpload: null, uploadProgress: 0, uploadPhase: null,
+      step: get().step === 'uploading' ? 'cropped' : get().step,
+    });
   },
 
   rescanAs: async (next) => {

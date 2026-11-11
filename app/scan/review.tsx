@@ -17,8 +17,8 @@
 // 나머지(폼·칩·액션바)는 정상적으로 테마를 따른다 — 다크에서 "밝은 이미지 띠 + 어두운 폼"이 된다.
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import {
   Alert,
@@ -54,6 +54,7 @@ import {
   type ParsedFields,
 } from '@/features/scan';
 import { haptics } from '@/lib/haptics';
+import { useScanNavigation } from '@/features/scan/useScanNavigation';
 import { radius, spacing } from '@/theme/scale';
 import { themes } from '@/theme/tokens';
 
@@ -84,6 +85,7 @@ function ZoomIcon({ color = '#FFFFFF' }: { color?: string }) {
 
 export default function ScanReviewScreen() {
   const router = useRouter();
+  const { toCamera } = useScanNavigation();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
 
@@ -192,24 +194,25 @@ export default function ScanReviewScreen() {
   const canSaveNow = !locked && !blocked && !saving && !rescanning && formValid;
 
   /* 스캔 결과 없이 직접 진입한 경우 방어 */
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!scan && Object.keys(initialValues).length === 0 && !previewUri) {
-      router.replace('/scan');
+      toCamera();
     }
-  }, [initialValues, previewUri, router, scan]);
+  }, [initialValues, previewUri, scan, toCamera]));
 
   /* ── 이탈 가드 ─────────────────────────────────────────────────────── */
 
   const leaveToCamera = useCallback(() => {
     resetForNextScan();
-    router.replace('/scan');
-  }, [resetForNextScan, router]);
+    toCamera();
+  }, [resetForNextScan, toCamera]);
 
   const handleBack = useCallback(() => {
+    if (saving) return;
     // 폼 값이 스토어와 어긋나 있을 수 있으므로 dirty 판정 직전에 밀어 넣는다.
     setValues(collect());
     confirmDiscardScan(leaveToCamera);
-  }, [collect, leaveToCamera, setValues]);
+  }, [collect, leaveToCamera, saving, setValues]);
 
   const openImageViewer = useCallback(() => {
     if (!previewUri) return;
@@ -223,13 +226,13 @@ export default function ScanReviewScreen() {
     });
   }, [docType, previewUri, router, showOriginal]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       handleBack();
       return true;
     });
     return () => sub.remove();
-  }, [handleBack]);
+  }, [handleBack]));
 
   /* ── 문서 종류 변경 (§9-3 승계 규칙은 스토어가 소유한다) ────────────────── */
 
